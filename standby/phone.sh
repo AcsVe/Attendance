@@ -90,7 +90,14 @@ case "$1" in
     need_code; ensure_env
     say "$(T "تنزيل أحدث بيانات الحضور من Drive" "Downloading the latest attendance data from Drive")"
     mkdir -p "$LOCAL_BK/db"
-    rclone copy "$RT_REMOTE/db" "$LOCAL_BK/db" --include "*.db.gz" --max-age 30d --progress
+    if ! rclone lsf "$RT_REMOTE/db" --include "*.db.gz" 2>/dev/null | grep -q . && ! neon_on && ! ls "$LOCAL_BK/db"/*.db.gz >/dev/null 2>&1; then
+      echo
+      echo "$(T "  ✖ لا توجد أي نسخة احتياطية لنظام الحضور في Drive ($RT_REMOTE/db)." "  ✖ There is no attendance backup in Drive ($RT_REMOTE/db).")"
+      echo "$(T "    الكمبيوتر لم يرفع نسخة بعد. عند تشغيله: شغّل 3_autostart.bat كمسؤول (نسخة كل ساعة) ثم backup_now.bat" "    The PC has not uploaded one yet. When it is on: run 3_autostart.bat as admin (hourly backup), then backup_now.bat")"
+      echo "$(T "    وتأكد أن مجلد النسخ BACKUP_DIR في .env داخل Google Drive: ...\\IAJ-backups\\attendance" "    and that BACKUP_DIR in .env is inside Google Drive: ...\\IAJ-backups\\attendance")"
+      die "$(T "لم يتغيّر شيء — الموقع لم يُحوَّل" "Nothing changed - the site was not switched")"
+    fi
+    rclone copy "$RT_REMOTE/db" "$LOCAL_BK/db" --include "*.db.gz" --max-age 30d --progress || true
     rclone copy "$RT_REMOTE/uploads" "$LOCAL_BK/uploads" --progress || true
     if neon_on; then
       ensure_pg8000
