@@ -25,6 +25,7 @@
     .kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}.kpi div{background:#f4f8f9;border-radius:12px;text-align:center;padding:9px 4px}
     .kpi b{display:block;font-size:1.25rem;color:var(--pd)}.kpi span{font-size:.75rem;color:var(--m);font-weight:700}
     table{width:100%;border-collapse:collapse;font-size:.85rem}th,td{padding:8px 4px;border-bottom:1px solid #eef2f3;text-align:right}th{color:var(--m);font-weight:700}
+    .tw{overflow:auto;max-height:62vh;-webkit-overflow-scrolling:touch}.tw thead th{position:sticky;top:0;background:#fff;z-index:2;box-shadow:inset 0 -1px 0 #e3eaec;cursor:pointer;user-select:none;white-space:nowrap}.tw th .ar{font-size:.7em;margin-inline-start:3px}
     .toast{position:fixed;left:14px;right:14px;bottom:calc(18px + env(safe-area-inset-bottom));max-width:490px;margin:0 auto;border-radius:14px;padding:14px 16px;font-weight:800;color:#fff;z-index:9;box-shadow:0 8px 24px rgba(0,0,0,.2);display:none}
     .hide{display:none}
   </style>
@@ -62,7 +63,7 @@
     <div class="card">
       <div class="kpi"><div><b id="k-days">0</b><span>أيام حضور</span></div><div><b id="k-late">0</b><span>أيام تأخير</span></div><div><b id="k-min">0</b><span>دقائق تأخير</span></div><div><b id="k-abs">0</b><span>غياب</span></div></div>
       <div class="muted" style="margin-bottom:6px">ساعات العمل هذا الشهر: <b id="k-hours">0</b></div>
-      <div style="overflow:auto"><table><thead><tr><th>التاريخ</th><th>حضور</th><th>انصراف</th><th>الحالة</th><th>ساعات</th></tr></thead><tbody id="days"></tbody></table></div>
+      <div class="tw"><table id="monthTable"><thead><tr><th>التاريخ</th><th>حضور</th><th>انصراف</th><th>الحالة</th><th>ساعات</th></tr></thead><tbody id="days"></tbody></table></div>
     </div>
     <div class="card"><b style="color:var(--pd)">آخر الحركات من الهاتف</b><ul class="tl" id="recent" style="margin-top:6px"></ul></div>
   </div>
@@ -263,6 +264,32 @@
   setInterval(load, 60000);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) load(); });
 })();
+
+  /* جدول الشهر: العنوان مثبّت + فرز بالضغط على أي عمود (يبقى بعد التحديث) */
+  (function () {
+    var t = document.getElementById('monthTable'); if (!t) return;
+    var body = t.tBodies[0], col = -1, dir = 1, busy = false;
+    function key(s) { s = s.trim(); var n = s.replace(/[٠-٩]/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'.indexOf(d); }); return /^-?\d+(\.\d+)?$/.test(n) ? parseFloat(n) : s; }
+    function apply() {
+      if (col < 0) return;
+      var rows = [].slice.call(body.rows).filter(function (r) { return r.cells.length > col && r.cells[0].colSpan < 2; });
+      rows.sort(function (a, b) {
+        var x = key(a.cells[col].textContent), y = key(b.cells[col].textContent);
+        if (x === '' || x === '—') return 1; if (y === '' || y === '—') return -1;
+        return (typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), 'ar', { numeric: true })) * dir;
+      });
+      busy = true; rows.forEach(function (r) { body.appendChild(r); }); setTimeout(function () { busy = false; }, 0);
+    }
+    [].forEach.call(t.tHead.rows[0].cells, function (th, i) {
+      var a = document.createElement('span'); a.className = 'ar'; th.appendChild(a);
+      th.addEventListener('click', function () {
+        dir = col === i ? -dir : 1; col = i;
+        [].forEach.call(t.querySelectorAll('.ar'), function (x) { x.textContent = ''; });
+        a.textContent = dir === 1 ? '▲' : '▼'; apply();
+      });
+    });
+    new MutationObserver(function () { if (!busy) apply(); }).observe(body, { childList: true });
+  })();
 </script>
 </body>
 </html>
