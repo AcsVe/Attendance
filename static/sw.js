@@ -13,7 +13,7 @@
  * بمتصفحات كروم/إيدج، وتسريع تحميل الملفات الثابتة قليلاً - وليس تشغيل
  * النظام بدون إنترنت بالكامل (يحتاج اتصال فعلي بالخادم دائماً لأي بيانات).
  */
-const CACHE_NAME = 'attendance-static-v1';
+const CACHE_NAME = 'attendance-static-v2';   // يُخدم من /sw.js (نطاق الموقع كله) لتثبيت النظام كتطبيق
 const STATIC_PREFIX = '/static/';
 
 self.addEventListener('install', (event) => {

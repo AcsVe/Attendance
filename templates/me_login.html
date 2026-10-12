@@ -22,7 +22,7 @@
       <input type="hidden" name="device" id="dev">
       <button class="btn btn-p" style="width:100%;margin-top:16px"><i class="fas fa-right-to-bracket"></i> دخول</button>
     </form>
-    <p class="muted" style="margin-top:12px;line-height:1.7"><i class="fas fa-mobile-screen"></i> يرتبط حسابك بهذا الهاتف عند أول دخول، ولا يمكن استخدامه من هاتف آخر إلا بعد فكّ الربط من الإدارة.</p>
+    <p class="muted" style="margin-top:12px;line-height:1.7"><a href="/app"><i class="fas fa-download"></i> تنزيل تطبيق الموظف (أندرويد)</a><br><i class="fas fa-mobile-screen"></i> يرتبط حسابك بهذا الهاتف عند أول دخول، ولا يمكن استخدامه من هاتف آخر إلا بعد فكّ الربط من الإدارة.</p>
   </div>
 </div>
 <script>
@@ -30,7 +30,8 @@
   function hex(n) { var a = new Uint8Array(n); crypto.getRandomValues(a); return Array.prototype.map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); }
   function cookie() { var m = document.cookie.match(/(?:^|; )att_dev=([0-9a-f]{64})/); return m ? m[1] : ''; }
   var t = '';
-  try { t = localStorage.getItem('att_dev') || ''; } catch (e) {}
+  if (window.AttNative) { try { t = window.AttNative.deviceId(); } catch (e) {} }   // داخل تطبيق الموظف: معرّف الهاتف الثابت
+  if (!t) { try { t = localStorage.getItem('att_dev') || ''; } catch (e) {} }
   t = t || cookie() || hex(32);
   try { localStorage.setItem('att_dev', t); } catch (e) {}
   document.cookie = 'att_dev=' + t + '; max-age=' + (3650 * 86400) + '; path=/me; samesite=strict' + (location.protocol === 'https:' ? '; secure' : '');

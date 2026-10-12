@@ -72,7 +72,9 @@
       <h1 id="pageTitle">لوحة التحكم</h1>
     </div>
     <div class="topbar-right">
-      <button class="btn btn-outline btn-sm" onclick="refreshCurrentTab()"><i class="fas fa-sync"></i> تحديث</button>
+      <button class="btn btn-primary btn-sm" id="pwaInstallBtn" style="display:none" onclick="pwaInstall()" title="يُضاف النظام كتطبيق في قائمة ابدأ وشريط المهام"><i class="fas fa-download"></i> تثبيت على هذا الجهاز</button>
+      <a class="btn btn-outline btn-sm" href="/app" target="_blank" title="تطبيقات أندرويد للموظفين والإدارة"><i class="fab fa-android"></i> التطبيقات</a>
+            <button class="btn btn-outline btn-sm" onclick="refreshCurrentTab()"><i class="fas fa-sync"></i> تحديث</button>
       <span style="font-size:.85rem;color:var(--muted)" id="clockEl"></span>
     </div>
   </div>
@@ -1101,6 +1103,37 @@
     <!-- ============ USERS ============ -->
     <div class="tab-panel" id="tab-users">
       <div class="card">
+        <div class="card-title"><i class="fas fa-user-shield"></i> مراجعة صلاحيات المستخدمين (<span id="urShown">0</span>)
+          <button class="btn btn-outline btn-sm" style="margin-inline-start:auto" onclick="urExport()"><i class="fas fa-file-csv"></i> تصدير</button></div>
+        <div class="filter-bar"><input type="search" id="urSearch" class="search-input" placeholder="بحث فوري…" oninput="urRender()" style="flex:1"></div>
+        <div class="m-chips" id="urChips"></div>
+        <div class="m-bulk">
+          <b>المحدد: <span id="urSel">0</span></b>
+          <select id="urAction" class="search-input">
+            <option value="">— إجراء —</option>
+            <option value="role:viewer">تحويل إلى: اطّلاع فقط (viewer)</option>
+            <option value="role:dept_manager">تحويل إلى: مدير قسم</option>
+            <option value="role:admin">تحويل إلى: مدير النظام (admin)</option>
+            <option value="grant:can_manage_employees">منح: الموظفون وحسابات التطبيق</option>
+            <option value="revoke:can_manage_employees">سحب: الموظفون وحسابات التطبيق</option>
+            <option value="grant:can_push_devices">منح: أجهزة البصمة</option>
+            <option value="revoke:can_push_devices">سحب: أجهزة البصمة</option>
+            <option value="grant:can_edit_org_settings">منح: الإعدادات ومواقع العمل</option>
+            <option value="revoke:can_edit_org_settings">سحب: الإعدادات ومواقع العمل</option>
+            <option value="depts:">إلغاء تقييد الأقسام (يرى الكل)</option>
+            <option value="delete:">حذف المستخدمين</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="urBulk()">تنفيذ</button>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th><input type="checkbox" id="urAll" onchange="document.querySelectorAll('#urTable .row-check').forEach(c=>{c.checked=this.checked});urCount()"></th>
+            <th>المستخدم</th><th>الدور</th><th>الموظفون</th><th>الأجهزة</th><th>الإعدادات</th><th>الأقسام</th><th>الأقسام المسموحة</th><th>آخر دخول</th></tr></thead>
+          <tbody id="urTable"></tbody></table></div>
+        <p style="font-size:.8rem;color:var(--muted);margin-top:8px;line-height:1.8">
+          <b>admin</b>: كل شيء + المستخدمون · <b>مدير قسم</b>: حسب الصلاحيات المحددة · <b>اطّلاع فقط</b>: يرى التقارير ولا يعدّل شيئاً.
+          الأقسام المسموحة فارغة = يرى كل الأقسام. ✓ رمادية = مشمولة تلقائياً لأن الدور admin. لتعديل مستخدم بالتفصيل استخدم «قائمة المستخدمين» بالأسفل.</p>
+      </div>
+      <div class="card">
         <div class="card-title"><i class="fas fa-user-plus"></i> إضافة مستخدم</div>
         <div class="form-grid quad">
           <div class="form-group"><label>اسم المستخدم <span style="color:#c0392b">*</span></label><input type="text" id="usrUsername" dir="ltr"></div>
@@ -1217,5 +1250,6 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="{{ url_for('static', filename='js/mobile_admin.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin_extra.js') }}"></script>
 </body>
 </html>

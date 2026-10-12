@@ -1,0 +1,81 @@
+plugins {
+    id 'com.android.application'
+}
+
+// إعدادات البناء من android/app.properties (+ أسرار GitHub إن وُجدت)
+def props = new Properties()
+file('../app.properties').withInputStream { props.load(it) }
+def baseUrl = System.getenv('ATT_BASE_URL') ?: props.getProperty('BASE_URL')
+def appKey = System.getenv('ATT_APP_KEY') ?: props.getProperty('APP_KEY')
+def ksFile = System.getenv('ANDROID_KEYSTORE_FILE') ?: ('../' + props.getProperty('KEYSTORE_FILE'))
+def ksPass = System.getenv('ANDROID_KEYSTORE_PASSWORD') ?: props.getProperty('KEYSTORE_PASSWORD')
+def ksAlias = System.getenv('ANDROID_KEY_ALIAS') ?: props.getProperty('KEY_ALIAS')
+def vCode = (System.getenv('GITHUB_RUN_NUMBER') ?: '1') as Integer
+
+android {
+    namespace 'org.iajaward.attendance'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'org.iajaward.attendance'
+        minSdk 23
+        targetSdk 34
+        versionCode vCode
+        versionName "1.0.${vCode}"
+        buildConfigField 'String', 'BASE_URL', "\"${baseUrl}\""
+        buildConfigField 'String', 'APP_KEY', "\"${appKey}\""
+    }
+
+    signingConfigs {
+        release {
+            storeFile file(ksFile)
+            storePassword ksPass
+            keyAlias ksAlias
+            keyPassword ksPass
+        }
+    }
+
+    flavorDimensions = ['audience']
+    productFlavors {
+        employee {
+            dimension 'audience'
+            applicationIdSuffix '.employee'
+            resValue 'string', 'app_name', 'دوامي'
+            buildConfigField 'String', 'START_PATH', '"/me"'
+            buildConfigField 'boolean', 'EMPLOYEE', 'true'
+        }
+        admin {
+            dimension 'audience'
+            applicationIdSuffix '.admin'
+            resValue 'string', 'app_name', 'إدارة الحضور'
+            buildConfigField 'String', 'START_PATH', '"/dashboard"'
+            buildConfigField 'boolean', 'EMPLOYEE', 'false'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
+        }
+        debug {
+            signingConfig signingConfigs.release
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}

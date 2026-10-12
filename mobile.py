@@ -37,6 +37,8 @@ NEXT = {   # الحركة المسموحة حسب آخر حركة اليوم
     'out': ['in'],
 }
 LEAVE_REASON = 'خروج مؤقت عبر تطبيق الهاتف'
+# مفتاح توقيع تطبيق الموظف (APK) — نفس القيمة في android/app.properties (يمكن تغييره بـ MOBILE_APP_KEY في .env + إعادة بناء التطبيق)
+APP_KEY = os.environ.get('MOBILE_APP_KEY') or '8aGskrDZUF1q0VN5_Eny0xQVPLl4a2lYSOzl63c93_A'
 
 
 # =====================================================
@@ -146,6 +148,85 @@ def check_location(conn, emp, acc, lat, lng, accuracy, cfg):
     if best_d - slack <= best['radius_m']:
         return True, '', best, best_d
     return False, f'أنت خارج موقع العمل ({int(best_d)} م عن «{best["name"]}»، المسموح {best["radius_m"]} م)', best, best_d
+
+
+def _ip_in(ip, ips_text):
+    import ipaddress
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    for part in (ips_text or '').replace('\n', ',').split(','):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            if addr in ipaddress.ip_network(part, strict=False):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def check_integrity(conn, emp, kind, data, lat, lng, accuracy, site, cfg):
+    """حماية من تطبيقات الموقع الوهمي (Fake GPS).
+    يرجع (سبب الرفض أو '', [علامات اشتباه], المصدر app/browser)."""
+    import hashlib as _h
+    import hmac
+    flags = []
+    source = 'browser'
+    if request.headers.get('X-App'):
+        ts = request.headers.get('X-App-Ts', '')
+        msg = f"{kind}|{data.get('lat')}|{data.get('lng')}|{ts}".encode()
+        good = hmac.new(APP_KEY.encode(), msg, _h.sha256).hexdigest()
+        try:
+            fresh = abs(time.time() * 1000 - float(ts)) < 180000
+        except ValueError:
+            fresh = False
+        if fresh and hmac.compare_digest(good, request.headers.get('X-App-Sig', '')):
+            source = 'app'
+        else:
+            flags.append('توقيع تطبيق الموظف غير صحيح')
+    # 1) التطبيق يكشف الموقع الوهمي من نظام أندرويد مباشرة
+    if source == 'app' and data.get('mock'):
+        return 'تم اكتشاف تطبيق موقع وهمي (Fake GPS) على هاتفك — أغلقه وألغِ «تطبيق الموقع الوهمي» من خيارات المطوّر ثم أعد المحاولة', flags, source
+    if source == 'app' and data.get('rooted'):
+        flags.append('الهاتف معدّل (root)')
+    if cfg.get('mobile_require_app', '0') == '1' and source != 'app':
+        return 'التسجيل متاح من تطبيق الموظف فقط — نزّله من صفحة التطبيق ثم سجّل منه', flags, source
+    # 2) شبكة العمل: الموقع قد يشترط الاتصال بشبكة Wi-Fi المؤسسة (لا يزوّرها تطبيق الموقع الوهمي)
+    if site and (site.get('ips') or '').strip():
+        if not _ip_in(_ip(), site['ips']):
+            if site.get('ip_required'):
+                return f'يجب أن تكون متصلاً بشبكة Wi-Fi العمل في «{site["name"]}» للتسجيل', flags, source
+            flags.append('ليس على شبكة العمل')
+    # 3) إحداثيات ثابتة تماماً لعدة قراءات (GPS الحقيقي يتذبذب دائماً)
+    samples = [x for x in (data.get('samples') or []) if isinstance(x, dict)][:20]
+    try:
+        if len(samples) >= 3:
+            span = (float(samples[-1].get('t', 0)) - float(samples[0].get('t', 0))) / 1000
+            same = len({(round(float(x['lat']), 7), round(float(x['lng']), 7), round(float(x.get('acc') or 0), 1)) for x in samples}) == 1
+            if span >= 8 and same:
+                flags.append('إحداثيات ثابتة تماماً (اشتباه موقع وهمي)')
+    except (KeyError, TypeError, ValueError):
+        pass
+    if accuracy is not None and accuracy in (1.0, 3.0, 5.0) and source == 'browser':
+        flags.append(f'دقة مثالية غير معتادة ({accuracy:g} م)')
+    # 4) قفزة غير منطقية عن آخر موقع مسجّل
+    prev = conn.execute("SELECT lat, lng, date, time FROM mobile_punches WHERE employee_id = ? AND lat IS NOT NULL "
+                        "ORDER BY id DESC LIMIT 1", (emp['id'],)).fetchone()
+    if prev and lat is not None:
+        try:
+            t_prev = datetime.strptime(f"{prev['date']} {prev['time']}", '%Y-%m-%d %H:%M:%S')
+            hours = max((now_local() - t_prev).total_seconds() / 3600, 1 / 60)
+            km = haversine_m(lat, lng, prev['lat'], prev['lng']) / 1000
+            if hours < 6 and km > 2 and km / hours > 250:
+                flags.append(f'قفزة غير منطقية في الموقع ({km:.0f} كم خلال {hours * 60:.0f} دقيقة)')
+        except ValueError:
+            pass
+    if flags and cfg.get('mobile_suspicious', 'flag') == 'reject':
+        return 'لم يُقبل التسجيل لاشتباه في موقع غير حقيقي: ' + '؛ '.join(flags), flags, source
+    return '', flags, source
 
 
 # =====================================================
@@ -362,6 +443,7 @@ def me_status(conn, acc, emp, cfg):
         'last': last, 'allowed': NEXT.get(last, ['in']),
         'anywhere': bool(acc['anywhere']) or cfg.get('mobile_require_geofence', '1') != '1',
         'max_accuracy': float(cfg.get('mobile_max_accuracy') or 150),
+        'require_app': cfg.get('mobile_require_app', '0') == '1',
         'sites': [{'name': s['name'], 'lat': s['lat'], 'lng': s['lng'], 'radius': s['radius_m']} for s in sites],
         'month': days, 'recent': recent,
         'summary': {
@@ -401,16 +483,24 @@ def me_punch(conn, acc, emp, cfg):
                           "AND created_at >= datetime('now', '-30 seconds')", (emp['id'],)).fetchone()
 
     ok, reason, site, dist = check_location(conn, emp, acc, lat, lng, accuracy, cfg)
+    flags, source = [], 'browser'
+    if lat is not None:
+        bad, flags, source = check_integrity(conn, emp, kind, data, lat, lng, accuracy, site if ok else None, cfg)
+        if ok and bad:
+            ok, reason = False, bad
+        elif not ok and data.get('mock') and source == 'app':
+            reason = bad or reason
     if ok and kind not in NEXT.get(last, ['in']):
         ok, reason = False, f'لا يمكن تسجيل «{KINDS[kind]}» الآن — آخر حركة: {KINDS.get(last, "لا شيء")}'
     if ok and recent:
         ok, reason = False, 'سُجّلت حركة قبل لحظات — انتظر نصف دقيقة'
     conn.execute(
         "INSERT INTO mobile_punches (employee_id, name, dept, kind, date, time, lat, lng, accuracy, site_id, site_name, "
-        "distance_m, status, reason, device_label, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "distance_m, status, reason, device_label, ip, flags, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (emp['id'], emp['name'], emp['dept'] or '', kind, d, t, lat, lng, accuracy, site['id'] if site else None,
          site['name'] if site else None, round(dist, 1) if dist is not None else None,
-         'accepted' if ok else 'rejected', reason or None, acc['device_label'] or _device_label(), _ip()))
+         'accepted' if ok else 'rejected', reason or None, acc['device_label'] or _device_label(), _ip(),
+         '؛ '.join(flags) or None, source))
     if ok:
         if kind in ('in', 'out'):
             _merge_punch(conn, emp, d, t, kind)
@@ -612,8 +702,9 @@ def _site_payload(data):
     if not name:
         return None, 'اسم الموقع مطلوب'
     depts = sorted({str(d).strip() for d in (data.get('depts') or []) if str(d).strip()})
+    ips = ', '.join(x.strip() for x in str(data.get('ips') or '').replace('\n', ',').split(',') if x.strip())[:500]
     return {'name': name[:120], 'lat': lat, 'lng': lng, 'radius_m': radius, 'depts_json': json.dumps(depts, ensure_ascii=False),
-            'active': 1 if data.get('active', True) else 0}, ''
+            'active': 1 if data.get('active', True) else 0, 'ips': ips, 'ip_required': 1 if (data.get('ip_required') and ips) else 0}, ''
 
 
 @bp.route('/api/mobile/sites', methods=['GET', 'POST'])
@@ -625,8 +716,8 @@ def api_sites():
             p, err = _site_payload(request.get_json(silent=True) or {})
             if err:
                 return jsonify({'ok': False, 'error': err}), 400
-            conn.execute("INSERT INTO work_sites (name, lat, lng, radius_m, depts_json, active) VALUES (?, ?, ?, ?, ?, ?)",
-                         (p['name'], p['lat'], p['lng'], p['radius_m'], p['depts_json'], p['active']))
+            conn.execute("INSERT INTO work_sites (name, lat, lng, radius_m, depts_json, active, ips, ip_required) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                         (p['name'], p['lat'], p['lng'], p['radius_m'], p['depts_json'], p['active'], p['ips'], p['ip_required']))
             _audit(conn, 'site_add', 'work_site', p['name'])
             conn.commit()
             return jsonify({'ok': True})
@@ -658,8 +749,8 @@ def api_site_edit(site_id):
                 p, err = _site_payload(data)
                 if err:
                     return jsonify({'ok': False, 'error': err}), 400
-                conn.execute("UPDATE work_sites SET name = ?, lat = ?, lng = ?, radius_m = ?, depts_json = ?, active = ? WHERE id = ?",
-                             (p['name'], p['lat'], p['lng'], p['radius_m'], p['depts_json'], p['active'], site_id))
+                conn.execute("UPDATE work_sites SET name = ?, lat = ?, lng = ?, radius_m = ?, depts_json = ?, active = ?, ips = ?, ip_required = ? WHERE id = ?",
+                             (p['name'], p['lat'], p['lng'], p['radius_m'], p['depts_json'], p['active'], p['ips'], p['ip_required'], site_id))
             _audit(conn, 'site_edit', 'work_site', str(site_id))
         conn.commit()
         return jsonify({'ok': True})
@@ -670,18 +761,21 @@ def api_site_edit(site_id):
 @bp.route('/api/mobile/settings', methods=['GET', 'POST'])
 @admin_required
 def api_mobile_settings():
-    keys = ('mobile_enabled', 'mobile_bind_device', 'mobile_max_accuracy', 'mobile_require_geofence', 'mobile_leave_deduct')
+    keys = ('mobile_enabled', 'mobile_bind_device', 'mobile_max_accuracy', 'mobile_require_geofence', 'mobile_leave_deduct',
+            'mobile_require_app', 'mobile_suspicious')
     if request.method == 'POST':
         data = request.get_json(silent=True) or {}
         for k in keys:
             if k in data:
                 v = data[k]
-                if k == 'mobile_max_accuracy':
+                if k == 'mobile_suspicious':
+                    v = 'reject' if v == 'reject' else 'flag'
+                elif k == 'mobile_max_accuracy':
                     try:
                         v = str(max(10, min(1000, int(float(v)))))
                     except (TypeError, ValueError):
                         continue
-                else:
+                elif k != 'mobile_suspicious':
                     v = '1' if v in (True, 1, '1', 'true', 'on') else '0'
                 db.set_setting(k, v)
         return jsonify({'ok': True})
@@ -700,6 +794,8 @@ def _punch_query(args):
         if args.get(key):
             where.append(f"{col} = ?")
             params.append(args[key])
+    if args.get('flagged') == '1':
+        where.append("flags IS NOT NULL AND flags != ''")
     allowed = session.get('allowed_depts') or []
     if allowed:
         where.append(f"dept IN ({','.join('?' * len(allowed))})")
@@ -716,9 +812,10 @@ def api_punches():
         rows = [dict(r) for r in conn.execute(
             f"SELECT * FROM mobile_punches WHERE {where} ORDER BY date DESC, time DESC, id DESC LIMIT 3000", params).fetchall()]
         # الأعداد (بدون فلتر النوع/الحالة حتى تبقى الأزرار صحيحة)
-        base_args = {k: v for k, v in request.args.items() if k not in ('kind', 'status')}
+        base_args = {k: v for k, v in request.args.items() if k not in ('kind', 'status', 'flagged')}
         w2, p2, _, _ = _punch_query(base_args)
-        counts = {'all': 0, 'rejected': 0, **{k: 0 for k in KINDS}}
+        counts = {'all': 0, 'rejected': 0, 'flagged': 0, **{k: 0 for k in KINDS}}
+        counts['flagged'] = conn.execute(f"SELECT COUNT(*) FROM mobile_punches WHERE {w2} AND flags IS NOT NULL AND flags != ''", p2).fetchone()[0]
         for r in conn.execute(f"SELECT kind, status, COUNT(*) AS n FROM mobile_punches WHERE {w2} GROUP BY kind, status", p2):
             counts['all'] += r['n']
             if r['status'] == 'rejected':
@@ -772,10 +869,11 @@ def api_punches_export():
     finally:
         conn.close()
     header = ['التاريخ', 'الوقت', 'الموظف', 'القسم', 'الحركة', 'الحالة', 'السبب', 'الموقع', 'المسافة (م)', 'دقة GPS (م)',
-              'خط العرض', 'خط الطول', 'الهاتف', 'IP']
+              'خط العرض', 'خط الطول', 'الهاتف', 'IP', 'المصدر', 'علامات الاشتباه']
     data = [[r['date'], r['time'], r['name'], r['dept'], KINDS.get(r['kind'], r['kind']),
              'مقبولة' if r['status'] == 'accepted' else 'مرفوضة', r['reason'] or '', r['site_name'] or '',
-             r['distance_m'], r['accuracy'], r['lat'], r['lng'], r['device_label'] or '', r['ip'] or ''] for r in rows]
+             r['distance_m'], r['accuracy'], r['lat'], r['lng'], r['device_label'] or '', r['ip'] or '',
+             'التطبيق' if r['source'] == 'app' else 'المتصفح', r['flags'] or ''] for r in rows]
     fname = f'mobile-punches-{d_from}_{d_to}'
     if request.args.get('format') == 'xlsx':
         from openpyxl import Workbook
@@ -790,7 +888,7 @@ def api_punches_export():
             c.fill = PatternFill('solid', fgColor='1B6E8C')
         for row in data:
             ws.append(row)
-        for i, w in enumerate((12, 10, 26, 18, 14, 10, 40, 20, 10, 10, 12, 12, 22, 16), 1):
+        for i, w in enumerate((12, 10, 26, 18, 14, 10, 40, 20, 10, 10, 12, 12, 22, 16, 10, 40), 1):
             ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
         ws.freeze_panes = 'A2'
         ws.auto_filter.ref = ws.dimensions
@@ -805,3 +903,17 @@ def api_punches_export():
     w.writerow(header)
     w.writerows(data)
     return send_file(io.BytesIO(s.getvalue().encode('utf-8')), mimetype='text/csv', as_attachment=True, download_name=fname + '.csv')
+
+
+@bp.route('/api/mobile/myip')
+@admin_required
+def api_myip():
+    """عنوان IP الذي يرى به الخادم هذا الجهاز (لإضافة شبكة Wi-Fi العمل لموقع)"""
+    return jsonify({'ok': True, 'ip': _ip()})
+
+
+@bp.route('/me/app.json')
+def me_app_info():
+    """للتطبيق: هل التسجيل يتطلب التطبيق؟ (بدون بيانات حساسة)"""
+    cfg = settings()
+    return jsonify({'ok': True, 'require_app': cfg.get('mobile_require_app', '0') == '1'})

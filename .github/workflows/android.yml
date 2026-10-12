@@ -1,0 +1,82 @@
+# بناء تطبيقَي أندرويد (الموظف + الإدارة) تلقائياً عند أي تعديل في مجلد android/
+# النتيجة: static/apk/attendance-employee.apk و attendance-admin.apk — تُرفع إلى المستودع فيحصل عليها
+# الكمبيوتر مع update.bat وتظهر للتنزيل في صفحة /app — ونسخة في Actions ← Artifacts أيضاً.
+name: Android APKs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'عنوان النظام داخل التطبيق'
+        required: false
+        default: 'https://3.iajaward.org'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-apk
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Signing key from secrets (optional)
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build
+        working-directory: android
+        env:
+          ATT_BASE_URL: ${{ github.event.inputs.base_url }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          [ -n "$ATT_BASE_URL" ] || unset ATT_BASE_URL
+          [ -n "$ANDROID_KEYSTORE_PASSWORD" ] || unset ANDROID_KEYSTORE_PASSWORD
+          [ -n "$ANDROID_KEY_ALIAS" ] || unset ANDROID_KEY_ALIAS
+          gradle --no-daemon assembleEmployeeRelease assembleAdminRelease
+
+      - name: Collect
+        run: |
+          mkdir -p static/apk
+          cp android/app/build/outputs/apk/employee/release/app-employee-release.apk static/apk/attendance-employee.apk
+          cp android/app/build/outputs/apk/admin/release/app-admin-release.apk static/apk/attendance-admin.apk
+          echo "1.0.${GITHUB_RUN_NUMBER} — $(date -u +%Y-%m-%d)" > static/apk/version.txt
+          ls -la static/apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: attendance-apks
+          path: static/apk/
+
+      - name: Publish to the repository (served at /app)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add static/apk
+          git commit -m "APKs 1.0.${GITHUB_RUN_NUMBER} [skip ci]" || exit 0
+          git pull --rebase origin main
+          git push origin HEAD:main

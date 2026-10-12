@@ -163,6 +163,8 @@ async function loadMobileSettings() {
   document.getElementById('msGeo').checked = s.mobile_require_geofence === '1';
   document.getElementById('msLeave').checked = s.mobile_leave_deduct === '1';
   document.getElementById('msAcc').value = s.mobile_max_accuracy;
+  document.getElementById('msApp').checked = s.mobile_require_app === '1';
+  document.getElementById('msSusp').value = s.mobile_suspicious || 'flag';
   if (!PERMS.can_edit_org_settings) document.querySelectorAll('#mobileSettingsCard input, #mobileSettingsCard button').forEach(e => { e.disabled = true; });
 }
 
@@ -171,6 +173,7 @@ async function msSave() {
     mobile_enabled: document.getElementById('msEnabled').checked, mobile_bind_device: document.getElementById('msBind').checked,
     mobile_require_geofence: document.getElementById('msGeo').checked, mobile_leave_deduct: document.getElementById('msLeave').checked,
     mobile_max_accuracy: document.getElementById('msAcc').value,
+    mobile_require_app: document.getElementById('msApp').checked, mobile_suspicious: document.getElementById('msSusp').value,
   }) });
   toast('حُفظت إعدادات التطبيق');
 }
@@ -208,11 +211,12 @@ async function loadSites() {
   document.getElementById('sitesTable').innerHTML = d.rows.map(s => `
     <tr><td><input type="checkbox" class="row-check" data-id="${s.id}"></td>
       <td><b>${mEsc(s.name)}</b><br><small dir="ltr" style="color:var(--muted)">${s.lat.toFixed(5)}, ${s.lng.toFixed(5)}</small></td>
-      <td>${s.radius_m} م</td><td><small>${s.depts.length ? s.depts.map(mEsc).join('، ') : 'كل الأقسام'}</small></td><td>${s.moves}</td>
+      <td>${s.radius_m} م</td><td><small>${s.depts.length ? s.depts.map(mEsc).join('، ') : 'كل الأقسام'}</small></td>
+      <td><small dir="ltr">${mEsc(s.ips || '—')}</small>${s.ip_required ? '<br><span class="badge badge-ontime">إلزامي</span>' : ''}</td><td>${s.moves}</td>
       <td><button class="btn btn-sm ${s.active ? 'btn-primary' : 'btn-outline'}" onclick="siteToggle(${s.id}, ${s.active ? 0 : 1})">${s.active ? 'مفعّل' : 'معطّل'}</button></td>
       <td style="white-space:nowrap"><button class="btn btn-outline btn-sm" onclick="siteEdit(${s.id})"><i class="fas fa-pen"></i></button>
         <a class="btn btn-outline btn-sm" target="_blank" href="https://www.google.com/maps?q=${s.lat},${s.lng}"><i class="fas fa-map-location-dot"></i></a></td></tr>`).join('')
-    || '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px">لا توجد مواقع عمل بعد — أضف موقعاً حتى يستطيع الموظفون التسجيل</td></tr>';
+    || '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:16px">لا توجد مواقع عمل بعد — أضف موقعاً حتى يستطيع الموظفون التسجيل</td></tr>';
   siteRenderDepts([]);
   setTimeout(() => {
     siteEnsureMap();
@@ -235,7 +239,8 @@ function siteRenderDepts(selected) {
 }
 
 function siteReset() {
-  ['siteId', 'siteName', 'siteLat', 'siteLng'].forEach(id => { document.getElementById(id).value = ''; });
+  ['siteId', 'siteName', 'siteLat', 'siteLng', 'siteIps'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('siteIpReq').checked = false;
   document.getElementById('siteRadius').value = 150;
   document.getElementById('siteFormTitle').textContent = 'إضافة موقع عمل';
   siteRenderDepts([]);
@@ -250,6 +255,8 @@ function siteEdit(id) {
   document.getElementById('siteLat').value = s.lat;
   document.getElementById('siteLng').value = s.lng;
   document.getElementById('siteRadius').value = s.radius_m;
+  document.getElementById('siteIps').value = s.ips || '';
+  document.getElementById('siteIpReq').checked = !!s.ip_required;
   document.getElementById('siteFormTitle').textContent = `تعديل: ${s.name}`;
   siteRenderDepts(s.depts);
   siteDraw();
@@ -275,6 +282,7 @@ async function siteSave() {
     name: document.getElementById('siteName').value.trim(), lat: document.getElementById('siteLat').value,
     lng: document.getElementById('siteLng').value, radius_m: document.getElementById('siteRadius').value,
     depts: [...document.querySelectorAll('.site-dept:checked')].map(c => c.value), active: true,
+    ips: document.getElementById('siteIps').value, ip_required: document.getElementById('siteIpReq').checked,
   };
   const d = await api(id ? '/api/mobile/sites/' + id : '/api/mobile/sites', { method: id ? 'PUT' : 'POST', body: JSON.stringify(body) });
   if (!d) return;
@@ -283,13 +291,23 @@ async function siteSave() {
   loadSites();
 }
 
+async function siteAddMyIp() {
+  const d = await api('/api/mobile/myip');
+  if (!d) return;
+  const el = document.getElementById('siteIps');
+  const list = el.value.split(',').map(x => x.trim()).filter(Boolean);
+  if (!list.includes(d.ip)) list.push(d.ip);
+  el.value = list.join(', ');
+  toast(`أُضيف ${d.ip} — تأكد أنك متصل الآن بشبكة Wi-Fi العمل`);
+}
+
 async function siteToggle(id, active) {
   await api('/api/mobile/sites/' + id, { method: 'PUT', body: JSON.stringify({ active: !!active }) });
   loadSites();
 }
 
 /* ================= الحركات والمتابعة ================= */
-let liveMap = null, liveLayer = null, liveTimer = null, mvKind = '', mvStatus = '', mvRowsCache = [];
+let liveMap = null, liveLayer = null, liveTimer = null, mvKind = '', mvStatus = '', mvFlag = false, mvRowsCache = [];
 const ST_LABEL = { in: 'في الدوام', out: 'انصرف', leave: 'خروج مؤقت', none: 'لم يسجّل' };
 
 async function loadLive() {
@@ -331,6 +349,7 @@ function mvParams() {
   ['From', 'To', 'Dept', 'Name'].forEach(k => { const v = document.getElementById('mv' + k).value; if (v) p.set(k.toLowerCase(), v); });
   if (mvKind) p.set('kind', mvKind);
   if (mvStatus) p.set('status', mvStatus);
+  if (mvFlag) p.set('flagged', '1');
   return p;
 }
 
@@ -348,21 +367,22 @@ async function loadMoves(quiet) {
   const keepDept = deptSel.value;
   deptSel.innerHTML = '<option value="">كل الأقسام</option>' + depts.map(n => `<option ${n === keepDept ? 'selected' : ''}>${mEsc(n)}</option>`).join('');
   const c = d.counts;
-  const chip = (kind, status, label, n) => `<button class="${mvKind === kind && mvStatus === status ? 'on' : ''}" onclick="mvKind='${kind}';mvStatus='${status}';loadMoves()">${label} <b>${n}</b></button>`;
+  const chip = (kind, status, label, n) => `<button class="${!mvFlag && mvKind === kind && mvStatus === status ? 'on' : ''}" onclick="mvFlag=false;mvKind='${kind}';mvStatus='${status}';loadMoves()">${label} <b>${n}</b></button>`;
   document.getElementById('mvChips').innerHTML = chip('', '', 'الكل', c.all) + chip('in', 'accepted', 'حضور', c.in) + chip('out', 'accepted', 'انصراف', c.out) +
-    chip('leave_out', 'accepted', 'خروج مؤقت', c.leave_out) + chip('leave_back', 'accepted', 'عودة', c.leave_back) + chip('', 'rejected', 'مرفوضة', c.rejected);
+    chip('leave_out', 'accepted', 'خروج مؤقت', c.leave_out) + chip('leave_back', 'accepted', 'عودة', c.leave_back) + chip('', 'rejected', 'مرفوضة', c.rejected) +
+    `<button class="${mvFlag ? 'on' : ''}" onclick="mvFlag=!mvFlag;mvKind='';mvStatus='';loadMoves()">⚠ مشبوهة <b>${c.flagged}</b></button>`;
   mvFilter();
 }
 
 function mvFilter() {
   const q = (document.getElementById('mvSearch').value || '').trim().toLowerCase();
-  const rows = mvRowsCache.filter(r => !q || [r.name, r.dept, r.site_name, r.reason, r.kind_label, r.device_label].some(v => (v || '').toLowerCase().includes(q)));
+  const rows = mvRowsCache.filter(r => !q || [r.name, r.dept, r.site_name, r.reason, r.kind_label, r.device_label, r.flags].some(v => (v || '').toLowerCase().includes(q)));
   document.getElementById('mvShown').textContent = `${rows.length} من ${mvRowsCache.length}`;
-  document.getElementById('mvTable').innerHTML = rows.map(r => `<tr${r.status === 'rejected' ? ' style="background:#fff5f5"' : ''}>
+  document.getElementById('mvTable').innerHTML = rows.map(r => `<tr${r.status === 'rejected' ? ' style="background:#fff5f5"' : (r.flags ? ' style="background:#fffbeb"' : '')}>
     <td>${mEsc(r.date)}</td><td dir="ltr" style="text-align:right">${mEsc(r.time.slice(0, 5))}</td><td><b>${mEsc(r.name)}</b></td><td>${mEsc(r.dept || '')}</td>
     <td>${mEsc(r.kind_label)}</td><td>${mEsc(r.site_name || '—')}${r.distance_m != null ? ` <small style="color:var(--muted)">(${Math.round(r.distance_m)} م)</small>` : ''}</td>
-    <td>${r.accuracy != null ? Math.round(r.accuracy) + ' م' : '—'}</td>
-    <td>${r.status === 'accepted' ? '<span class="badge badge-ontime">مقبولة</span>' : `<span class="badge badge-absent" title="${mEsc(r.reason || '')}">مرفوضة</span><br><small style="color:#842029">${mEsc(r.reason || '')}</small>`}</td>
+    <td>${r.accuracy != null ? Math.round(r.accuracy) + ' م' : '—'}<br><small style="color:var(--muted)">${r.source === 'app' ? '<i class="fas fa-mobile-screen"></i> التطبيق' : '<i class="fas fa-globe"></i> المتصفح'}</small></td>
+    <td>${r.status === 'accepted' ? '<span class="badge badge-ontime">مقبولة</span>' : `<span class="badge badge-absent" title="${mEsc(r.reason || '')}">مرفوضة</span><br><small style="color:#842029">${mEsc(r.reason || '')}</small>`}${r.flags ? `<br><small style="color:#b45309">⚠ ${mEsc(r.flags)}</small>` : ''}</td>
     <td>${r.lat != null ? `<a target="_blank" href="https://www.google.com/maps?q=${r.lat},${r.lng}"><i class="fas fa-map-location-dot"></i></a>` : ''}</td></tr>`).join('')
     || '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:16px">لا توجد حركات في هذه الفترة</td></tr>';
 }

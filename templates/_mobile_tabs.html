@@ -65,6 +65,9 @@
       <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="msGeo"> منع التسجيل من خارج مواقع العمل</label>
       <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="msLeave"> خصم الخروج المؤقت من ساعات العمل</label>
       <div class="form-group"><label>أقصى خطأ مقبول في دقة الموقع (متر)</label><input type="number" id="msAcc" min="10" max="1000"></div>
+      <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="msApp"> التسجيل من تطبيق الموظف (APK) فقط — يكشف تطبيقات الموقع الوهمي</label>
+      <div class="form-group"><label>الحركة المشبوهة (موقع ثابت تماماً، قفزة غير منطقية، خارج شبكة العمل)</label>
+        <select id="msSusp" class="search-input"><option value="flag">تُقبل مع علامة ⚠ للمراجعة</option><option value="reject">تُرفض</option></select></div>
     </div>
     <button class="btn btn-primary" onclick="msSave()"><i class="fas fa-save"></i> حفظ الإعدادات</button>
   </div>
@@ -83,6 +86,11 @@
       <div class="form-group"><label>نصف القطر (متر)</label><input type="number" id="siteRadius" value="150" min="20" max="20000" oninput="siteDraw()"></div>
     </div>
     <div class="form-group"><label>الأقسام المسموح لها (اتركها كلها بدون تحديد = كل الأقسام)</label><div id="siteDepts" style="display:flex;flex-wrap:wrap;gap:6px 14px"></div></div>
+    <div class="form-grid">
+      <div class="form-group"><label>شبكة Wi-Fi العمل — عنوان IP العام (اختياري، يفصل بينها فاصلة)</label>
+        <div style="display:flex;gap:6px"><input type="text" id="siteIps" dir="ltr" placeholder="مثال: 94.142.10.20"><button class="btn btn-outline btn-sm" type="button" onclick="siteAddMyIp()" title="عنوان هذا الجهاز كما يراه الخادم — اضغطه وأنت متصل بشبكة العمل"><i class="fas fa-wifi"></i> عنواني الحالي</button></div></div>
+      <label style="display:flex;gap:8px;align-items:center;font-weight:600;margin-top:24px"><input type="checkbox" id="siteIpReq"> يجب الاتصال بشبكة العمل للتسجيل من هذا الموقع (أقوى حماية من الموقع الوهمي)</label>
+    </div>
     <input type="hidden" id="siteId">
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-primary" onclick="siteSave()"><i class="fas fa-save"></i> حفظ الموقع</button>
@@ -94,7 +102,7 @@
     <div class="card-title"><i class="fas fa-list"></i> مواقع العمل (<span id="siteCount">0</span>)</div>
     <button class="btn btn-red btn-sm" style="margin-bottom:8px" onclick="bulkDeleteSelected('sitesTable', id => '/api/mobile/sites/' + id, loadSites)"><i class="fas fa-trash"></i> حذف المحدد</button>
     <div class="table-wrap"><table>
-      <thead><tr><th><input type="checkbox" onchange="toggleSelectAll('sitesTable', this.checked)"></th><th>الموقع</th><th>نصف القطر</th><th>الأقسام</th><th>الحركات</th><th>الحالة</th><th></th></tr></thead>
+      <thead><tr><th><input type="checkbox" onchange="toggleSelectAll('sitesTable', this.checked)"></th><th>الموقع</th><th>نصف القطر</th><th>الأقسام</th><th>شبكة العمل</th><th>الحركات</th><th>الحالة</th><th></th></tr></thead>
       <tbody id="sitesTable"></tbody>
     </table></div>
   </div>
@@ -124,7 +132,7 @@
     </div>
     <div class="m-chips" id="mvChips"></div>
     <div class="table-wrap"><table>
-      <thead><tr><th>التاريخ</th><th>الوقت</th><th>الموظف</th><th>القسم</th><th>الحركة</th><th>الموقع / المسافة</th><th>الدقة</th><th>الحالة</th><th>الخريطة</th></tr></thead>
+      <thead><tr><th>التاريخ</th><th>الوقت</th><th>الموظف</th><th>القسم</th><th>الحركة</th><th>الموقع / المسافة</th><th>الدقة / المصدر</th><th>الحالة</th><th>الخريطة</th></tr></thead>
       <tbody id="mvTable"></tbody></table></div>
   </div>
 </div>

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  {% include '_me_head.html' %}
+  <title>تطبيقات نظام الحضور</title>
+  <style>
+    .app{display:flex;gap:14px;align-items:flex-start}
+    .ic{width:62px;height:62px;border-radius:18px;color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.8rem;flex:none}
+    h2{font-size:1.1rem;color:var(--pd);margin-bottom:4px}
+    ol{padding-inline-start:20px;line-height:1.9;font-size:.92rem}
+    .na{background:#f3f3f3;color:#777;border-radius:12px;padding:10px 12px;font-weight:700;font-size:.9rem}
+  </style>
+</head>
+<body>
+<div class="wrap" style="padding-top:5vh">
+  <div style="text-align:center;margin-bottom:16px">
+    <h1 style="font-size:1.4rem;color:var(--pd)"><i class="fas fa-mobile-screen"></i> تطبيقات نظام الحضور</h1>
+    <div class="muted">{{ settings.org_name or '' }}{% if version %} · الإصدار {{ version }}{% endif %}</div>
+  </div>
+
+  <div class="card">
+    <div class="app">
+      <div class="ic" style="background:linear-gradient(135deg,#1e8e5a,#2fb37a)"><i class="fas fa-fingerprint"></i></div>
+      <div style="flex:1">
+        <h2>تطبيق الموظف — تسجيل الدوام</h2>
+        <p class="muted">حضور، انصراف، خروج مؤقت من داخل موقع العمل. يكشف تطبيقات الموقع الوهمي.</p>
+        {% if files.employee %}<a class="btn btn-p" style="margin-top:10px;width:100%" href="{{ files.employee.url }}" download><i class="fab fa-android"></i> تنزيل للأندرويد ({{ files.employee.size }} MB)</a>
+        {% else %}<div class="na" style="margin-top:10px">ملف التطبيق غير متوفر بعد على الخادم</div>{% endif %}
+        <a class="btn btn-l" style="margin-top:8px;width:100%" href="/me"><i class="fas fa-globe"></i> أو افتحه من المتصفح (آيفون)</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="app">
+      <div class="ic" style="background:linear-gradient(135deg,#1B6E8C,#2E4E7A)"><i class="fas fa-user-shield"></i></div>
+      <div style="flex:1">
+        <h2>تطبيق الإدارة — مستخدمو النظام</h2>
+        <p class="muted">التقارير، المتابعة المباشرة، الموظفون، الأجهزة — بصلاحيات حسابك.</p>
+        {% if files.admin %}<a class="btn btn-p" style="margin-top:10px;width:100%" href="{{ files.admin.url }}" download><i class="fab fa-android"></i> تنزيل للأندرويد ({{ files.admin.size }} MB)</a>
+        {% else %}<div class="na" style="margin-top:10px">ملف التطبيق غير متوفر بعد على الخادم</div>{% endif %}
+        <a class="btn btn-l" style="margin-top:8px;width:100%" href="/dashboard"><i class="fab fa-windows"></i> على الكمبيوتر: افتح النظام ثم «تثبيت على هذا الجهاز»</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><i class="fab fa-android"></i> طريقة التثبيت على أندرويد</h2>
+    <ol>
+      <li>اضغط «تنزيل» ثم افتح الملف من الإشعارات.</li>
+      <li>إن ظهر «غير مسموح» اختر «الإعدادات» ← فعّل «السماح من هذا المصدر» ثم ارجع.</li>
+      <li>اضغط «تثبيت». عند أول فتح اسمح باستخدام الموقع «أثناء استخدام التطبيق» (تطبيق الموظف).</li>
+      <li>سجّل الدخول باسم المستخدم وكلمة المرور من الإدارة — يرتبط حسابك بهذا الهاتف.</li>
+    </ol>
+    <h2 style="margin-top:12px"><i class="fab fa-windows"></i> على Windows (للإدارة)</h2>
+    <ol>
+      <li>افتح النظام في Edge أو Chrome وسجّل الدخول.</li>
+      <li>اضغط زر «تثبيت على هذا الجهاز» أعلى الصفحة (أو من قائمة المتصفح: التطبيقات ← تثبيت).</li>
+      <li>يظهر «إدارة الحضور والانصراف» في قائمة ابدأ ويمكن تثبيته على شريط المهام.</li>
+    </ol>
+  </div>
+</div>
+</body>
+</html>

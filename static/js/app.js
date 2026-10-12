@@ -2442,7 +2442,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // ===== تسجيل Service Worker لتفعيل "تثبيت التطبيق" (PWA) على أندرويد/
   // ويندوز - راجع static/sw.js لتفاصيل نطاق التخزين المؤقت المحدود عمداً =====
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
   }
 });
 

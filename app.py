@@ -38,6 +38,10 @@ import sync_engine
 import onedrive_backup
 import gdrive_backup
 
+import mimetypes  # noqa: E402
+mimetypes.add_type('application/vnd.android.package-archive', '.apk')
+mimetypes.add_type('application/manifest+json', '.webmanifest')
+
 app = Flask(__name__)
 
 
@@ -206,7 +210,7 @@ VIEWER_ALLOWED_WRITES = {'api_overtime', 'api_overtime_export_csv', 'api_change_
 # مسارات admin فقط بغض النظر عن أي صلاحية دقيقة - إدارة المستخدمين حصراً
 # (تبويب "المستخدمون" بالكامل مخفي عن غير admin بالواجهة أيضاً، مطابقةً
 # للأصل المكتبي بالضبط)
-ADMIN_ONLY_ENDPOINTS = {'api_users', 'api_user_edit'}
+ADMIN_ONLY_ENDPOINTS = {'api_users', 'api_user_edit', 'api_users_review', 'api_users_bulk'}
 
 # مسارات القراءة الخاضعة لتقييد "الأقسام المسموحة" - تُصفَّى بياناتها
 # تلقائياً حسب user_departments لو المستخدم مقيَّد (راجع scoped_dept_filter)
@@ -352,6 +356,12 @@ def login():
     _LOGIN_FAILS.pop(key, None)
 
     dept_rows = conn.execute("SELECT dept FROM user_departments WHERE user_id = ?", (user['id'],)).fetchall()
+    ip = (request.headers.get('CF-Connecting-IP') or request.remote_addr or '')[:45]
+    conn.execute("UPDATE users SET last_login_at = ?, last_login_ip = ? WHERE id = ?",
+                 (datetime.now().strftime('%Y-%m-%d %H:%M'), ip, user['id']))
+    session['username'] = user['username']
+    log_audit(conn, 'login', 'user', new_value=f"{user['username']} — {ip}")
+    conn.commit()
     conn.close()
 
     session.clear()
@@ -3187,6 +3197,103 @@ def api_user_edit(user_id):
     conn.commit()
     conn.close()
     return jsonify({'ok': True})
+
+
+PERM_LABELS = {
+    'can_manage_employees': 'الموظفون وحسابات التطبيق',
+    'can_manage_departments': 'الأقسام',
+    'can_push_devices': 'أجهزة البصمة (سحب/رفع/باب)',
+    'can_edit_org_settings': 'الإعدادات والبريد والجدولة ومواقع العمل',
+}
+
+
+@app.route('/api/users/review')
+@login_required
+def api_users_review():
+    """مراجعة صلاحيات كل المستخدمين في جدول واحد + ما يعنيه كل دور"""
+    conn = db.get_db()
+    try:
+        rows = [dict(r) for r in conn.execute(
+            "SELECT id, username, full_name, role, can_manage_employees, can_manage_departments, can_push_devices, "
+            "can_edit_org_settings, created_at, last_login_at, last_login_ip FROM users ORDER BY role, username").fetchall()]
+        for r in rows:
+            r['allowed_departments'] = [x['dept'] for x in conn.execute(
+                "SELECT dept FROM user_departments WHERE user_id = ?", (r['id'],)).fetchall()]
+            eff = {k: (r['role'] == 'admin' or bool(r[k])) for k in _PERMISSION_KEYS}
+            r['effective'] = eff
+            r['read_only'] = r['role'] == 'viewer'
+            r['is_me'] = r['id'] == session.get('user_id')
+        return jsonify({'ok': True, 'rows': rows, 'perm_labels': PERM_LABELS})
+    finally:
+        conn.close()
+
+
+@app.route('/api/users/bulk', methods=['POST'])
+@login_required
+def api_users_bulk():
+    data = request.get_json(force=True) or {}
+    ids = [int(i) for i in (data.get('ids') or []) if str(i).isdigit()]
+    action, value = data.get('action'), data.get('value')
+    me = session.get('user_id')
+    if not ids:
+        return jsonify({'ok': False, 'error': 'حدّد مستخدماً واحداً على الأقل'}), 400
+    conn = db.get_db()
+    n = 0
+    try:
+        for uid in ids:
+            if action == 'role' and value in _VALID_ROLES:
+                if uid == me and value != 'admin':
+                    continue
+                d = _ROLE_PERMISSION_DEFAULTS[value]
+                conn.execute("UPDATE users SET role = ?, can_manage_employees = ?, can_manage_departments = ?, "
+                             "can_push_devices = ?, can_edit_org_settings = ? WHERE id = ?",
+                             (value, int(d['can_manage_employees']), int(d['can_manage_departments']),
+                              int(d['can_push_devices']), int(d['can_edit_org_settings']), uid))
+            elif action in ('grant', 'revoke') and value in _PERMISSION_KEYS:
+                conn.execute(f"UPDATE users SET {value} = ? WHERE id = ?", (1 if action == 'grant' else 0, uid))
+            elif action == 'depts':
+                _set_user_departments(conn, uid, value or [])
+            elif action == 'delete':
+                if uid == me:
+                    continue
+                conn.execute("DELETE FROM users WHERE id = ?", (uid,))
+            else:
+                continue
+            n += 1
+        log_audit(conn, 'users_bulk', 'user', new_value=f'{action} {value or ""} ← {n} مستخدم')
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'count': n})
+
+
+@app.route('/sw.js')
+def service_worker():
+    """Service Worker على مستوى الموقع كله (يُثبَّت النظام كتطبيق على Windows/أندرويد)"""
+    resp = send_file(os.path.join(app.static_folder, 'sw.js'), mimetype='application/javascript')
+    resp.headers['Service-Worker-Allowed'] = '/'
+    resp.headers['Cache-Control'] = 'no-cache'
+    return resp
+
+
+@app.route('/app')
+def app_download_page():
+    """صفحة تنزيل التطبيقات (APK للموظف وللإدارة + تثبيت على Windows)"""
+    apk_dir = os.path.join(app.static_folder, 'apk')
+    files = {}
+    for key, name in (('employee', 'attendance-employee.apk'), ('admin', 'attendance-admin.apk')):
+        path = os.path.join(apk_dir, name)
+        if os.path.isfile(path):
+            files[key] = {'url': url_for('static', filename='apk/' + name),
+                          'size': f"{os.path.getsize(path) / 1048576:.1f}",
+                          'date': datetime.fromtimestamp(os.path.getmtime(path)).strftime('%Y-%m-%d')}
+    version = ''
+    try:
+        with open(os.path.join(apk_dir, 'version.txt'), encoding='utf-8') as fh:
+            version = fh.read().strip()
+    except OSError:
+        pass
+    return render_template('app_download.html', files=files, version=version, settings=db.get_all_settings())
 
 
 @app.route('/api/change-password', methods=['POST'])

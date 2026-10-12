@@ -74,7 +74,8 @@
       <button class="btn btn-p" style="width:100%;margin-top:14px" onclick="changePw()"><i class="fas fa-key"></i> حفظ</button>
     </div>
     <div class="card muted" style="line-height:1.9">
-      <i class="fas fa-circle-info"></i> لتثبيت التطبيق: من قائمة المتصفح اختر «إضافة إلى الشاشة الرئيسية».<br>
+      <button class="btn btn-p hide" id="installBtn" style="width:100%;margin-bottom:10px"><i class="fas fa-download"></i> تثبيت التطبيق على هذا الهاتف</button>
+      <i class="fas fa-circle-info"></i> لتثبيت التطبيق: <a href="/app">صفحة التطبيق</a> (أندرويد APK) أو من قائمة المتصفح «إضافة إلى الشاشة الرئيسية».<br>
       <i class="fas fa-location-dot"></i> يجب السماح للمتصفح باستخدام الموقع وتشغيل GPS.<br>
       <i class="fas fa-mobile-screen"></i> حسابك مرتبط بهذا الهاتف — عند تغيير الهاتف اطلب من الإدارة فكّ الربط.<br>
       <i class="fas fa-fingerprint"></i> إن نسيت هاتفك سجّل على جهاز البصمة كالمعتاد.
@@ -84,9 +85,13 @@
 <div class="toast" id="toast"></div>
 <script>
 (function () {
-  var DEV = ''; try { DEV = localStorage.getItem('att_dev') || ''; } catch (e) {}
+  var NATIVE = window.AttNative || null;   // داخل تطبيق الموظف (APK): موقع أندرويد مع كشف الموقع الوهمي
+  var DEV = '';
+  if (NATIVE) { try { DEV = NATIVE.deviceId(); } catch (e) {} }
+  if (!DEV) { try { DEV = localStorage.getItem('att_dev') || ''; } catch (e) {} }
   if (!DEV) { var m = document.cookie.match(/(?:^|; )att_dev=([0-9a-f]{64})/); DEV = m ? m[1] : ''; }
-  var S = null, POS = null, busy = false, offset = 0;
+  var S = null, POS = null, busy = false, offset = 0, SAMPLES = [];
+  function addSample(p) { SAMPLES.push({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, t: Date.now() }); if (SAMPLES.length > 10) SAMPLES.shift(); }
   var LABEL = { 'in': 'حضور', 'out': 'انصراف', 'leave_out': 'خروج مؤقت', 'leave_back': 'عودة من الخروج' };
   var STATE = { '': 'لم تسجّل حضورك اليوم بعد', 'in': 'أنت في الدوام', 'leave_out': 'أنت في خروج مؤقت', 'leave_back': 'أنت في الدوام (عدت من الخروج)', 'out': 'انتهى دوامك اليوم' };
   function $(id) { return document.getElementById(id); }
@@ -110,6 +115,8 @@
     (S && S.sites || []).forEach(function (s) { var d = dist(POS.coords.latitude, POS.coords.longitude, s.lat, s.lng); if (bd === null || d - s.radius < bd - best.radius) { best = s; bd = d; } });
     var inside = S && (S.anywhere || (best && bd - Math.min(acc, 30) <= best.radius));
     var accOk = !S || acc <= S.max_accuracy;
+    if (S && S.require_app && !NATIVE) { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-mobile-screen"></i><span>التسجيل متاح من تطبيق الموظف فقط — <a href="/app">نزّل التطبيق</a></span>'; return { ok: false }; }
+    if (POS.mock) { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-ban"></i><span>تم اكتشاف تطبيق موقع وهمي على هاتفك — أغلقه للتمكن من التسجيل</span>'; return { ok: false }; }
     if (!accOk) { g.className = 'gps wait'; g.innerHTML = '<i class="fas fa-satellite-dish fa-beat-fade"></i><span>دقة الموقع ضعيفة (' + Math.round(acc) + ' م) — انتظر قليلاً</span>'; }
     else if (inside) { g.className = 'gps ok'; g.innerHTML = '<i class="fas fa-circle-check"></i><span>' + (S.anywhere ? 'مسموح لك التسجيل من أي مكان' : 'أنت داخل موقع العمل: ' + esc(best.name)) + ' · دقة ' + Math.round(acc) + ' م</span>'; }
     else if (best) { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-location-dot"></i><span>خارج موقع العمل — ' + Math.round(bd) + ' م عن «' + esc(best.name) + '» (المسموح ' + best.radius + ' م)</span>'; }
@@ -122,8 +129,15 @@
     document.querySelectorAll('.act').forEach(function (b) { b.disabled = busy || !S.enabled || S.allowed.indexOf(b.dataset.k) < 0 || !w.ok; });
     $('state').textContent = S.enabled ? STATE[S.last || ''] : 'التسجيل من الهاتف متوقف حالياً من الإدارة';
   }
-  if ('geolocation' in navigator) {
-    navigator.geolocation.watchPosition(function (p) { POS = p; render(); },
+  window.attNativeLocation = function (d) {   // يستدعيها تطبيق أندرويد مع كل قراءة
+    if (d.error) { var g = $('gps'); g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-location-crosshairs"></i><span>' + esc(d.error) + '</span>'; return; }
+    POS = { coords: { latitude: d.lat, longitude: d.lng, accuracy: d.accuracy }, mock: !!d.mock };
+    addSample(POS); render();
+  };
+  if (NATIVE) {
+    try { NATIVE.startLocation(); } catch (e) {}
+  } else if ('geolocation' in navigator) {
+    navigator.geolocation.watchPosition(function (p) { POS = p; addSample(p); render(); },
       function (e) { var g = $('gps'); g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-location-crosshairs"></i><span>' + (e.code === 1 ? 'اسمح للمتصفح باستخدام موقعك (من إعدادات الموقع) ثم أعد فتح الصفحة' : 'تعذّر تحديد الموقع — شغّل GPS') + '</span>'; },
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 });
   } else { $('gps').innerHTML = '<span>هذا المتصفح لا يدعم تحديد الموقع</span>'; }
@@ -149,7 +163,9 @@
       if (!POS || busy) return;
       if (!confirm('تسجيل «' + LABEL[k] + '» الآن؟')) return;
       busy = true; render();
-      api('/me/api/punch', { method: 'POST', body: JSON.stringify({ kind: k, lat: POS.coords.latitude, lng: POS.coords.longitude, accuracy: POS.coords.accuracy }) })
+      var lat = POS.coords.latitude.toFixed(7), lng = POS.coords.longitude.toFixed(7), hdr = {};
+      if (NATIVE) { var ts = String(Date.now()); hdr = { 'X-App': 'android', 'X-App-Ts': ts, 'X-App-Sig': NATIVE.sign(k + '|' + lat + '|' + lng + '|' + ts) }; }
+      api('/me/api/punch', { method: 'POST', headers: hdr, body: JSON.stringify({ kind: k, lat: lat, lng: lng, accuracy: POS.coords.accuracy, mock: !!POS.mock, rooted: NATIVE ? !!NATIVE.isRooted() : false, samples: SAMPLES }) })
         .then(function (d) { toast(d.ok ? d.message : d.error, d.ok); })
         .catch(function () { toast('تعذّر الاتصال بالخادم — تحقق من الإنترنت'); })
         .then(function () { busy = false; return load(); });
@@ -165,6 +181,10 @@
     api('/me/api/password', { method: 'POST', body: JSON.stringify({ current: $('pw0').value, 'new': $('pw1').value }) })
       .then(function (d) { toast(d.ok ? 'تم تغيير كلمة المرور' : d.error, d.ok); if (d.ok) { $('pw0').value = $('pw1').value = ''; } });
   };
+  var deferred = null;
+  window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferred = e; if (!NATIVE) $('installBtn').classList.remove('hide'); });
+  $('installBtn').addEventListener('click', function () { if (deferred) { deferred.prompt(); deferred = null; $('installBtn').classList.add('hide'); } });
+  if ('serviceWorker' in navigator && !NATIVE) navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function () {});
   load();
   setInterval(load, 60000);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) load(); });

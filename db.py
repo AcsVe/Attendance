@@ -295,6 +295,20 @@ def init_db():
         created_at TEXT DEFAULT (datetime('now'))
     )''')
     cur.execute("CREATE INDEX IF NOT EXISTS ix_mobile_punches_date ON mobile_punches(date, employee_id)")
+    # ترحيل: حماية من الموقع الوهمي — شبكة العمل لكل موقع + مصدر الحركة وعلامات الاشتباه
+    site_cols = {r['name'] for r in cur.execute("PRAGMA table_info(work_sites)").fetchall()}
+    if 'ips' not in site_cols:
+        cur.execute("ALTER TABLE work_sites ADD COLUMN ips TEXT NOT NULL DEFAULT ''")
+    if 'ip_required' not in site_cols:
+        cur.execute("ALTER TABLE work_sites ADD COLUMN ip_required INTEGER NOT NULL DEFAULT 0")
+    mp_cols = {r['name'] for r in cur.execute("PRAGMA table_info(mobile_punches)").fetchall()}
+    for col, typ in (('flags', "TEXT"), ('source', "TEXT")):
+        if col not in mp_cols:
+            cur.execute(f"ALTER TABLE mobile_punches ADD COLUMN {col} {typ}")
+    user_cols = {r['name'] for r in cur.execute("PRAGMA table_info(users)").fetchall()}
+    for col in ('last_login_at', 'last_login_ip'):
+        if col not in user_cols:
+            cur.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
 
     conn.commit()
 
@@ -407,6 +421,8 @@ def get_all_settings():
         'mobile_max_accuracy': '150',     # أقصى خطأ مقبول في دقة الموقع (متر)
         'mobile_require_geofence': '1',   # منع التسجيل خارج مواقع العمل
         'mobile_leave_deduct': '1',       # الخروج المؤقت يُخصم من ساعات العمل
+        'mobile_require_app': '0',        # التسجيل من تطبيق الموظف (APK) فقط — لا من المتصفح
+        'mobile_suspicious': 'flag',      # الحركة المشبوهة (موقع ثابت/قفزة/شبكة أخرى): flag = تُقبل مع علامة، reject = تُرفض
         'sync_central_url': '',
         'sync_api_key': '',
         'sync_last_push_at': '',
