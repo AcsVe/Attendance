@@ -51,6 +51,24 @@ def probe(host):
         return None
 
 
+def site_answers(host, tries=3):
+    """هل يجيب نظام الحضور فعلاً على https://host ؟ (خطأ 5xx/530 من Cloudflare = الكمبيوتر لا يعمل)"""
+    import json
+    import urllib.request
+    for i in range(tries):
+        try:
+            req = urllib.request.Request(f'https://{host}/me/app.json?probe={int(time.time())}',
+                                         headers={'User-Agent': 'att-standby-check', 'Cache-Control': 'no-cache'})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                if r.status == 200 and json.loads(r.read().decode('utf-8', 'replace')).get('ok'):
+                    return True
+        except Exception:
+            pass
+        if i < tries - 1:
+            time.sleep(3)
+    return False
+
+
 def up(tun):
     return (tun.get('status') or '').lower() in ('healthy', 'degraded')
 
@@ -142,7 +160,14 @@ def main():
         return
 
     if cmd == 'server-up':
-        sys.exit(0 if up(t_main) else 1)
+        # حالة النفق في Cloudflare تبقى «سليم» دقائق بعد إطفاء الكمبيوتر (أو إن شغّل النفق جهاز آخر)،
+        # لذلك نفتح الموقع فعلياً: يُعتبر الكمبيوتر يعمل فقط إن أجاب نظام الحضور نفسه عبر نفقه.
+        if not up(t_main):
+            sys.exit(1)
+        recs = records()
+        if not any(r['content'].startswith(t_main['id']) for r in recs.values()):
+            sys.exit(0)   # الموقع موجّه لغير الكمبيوتر حالياً؛ نكتفي بحالة النفق
+        sys.exit(0 if all(site_answers(h) for h in hosts) else 1)
 
     t_sb = tunnel(sb_name)
     names = {f"{t_main['id']}.cfargotunnel.com": t('الكمبيوتر', 'the PC'), f"{t_sb['id']}.cfargotunnel.com": t('الهاتف', 'the PHONE')}
