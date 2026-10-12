@@ -54,46 +54,70 @@ function applyAllTableFilters() {
    صفوف الجدول تصاعدياً/تنازلياً حسب محتوى ذلك العمود (رقمياً لو كل القيم
    أرقام، وإلا أبجدياً عربياً) - عمود صندوق الاختيار (no-filter) يُستثنى
    تلقائياً لأنه غير قابل للفرز أصلاً ===== */
-function initTableSorting() {
-  document.querySelectorAll('table.dt-filterable').forEach(table => {
-    if (table.dataset.sortReady) return;
+function initTableSorting(root) {
+  (root || document).querySelectorAll('table').forEach(table => {
+    if (table.dataset.sortReady || table.classList.contains('no-sort')) return;
     const headRow = table.querySelector('thead tr');
-    if (!headRow) return;
+    const tbody = table.querySelector('tbody');
+    if (!headRow || !tbody) return;
     table.dataset.sortReady = '1';
     Array.from(headRow.children).forEach((th, idx) => {
-      if (th.classList.contains('no-filter') || th.classList.contains('no-sort')) return;
-      th.style.cursor = 'pointer';
+      // عمود صندوق الاختيار أو عمود الأزرار (بدون عنوان) لا يُفرز
+      if (th.classList.contains('no-filter') || th.classList.contains('no-sort') || th.querySelector('input') || !th.textContent.trim()) return;
+      if (th.getAttribute('onclick')) return;   // جداول لها فرز خاص من الخادم (التقارير)
+      th.classList.add('dt-sortable');
       th.title = 'اضغط للفرز تصاعدياً/تنازلياً';
       const arrow = document.createElement('span');
       arrow.className = 'dt-sort-arrow';
-      arrow.style.cssText = 'font-size:.7em;opacity:.65;margin-inline-start:4px';
       th.appendChild(arrow);
-      th.addEventListener('click', () => sortTableByColumn(table, idx, th));
+      th.addEventListener('click', () => {
+        const dir = th.dataset.sortDir === 'asc' ? 'desc' : 'asc';
+        headRow.querySelectorAll('th').forEach(h => { h.dataset.sortDir = ''; const a = h.querySelector('.dt-sort-arrow'); if (a) a.textContent = ''; });
+        th.dataset.sortDir = dir;
+        arrow.textContent = dir === 'asc' ? '▲' : '▼';
+        table.dataset.sortCol = idx;
+        table.dataset.sortDir = dir;
+        sortTableRows(table);
+      });
     });
+    // عند إعادة تحميل الصفوف (تحديث/بحث) يبقى الفرز المختار مطبَّقاً
+    new MutationObserver(() => {
+      if (table._sorting || table.dataset.sortCol === undefined) return;
+      sortTableRows(table);
+    }).observe(tbody, { childList: true });
   });
 }
 
-function sortTableByColumn(table, colIndex, th) {
-  const tbody = table.querySelector('tbody');
-  if (!tbody) return;
-  const dir = th.dataset.sortDir === 'asc' ? 'desc' : 'asc';
-  table.querySelectorAll('thead tr:first-child th .dt-sort-arrow').forEach(a => a.textContent = '');
-  table.querySelectorAll('thead tr:first-child th').forEach(h => { h.dataset.sortDir = ''; });
-  th.dataset.sortDir = dir;
-  const arrow = th.querySelector('.dt-sort-arrow');
-  if (arrow) arrow.textContent = dir === 'asc' ? ' ▲' : ' ▼';
-  const mult = dir === 'asc' ? 1 : -1;
-  const rows = Array.from(tbody.rows).filter(r => r.cells.length > colIndex);
-  rows.sort((a, b) => {
-    const av = a.cells[colIndex].textContent.trim();
-    const bv = b.cells[colIndex].textContent.trim();
-    const an = parseFloat(av.replace(/,/g, ''));
-    const bn = parseFloat(bv.replace(/,/g, ''));
-    if (av !== '' && bv !== '' && !isNaN(an) && !isNaN(bn)) return (an - bn) * mult;
-    return av.localeCompare(bv, 'ar') * mult;
-  });
-  rows.forEach(r => tbody.appendChild(r));
+function _sortKey(text) {
+  const t = text.trim();
+  const n = t.replace(/[,\s%]/g, '').replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+  return /^-?\d+(\.\d+)?$/.test(n) ? { num: parseFloat(n) } : { str: t };
 }
+
+function sortTableRows(table) {
+  const tbody = table.querySelector('tbody');
+  const col = +table.dataset.sortCol, mult = table.dataset.sortDir === 'desc' ? -1 : 1;
+  const rows = Array.from(tbody.rows);
+  const sortable = rows.filter(r => r.cells.length > col && !(r.cells.length === 1 && r.cells[0].colSpan > 1));
+  if (sortable.length < 2) return;
+  sortable.sort((a, b) => {
+    const x = _sortKey(a.cells[col].textContent), y = _sortKey(b.cells[col].textContent);
+    if (x.str === '' && y.str !== '') return 1;          // الفارغ دائماً بالأسفل
+    if (y.str === '' && x.str !== '') return -1;
+    if ('num' in x && 'num' in y) return (x.num - y.num) * mult;
+    return String(x.str ?? x.num).localeCompare(String(y.str ?? y.num), 'ar', { numeric: true }) * mult;
+  });
+  table._sorting = true;
+  sortable.forEach(r => tbody.appendChild(r));
+  setTimeout(() => { table._sorting = false; }, 0);
+}
+
+// جداول تُبنى لاحقاً (ملف الموظف، النوافذ) تحصل على الفرز تلقائياً
+new MutationObserver(muts => {
+  for (const m of muts) for (const n of m.addedNodes) {
+    if (n.nodeType === 1 && (n.tagName === 'TABLE' || n.querySelector && n.querySelector('table'))) { initTableSorting(n.parentNode || document); return; }
+  }
+}).observe(document.documentElement, { childList: true, subtree: true });
 
 /* ===== تحديد الكل / حذف المحدد - عام لأي جدول فيه عمود صندوق اختيار
    بـ class="row-check" و data-id على كل صف ===== */
