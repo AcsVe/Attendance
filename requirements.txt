@@ -46,3 +46,6 @@ pywin32==306; sys_platform == 'win32'
 
 # خادم الإنتاج (Windows وTermux) — يُشغَّل بـ serve.py
 waitress==3.0.2
+
+# المنطقة الزمنية (Asia/Amman) لأوقات تطبيق الهاتف — مطلوبة على Windows
+tzdata

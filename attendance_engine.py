@@ -83,6 +83,35 @@ def compute_status(is_absent, is_tin_na, is_tout_na, late_minutes, late_threshol
     return 'في الوقت'
 
 
+def _valid_time(t):
+    return t is not None and not (isinstance(t, float) and pd.isna(t)) and not pd.isna(t)
+
+
+def merge_same_day(df):
+    """سجل واحد لكل موظف في كل يوم: إذا جاءت حركات اليوم من أكثر من مصدر (جهاز البصمة + تطبيق الهاتف،
+    أو سُحب الجهاز مرتين) يُؤخذ أبكر حضور وآخر انصراف — فإذا نسي الموظف هاتفه تكمّل بصمة الجهاز يومه والعكس."""
+    if df.empty:
+        return df
+    key = df['name'].astype(str) + '|' + df['date_parsed'].dt.strftime('%Y-%m-%d').fillna('')
+    if not key.duplicated().any():
+        return df
+    df = df.assign(_k=key)
+    keep = []
+    for _k, g in df.groupby('_k', sort=False):
+        first = g.index[0]
+        if len(g) > 1:
+            ins = [t for t in g['time_in_parsed'] if _valid_time(t)]
+            outs = [t for t in list(g['time_out_parsed']) + list(g['time_in_parsed']) if _valid_time(t)]
+            df.at[first, 'time_in_parsed'] = min(ins) if ins else None
+            df.at[first, 'time_out_parsed'] = max(outs) if outs else None
+            if not str(df.at[first, 'dept'] or '').strip():
+                depts = [d for d in g['dept'] if str(d or '').strip()]
+                if depts:
+                    df.at[first, 'dept'] = depts[0]
+        keep.append(first)
+    return df.loc[keep].drop(columns=['_k']).reset_index(drop=True)
+
+
 def analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
             official_holidays, shift1_names=None, shift2_names=None,
             late_permissions=None, departure_permissions=None):
@@ -140,6 +169,8 @@ def analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
     if df.empty:
         return pd.DataFrame(columns=['name', 'dept', 'date', 'weekday', 'time_in', 'time_out',
                                       'status', 'late_minutes', 'working_hours', 'shift'])
+
+    df = merge_same_day(df)
 
     df['is_shift'] = df['name'].isin(shift1_names | shift2_names) if shift_enabled else False
     df['shift_number'] = df['name'].apply(lambda n: 2 if n in shift2_names else 1)

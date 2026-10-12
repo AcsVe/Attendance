@@ -77,6 +77,10 @@ SECRET_MASK = '••••••••'
 def mask_secrets(d):
     return {k: (SECRET_MASK if k in SECRET_SETTINGS and v else v) for k, v in d.items()}
 
+# تطبيق الموظفين على الهاتف (تسجيل الحركات + Geofence + ربط الهاتف) — انظر mobile.py
+from mobile import bp as _mobile_bp  # noqa: E402
+app.register_blueprint(_mobile_bp)
+
 # حماية مصدر الصفحات (تشفير + منع الزر الأيمن والاختصارات) — انظر utils/page_shield.py
 from utils.page_shield import install as _shield  # noqa: E402
 _shield(app)
@@ -186,6 +190,14 @@ PERMISSION_REQUIRED_ENDPOINTS = {
     'api_backup_gdrive': 'can_edit_org_settings',
     'api_backup_gdrive_run': 'can_edit_org_settings',
     'api_punches_clear': 'can_edit_org_settings',
+
+    # تطبيق الموظفين على الهاتف (mobile.py)
+    'mobile.api_accounts': 'can_manage_employees',
+    'mobile.api_accounts_bulk': 'can_manage_employees',
+    'mobile.api_employees_bulk_dept': 'can_manage_employees',
+    'mobile.api_sites': 'can_edit_org_settings',
+    'mobile.api_site_edit': 'can_edit_org_settings',
+    'mobile.api_mobile_settings': 'can_edit_org_settings',
 }
 
 # دور «اطّلاع فقط» (viewer): لا يعدّل شيئاً — مسموح له فقط بهذه الطلبات غير GET (حسابات وتقارير بلا حفظ)
@@ -255,6 +267,8 @@ def enforce_role_permissions():
             from urllib.parse import urlparse
             if urlparse(origin).netloc.lower() != (request.host or '').lower():
                 return jsonify({'ok': False, 'error': 'طلب مرفوض (مصدر غير موثوق)'}), 403
+    if request.path == '/me' or request.path.startswith('/me/'):
+        return   # تطبيق الموظف على الهاتف — له جلسته وصلاحياته الخاصة (mobile.py)
     if not session.get('user_id'):
         return
     # الصلاحيات تُقرأ من قاعدة البيانات مع كل طلب: حذف مستخدم أو تغيير دوره يسري فوراً

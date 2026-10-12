@@ -1,0 +1,20 @@
+{
+  "name": "تسجيل الدوام — تطبيق الموظف",
+  "short_name": "دوامي",
+  "description": "تسجيل الحضور والانصراف والخروج المؤقت من الهاتف ضمن مواقع العمل",
+  "start_url": "/me",
+  "id": "/me",
+  "scope": "/me",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F4F7F8",
+  "theme_color": "#1B6E8C",
+  "dir": "rtl",
+  "lang": "ar",
+  "icons": [
+    { "src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icons/icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/static/icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

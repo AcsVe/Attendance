@@ -1,0 +1,143 @@
+<!-- =====================================================================
+     تطبيق الموظفين على الهاتف: الحسابات + مواقع العمل (Geofence) + الحركات والمتابعة
+     (الكود: static/js/mobile_admin.js و mobile.py)
+     ===================================================================== -->
+<style>
+.m-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.m-chips button{border:1px solid var(--border);background:#fff;border-radius:20px;padding:6px 12px;font:700 .84rem 'Tajawal',sans-serif;color:var(--primary-dark);cursor:pointer}
+.m-chips button b{background:#eef4f6;border-radius:12px;padding:0 7px;margin-inline-start:4px}
+.m-chips button.on{background:var(--primary);color:#fff;border-color:var(--primary)}.m-chips button.on b{background:rgba(255,255,255,.25)}
+.m-bulk{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:#fff8ec;border:1px solid #f0d9b5;border-radius:12px;padding:10px;margin-bottom:10px;position:sticky;top:0;z-index:5}
+.m-bulk select,.m-bulk input{width:auto;min-width:150px}
+.m-map{height:380px;border-radius:12px;border:1px solid var(--border);margin-bottom:10px;z-index:1}
+.m-state{display:inline-block;border-radius:20px;padding:2px 10px;font-size:.78rem;font-weight:800}
+.m-st-in{background:#d1e7dd;color:#0a6640}.m-st-out{background:#e2e3e5;color:#41464b}.m-st-leave{background:#fff3cd;color:#856404}.m-st-none{background:#f8d7da;color:#842029}
+.m-cred{font-family:ui-monospace,Consolas,monospace;direction:ltr}
+@media(max-width:768px){.m-map{height:300px}.m-bulk{position:static}}
+</style>
+
+<!-- ============ حسابات التطبيق ============ -->
+<div class="tab-panel" id="tab-mobile-accounts">
+  <div class="card">
+    <div class="card-title"><i class="fas fa-mobile-screen"></i> تطبيق الموظف على الهاتف</div>
+    <p style="font-size:.88rem;color:var(--muted);line-height:1.9">
+      رابط التطبيق للموظفين: <b dir="ltr" id="meLink"></b>
+      <button class="btn btn-outline btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('meLink').textContent).then(()=>toast('نُسخ الرابط'))"><i class="fas fa-copy"></i> نسخ</button><br>
+      كل موظف يدخل باسم مستخدم وكلمة مرور، ويرتبط حسابه بهاتفه عند أول دخول. يسجّل الحضور والانصراف والخروج المؤقت من داخل مواقع العمل المعتمدة فقط،
+      وتدخل حركاته في التقارير مع بصمات الأجهزة (أبكر حضور وآخر انصراف في اليوم).
+    </p>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="fas fa-users-gear"></i> الموظفون وحساباتهم (<span id="maShown">0</span> من <span id="maTotal">0</span>)</div>
+    <div class="filter-bar">
+      <input type="search" id="maSearch" class="search-input" placeholder="بحث فوري: الاسم، اسم المستخدم، الهاتف…" oninput="maRender()" style="flex:1;min-width:200px">
+    </div>
+    <div class="m-chips" id="maDeptChips"></div>
+    <div class="m-chips" id="maStateChips"></div>
+    <div class="m-bulk">
+      <b>المحدد: <span id="maSel">0</span></b>
+      <button class="btn btn-primary btn-sm" onclick="maBulk('create')"><i class="fas fa-user-plus"></i> إنشاء حسابات</button>
+      <button class="btn btn-outline btn-sm" onclick="maBulk('reset_password')"><i class="fas fa-key"></i> كلمات مرور جديدة</button>
+      <button class="btn btn-outline btn-sm" onclick="maBulk('unbind')"><i class="fas fa-link-slash"></i> فكّ ربط الهاتف</button>
+      <select id="maMore" class="search-input" onchange="if(this.value){maBulk(this.value);this.value=''}">
+        <option value="">— المزيد —</option>
+        <option value="enable">تفعيل الحساب</option><option value="disable">إيقاف الحساب</option>
+        <option value="anywhere_on">السماح بالتسجيل من أي مكان</option><option value="anywhere_off">إلغاء «من أي مكان»</option>
+        <option value="delete">حذف الحساب</option>
+      </select>
+      <span style="border-inline-start:1px solid #e5cfa6;height:26px"></span>
+      <input list="maDeptList" id="maMoveDept" class="search-input" placeholder="القسم">
+      <datalist id="maDeptList"></datalist>
+      <button class="btn btn-outline btn-sm" onclick="maMoveDept()"><i class="fas fa-people-arrows"></i> نقل إلى القسم</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th><input type="checkbox" id="maAll" onchange="maCheckAll(this.checked)"></th><th>الموظف</th><th>القسم</th><th>اسم المستخدم</th><th>الهاتف المرتبط</th><th>آخر حركة</th><th>الحالة</th><th></th></tr></thead>
+        <tbody id="maTable"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card" id="mobileSettingsCard">
+    <div class="card-title"><i class="fas fa-sliders"></i> إعدادات التطبيق</div>
+    <div class="form-grid">
+      <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="msEnabled"> التسجيل من الهاتف مفعّل</label>
+      <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="msBind"> ربط كل حساب بهاتف واحد فقط</label>
+      <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="msGeo"> منع التسجيل من خارج مواقع العمل</label>
+      <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="msLeave"> خصم الخروج المؤقت من ساعات العمل</label>
+      <div class="form-group"><label>أقصى خطأ مقبول في دقة الموقع (متر)</label><input type="number" id="msAcc" min="10" max="1000"></div>
+    </div>
+    <button class="btn btn-primary" onclick="msSave()"><i class="fas fa-save"></i> حفظ الإعدادات</button>
+  </div>
+</div>
+
+<!-- ============ مواقع العمل ============ -->
+<div class="tab-panel" id="tab-mobile-sites">
+  <div class="card">
+    <div class="card-title"><i class="fas fa-draw-polygon"></i> <span id="siteFormTitle">إضافة موقع عمل</span></div>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">اضغط على الخريطة لتحديد مركز الموقع، أو «موقعي الحالي»، ثم حدّد نصف القطر. الأقسام فارغة = الموقع متاح لكل الأقسام.</p>
+    <div id="siteMap" class="m-map"></div>
+    <div class="form-grid quad">
+      <div class="form-group"><label>اسم الموقع *</label><input type="text" id="siteName" placeholder="مثال: المبنى الرئيسي"></div>
+      <div class="form-group"><label>خط العرض</label><input type="number" step="any" id="siteLat" dir="ltr" oninput="siteDraw()"></div>
+      <div class="form-group"><label>خط الطول</label><input type="number" step="any" id="siteLng" dir="ltr" oninput="siteDraw()"></div>
+      <div class="form-group"><label>نصف القطر (متر)</label><input type="number" id="siteRadius" value="150" min="20" max="20000" oninput="siteDraw()"></div>
+    </div>
+    <div class="form-group"><label>الأقسام المسموح لها (اتركها كلها بدون تحديد = كل الأقسام)</label><div id="siteDepts" style="display:flex;flex-wrap:wrap;gap:6px 14px"></div></div>
+    <input type="hidden" id="siteId">
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="siteSave()"><i class="fas fa-save"></i> حفظ الموقع</button>
+      <button class="btn btn-outline" onclick="siteMyLocation()"><i class="fas fa-location-crosshairs"></i> موقعي الحالي</button>
+      <button class="btn btn-outline" onclick="siteReset()"><i class="fas fa-plus"></i> موقع جديد</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="fas fa-list"></i> مواقع العمل (<span id="siteCount">0</span>)</div>
+    <button class="btn btn-red btn-sm" style="margin-bottom:8px" onclick="bulkDeleteSelected('sitesTable', id => '/api/mobile/sites/' + id, loadSites)"><i class="fas fa-trash"></i> حذف المحدد</button>
+    <div class="table-wrap"><table>
+      <thead><tr><th><input type="checkbox" onchange="toggleSelectAll('sitesTable', this.checked)"></th><th>الموقع</th><th>نصف القطر</th><th>الأقسام</th><th>الحركات</th><th>الحالة</th><th></th></tr></thead>
+      <tbody id="sitesTable"></tbody>
+    </table></div>
+  </div>
+</div>
+
+<!-- ============ حركات الهاتف والمتابعة ============ -->
+<div class="tab-panel" id="tab-mobile-moves">
+  <div class="card">
+    <div class="card-title"><i class="fas fa-satellite"></i> المتابعة المباشرة — اليوم <span id="liveDate" style="font-weight:600;color:var(--muted)"></span>
+      <label style="margin-inline-start:auto;font-size:.82rem;font-weight:600;display:flex;gap:6px;align-items:center"><input type="checkbox" id="liveAuto" checked> تحديث تلقائي كل 30 ثانية</label></div>
+    <div class="m-chips" id="liveChips"></div>
+    <div id="liveMap" class="m-map"></div>
+    <div class="table-wrap" style="max-height:320px;overflow:auto"><table>
+      <thead><tr><th>الموظف</th><th>القسم</th><th>الحالة</th><th>آخر حركة</th><th>الموقع</th></tr></thead>
+      <tbody id="liveTable"></tbody></table></div>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="fas fa-list-check"></i> سجل الحركات (<span id="mvShown">0</span>)</div>
+    <div class="filter-bar">
+      <input type="date" id="mvFrom" class="search-input" onchange="loadMoves()">
+      <input type="date" id="mvTo" class="search-input" onchange="loadMoves()">
+      <select id="mvDept" class="search-input" onchange="loadMoves()"><option value="">كل الأقسام</option></select>
+      <select id="mvName" class="search-input" onchange="loadMoves()"><option value="">كل الموظفين</option></select>
+      <input type="search" id="mvSearch" class="search-input" placeholder="بحث فوري…" oninput="mvFilter()">
+      <button class="btn btn-outline btn-sm" onclick="mvExport('xlsx')"><i class="fas fa-file-excel"></i> Excel</button>
+      <button class="btn btn-outline btn-sm" onclick="mvExport('csv')"><i class="fas fa-file-csv"></i> CSV</button>
+    </div>
+    <div class="m-chips" id="mvChips"></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>التاريخ</th><th>الوقت</th><th>الموظف</th><th>القسم</th><th>الحركة</th><th>الموقع / المسافة</th><th>الدقة</th><th>الحالة</th><th>الخريطة</th></tr></thead>
+      <tbody id="mvTable"></tbody></table></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="maModal">
+  <div class="modal">
+    <div class="modal-title" id="maModalTitle">بيانات الدخول</div>
+    <div id="maModalBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" id="maModalSave" style="display:none"><i class="fas fa-save"></i> حفظ</button>
+      <button class="btn btn-outline" id="maModalCsv" style="display:none"><i class="fas fa-download"></i> تنزيل CSV</button>
+      <button class="btn btn-outline" id="maModalPrint" style="display:none" onclick="maPrint()"><i class="fas fa-print"></i> طباعة</button>
+      <button class="btn btn-outline" onclick="document.getElementById('maModal').classList.remove('open')">إغلاق</button>
+    </div>
+  </div>
+</div>

@@ -253,6 +253,49 @@ def init_db():
     if 'shift' not in existing_cols:
         cur.execute("ALTER TABLE report_cache ADD COLUMN shift TEXT")
 
+    # ===== تطبيق الموظفين على الهاتف: حسابات دخول + ربط الهاتف + مواقع العمل (Geofence) + الحركات =====
+    cur.execute('''CREATE TABLE IF NOT EXISTS employee_accounts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id INTEGER UNIQUE NOT NULL,
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        active INTEGER NOT NULL DEFAULT 1,
+        anywhere INTEGER NOT NULL DEFAULT 0,
+        device_hash TEXT,
+        device_label TEXT,
+        bound_at TEXT,
+        last_login_at TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+    )''')
+    cur.execute('''CREATE TABLE IF NOT EXISTS work_sites (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        lat REAL NOT NULL,
+        lng REAL NOT NULL,
+        radius_m INTEGER NOT NULL DEFAULT 150,
+        depts_json TEXT NOT NULL DEFAULT '[]',
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT DEFAULT (datetime('now'))
+    )''')
+    cur.execute('''CREATE TABLE IF NOT EXISTS mobile_punches (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id INTEGER,
+        name TEXT NOT NULL,
+        dept TEXT,
+        kind TEXT NOT NULL,
+        date TEXT NOT NULL,
+        time TEXT NOT NULL,
+        lat REAL, lng REAL, accuracy REAL,
+        site_id INTEGER, site_name TEXT, distance_m REAL,
+        status TEXT NOT NULL DEFAULT 'accepted',
+        reason TEXT,
+        device_label TEXT,
+        ip TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+    )''')
+    cur.execute("CREATE INDEX IF NOT EXISTS ix_mobile_punches_date ON mobile_punches(date, employee_id)")
+
     conn.commit()
 
     # ===== مستخدم افتراضي واحد عند أول تشغيل فقط - اسم المستخدم/كلمة
@@ -358,6 +401,12 @@ def get_all_settings():
         # نسخة أخرى من نفس النظام تعمل كـ"القاعدة الرئيسية" (راجع
         # sync_engine.py) - يجب أن يطابق sync_api_key نفس القيمة المضبوطة
         # بإعدادات النسخة المركزية تماماً =====
+        # ===== تطبيق الموظفين على الهاتف (Geofence) =====
+        'mobile_enabled': '1',            # تسجيل الحركات من الهاتف مفعّل
+        'mobile_bind_device': '1',        # ربط حساب الموظف بهاتف واحد فقط
+        'mobile_max_accuracy': '150',     # أقصى خطأ مقبول في دقة الموقع (متر)
+        'mobile_require_geofence': '1',   # منع التسجيل خارج مواقع العمل
+        'mobile_leave_deduct': '1',       # الخروج المؤقت يُخصم من ساعات العمل
         'sync_central_url': '',
         'sync_api_key': '',
         'sync_last_push_at': '',

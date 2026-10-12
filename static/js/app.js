@@ -226,6 +226,7 @@ function refreshCurrentTab() {
     holidays: loadHolidays,
     permissions: loadPermissions, employees: loadEmployees, devices: loadDevices, 'dept-times': loadDeptTimes,
     settings: loadSettings, schedule: loadScheduleSettings, audit: loadAuditLog, users: loadUsers,
+    ...(window.EXTRA_LOADERS || {}),
   };
   loadMetaInto();
   Promise.resolve((loaders[currentTab] || (() => {}))()).then(() => {

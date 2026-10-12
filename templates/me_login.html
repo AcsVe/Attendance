@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  {% include '_me_head.html' %}
+  <title>دخول الموظف — تسجيل الدوام</title>
+</head>
+<body>
+<div class="wrap" style="padding-top:8vh">
+  <div style="text-align:center;margin-bottom:18px">
+    {% if settings.org_logo_filename %}<img src="{{ url_for('static', filename='uploads/' + settings.org_logo_filename) }}" alt="" style="max-height:70px;max-width:220px">
+    {% else %}<div style="width:74px;height:74px;border-radius:22px;background:linear-gradient(135deg,var(--p),var(--s));color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:2rem"><i class="fas fa-fingerprint"></i></div>{% endif %}
+    <h1 style="font-size:1.45rem;margin-top:12px;color:var(--pd)">تسجيل الدوام</h1>
+    <div class="muted">{{ settings.org_name or '' }}</div>
+  </div>
+  <div class="card">
+    {% if error %}<div class="err"><i class="fas fa-circle-exclamation"></i> {{ error }}</div>{% endif %}
+    <form method="post" id="f" autocomplete="on">
+      <label>اسم المستخدم</label>
+      <input name="username" dir="ltr" autocomplete="username" autocapitalize="none" required autofocus>
+      <label>كلمة المرور</label>
+      <input name="password" type="password" autocomplete="current-password" required>
+      <input type="hidden" name="device" id="dev">
+      <button class="btn btn-p" style="width:100%;margin-top:16px"><i class="fas fa-right-to-bracket"></i> دخول</button>
+    </form>
+    <p class="muted" style="margin-top:12px;line-height:1.7"><i class="fas fa-mobile-screen"></i> يرتبط حسابك بهذا الهاتف عند أول دخول، ولا يمكن استخدامه من هاتف آخر إلا بعد فكّ الربط من الإدارة.</p>
+  </div>
+</div>
+<script>
+(function () {
+  function hex(n) { var a = new Uint8Array(n); crypto.getRandomValues(a); return Array.prototype.map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); }
+  function cookie() { var m = document.cookie.match(/(?:^|; )att_dev=([0-9a-f]{64})/); return m ? m[1] : ''; }
+  var t = '';
+  try { t = localStorage.getItem('att_dev') || ''; } catch (e) {}
+  t = t || cookie() || hex(32);
+  try { localStorage.setItem('att_dev', t); } catch (e) {}
+  document.cookie = 'att_dev=' + t + '; max-age=' + (3650 * 86400) + '; path=/me; samesite=strict' + (location.protocol === 'https:' ? '; secure' : '');
+  document.getElementById('dev').value = t;
+})();
+</script>
+</body>
+</html>

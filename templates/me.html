@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  {% include '_me_head.html' %}
+  <title>دوامي — {{ emp.name }}</title>
+  <style>
+    .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+    .top h1{font-size:1.15rem;color:var(--pd)}.top .muted{font-size:.82rem}
+    .clock{font-size:2.6rem;font-weight:800;color:var(--pd);text-align:center;letter-spacing:1px;direction:ltr}
+    .date{text-align:center;color:var(--m);font-weight:600;margin-bottom:6px}
+    .gps{display:flex;align-items:center;gap:10px;border-radius:12px;padding:11px 13px;font-weight:700;font-size:.92rem;margin-top:10px}
+    .gps i{font-size:1.2rem}.gps.ok{background:#e6f5ee;color:var(--ok)}.gps.bad{background:#fdecea;color:var(--bad)}.gps.wait{background:#fff6e8;color:var(--warn)}
+    .acts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .act{border:0;border-radius:18px;padding:20px 8px;font:800 1.08rem 'Tajawal',sans-serif;color:#fff;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.08);transition:transform .08s,opacity .2s}
+    .act i{font-size:1.9rem}.act:active{transform:scale(.97)}
+    .act[disabled]{opacity:.28;cursor:not-allowed;box-shadow:none}
+    .a-in{background:linear-gradient(135deg,#1e8e5a,#2fb37a)}.a-out{background:linear-gradient(135deg,#c0392b,#e2604f)}
+    .a-lo{background:linear-gradient(135deg,#d9822b,#f0a64f)}.a-lb{background:linear-gradient(135deg,#1B6E8C,#4FA3C0)}
+    .state{text-align:center;font-weight:800;margin:4px 0 12px;font-size:1rem}
+    .tl{list-style:none}.tl li{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px dashed var(--b);font-size:.95rem}
+    .tl li:last-child{border:0}.tag{border-radius:20px;padding:2px 10px;font-size:.78rem;font-weight:800}
+    .t-in{background:#e6f5ee;color:var(--ok)}.t-out{background:#fdecea;color:var(--bad)}.t-leave_out{background:#fff3e2;color:var(--warn)}.t-leave_back{background:#e6f1f6;color:var(--p)}.t-rej{background:#f3f3f3;color:#888}
+    .tabs{display:flex;gap:6px;margin-bottom:10px}.tabs button{flex:1;border:0;border-radius:12px;padding:10px;font:700 .92rem 'Tajawal',sans-serif;background:#e4eef1;color:var(--pd);cursor:pointer}
+    .tabs button.on{background:var(--p);color:#fff}
+    .kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}.kpi div{background:#f4f8f9;border-radius:12px;text-align:center;padding:9px 4px}
+    .kpi b{display:block;font-size:1.25rem;color:var(--pd)}.kpi span{font-size:.75rem;color:var(--m);font-weight:700}
+    table{width:100%;border-collapse:collapse;font-size:.85rem}th,td{padding:8px 4px;border-bottom:1px solid #eef2f3;text-align:right}th{color:var(--m);font-weight:700}
+    .toast{position:fixed;left:14px;right:14px;bottom:calc(18px + env(safe-area-inset-bottom));max-width:490px;margin:0 auto;border-radius:14px;padding:14px 16px;font-weight:800;color:#fff;z-index:9;box-shadow:0 8px 24px rgba(0,0,0,.2);display:none}
+    .hide{display:none}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div><h1><i class="fas fa-user-circle"></i> {{ emp.name }}</h1><div class="muted">{{ emp.dept or '' }}</div></div>
+    <a class="btn btn-l" style="padding:9px 12px" href="{{ url_for('mobile.me_logout') }}" onclick="return confirm('تسجيل الخروج من التطبيق؟')"><i class="fas fa-sign-out-alt"></i></a>
+  </div>
+
+  <div class="tabs"><button class="on" data-t="today">اليوم</button><button data-t="month">الشهر</button><button data-t="acc">حسابي</button></div>
+
+  <div id="t-today">
+    <div class="card">
+      <div class="clock" id="clock">--:--:--</div>
+      <div class="date" id="date"></div>
+      <div class="state" id="state">…</div>
+      <div class="acts">
+        <button class="act a-in" data-k="in" disabled><i class="fas fa-right-to-bracket"></i>تسجيل حضور</button>
+        <button class="act a-out" data-k="out" disabled><i class="fas fa-right-from-bracket"></i>تسجيل انصراف</button>
+        <button class="act a-lo" data-k="leave_out" disabled><i class="fas fa-person-walking-arrow-right"></i>خروج مؤقت</button>
+        <button class="act a-lb" data-k="leave_back" disabled><i class="fas fa-person-walking-arrow-loop-left"></i>عودة من الخروج</button>
+      </div>
+      <div class="gps wait" id="gps"><i class="fas fa-location-crosshairs fa-beat-fade"></i><span>جارٍ تحديد موقعك…</span></div>
+    </div>
+    <div class="card">
+      <b style="color:var(--pd)">حركات اليوم</b>
+      <ul class="tl" id="moves" style="margin-top:6px"></ul>
+    </div>
+  </div>
+
+  <div id="t-month" class="hide">
+    <div class="card">
+      <div class="kpi"><div><b id="k-days">0</b><span>أيام حضور</span></div><div><b id="k-late">0</b><span>أيام تأخير</span></div><div><b id="k-min">0</b><span>دقائق تأخير</span></div><div><b id="k-abs">0</b><span>غياب</span></div></div>
+      <div class="muted" style="margin-bottom:6px">ساعات العمل هذا الشهر: <b id="k-hours">0</b></div>
+      <div style="overflow:auto"><table><thead><tr><th>التاريخ</th><th>حضور</th><th>انصراف</th><th>الحالة</th><th>ساعات</th></tr></thead><tbody id="days"></tbody></table></div>
+    </div>
+    <div class="card"><b style="color:var(--pd)">آخر الحركات من الهاتف</b><ul class="tl" id="recent" style="margin-top:6px"></ul></div>
+  </div>
+
+  <div id="t-acc" class="hide">
+    <div class="card">
+      <b style="color:var(--pd)">تغيير كلمة المرور</b>
+      <label>كلمة المرور الحالية</label><input type="password" id="pw0" autocomplete="current-password">
+      <label>كلمة المرور الجديدة (6 أحرف على الأقل)</label><input type="password" id="pw1" autocomplete="new-password">
+      <button class="btn btn-p" style="width:100%;margin-top:14px" onclick="changePw()"><i class="fas fa-key"></i> حفظ</button>
+    </div>
+    <div class="card muted" style="line-height:1.9">
+      <i class="fas fa-circle-info"></i> لتثبيت التطبيق: من قائمة المتصفح اختر «إضافة إلى الشاشة الرئيسية».<br>
+      <i class="fas fa-location-dot"></i> يجب السماح للمتصفح باستخدام الموقع وتشغيل GPS.<br>
+      <i class="fas fa-mobile-screen"></i> حسابك مرتبط بهذا الهاتف — عند تغيير الهاتف اطلب من الإدارة فكّ الربط.<br>
+      <i class="fas fa-fingerprint"></i> إن نسيت هاتفك سجّل على جهاز البصمة كالمعتاد.
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+(function () {
+  var DEV = ''; try { DEV = localStorage.getItem('att_dev') || ''; } catch (e) {}
+  if (!DEV) { var m = document.cookie.match(/(?:^|; )att_dev=([0-9a-f]{64})/); DEV = m ? m[1] : ''; }
+  var S = null, POS = null, busy = false, offset = 0;
+  var LABEL = { 'in': 'حضور', 'out': 'انصراف', 'leave_out': 'خروج مؤقت', 'leave_back': 'عودة من الخروج' };
+  var STATE = { '': 'لم تسجّل حضورك اليوم بعد', 'in': 'أنت في الدوام', 'leave_out': 'أنت في خروج مؤقت', 'leave_back': 'أنت في الدوام (عدت من الخروج)', 'out': 'انتهى دوامك اليوم' };
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
+  function toast(msg, ok) { var t = $('toast'); t.textContent = msg; t.style.background = ok ? '#1e8e5a' : '#c0392b'; t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(function () { t.style.display = 'none'; }, 4500); if (navigator.vibrate) navigator.vibrate(ok ? 60 : [80, 60, 80]); }
+  function api(url, opts) {
+    opts = opts || {}; opts.headers = Object.assign({ 'Content-Type': 'application/json', 'X-Device': DEV }, opts.headers || {});
+    return fetch(url, opts).then(function (r) { return r.json().then(function (d) { if (d.login) { setTimeout(function () { location.href = '/me/login'; }, 2500); } return d; }); });
+  }
+  function dist(a, b, c, d) { var R = 6371000, p1 = a * Math.PI / 180, p2 = c * Math.PI / 180, dp = (c - a) * Math.PI / 180, dl = (d - b) * Math.PI / 180; var x = Math.sin(dp / 2) * Math.sin(dp / 2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) * Math.sin(dl / 2); return 2 * R * Math.asin(Math.sqrt(x)); }
+
+  // ===== الساعة (بتوقيت الخادم) =====
+  function tick() { var n = new Date(Date.now() + offset); $('clock').textContent = n.toTimeString().slice(0, 8); }
+  setInterval(tick, 1000);
+
+  // ===== الموقع =====
+  function where() {
+    var g = $('gps');
+    if (!POS) return { ok: false };
+    var acc = POS.coords.accuracy, best = null, bd = null;
+    (S && S.sites || []).forEach(function (s) { var d = dist(POS.coords.latitude, POS.coords.longitude, s.lat, s.lng); if (bd === null || d - s.radius < bd - best.radius) { best = s; bd = d; } });
+    var inside = S && (S.anywhere || (best && bd - Math.min(acc, 30) <= best.radius));
+    var accOk = !S || acc <= S.max_accuracy;
+    if (!accOk) { g.className = 'gps wait'; g.innerHTML = '<i class="fas fa-satellite-dish fa-beat-fade"></i><span>دقة الموقع ضعيفة (' + Math.round(acc) + ' م) — انتظر قليلاً</span>'; }
+    else if (inside) { g.className = 'gps ok'; g.innerHTML = '<i class="fas fa-circle-check"></i><span>' + (S.anywhere ? 'مسموح لك التسجيل من أي مكان' : 'أنت داخل موقع العمل: ' + esc(best.name)) + ' · دقة ' + Math.round(acc) + ' م</span>'; }
+    else if (best) { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-location-dot"></i><span>خارج موقع العمل — ' + Math.round(bd) + ' م عن «' + esc(best.name) + '» (المسموح ' + best.radius + ' م)</span>'; }
+    else { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-triangle-exclamation"></i><span>لم تُحدَّد مواقع عمل لقسمك — راجع الإدارة</span>'; }
+    return { ok: inside && accOk };
+  }
+  function render() {
+    if (!S) return;
+    var w = where();
+    document.querySelectorAll('.act').forEach(function (b) { b.disabled = busy || !S.enabled || S.allowed.indexOf(b.dataset.k) < 0 || !w.ok; });
+    $('state').textContent = S.enabled ? STATE[S.last || ''] : 'التسجيل من الهاتف متوقف حالياً من الإدارة';
+  }
+  if ('geolocation' in navigator) {
+    navigator.geolocation.watchPosition(function (p) { POS = p; render(); },
+      function (e) { var g = $('gps'); g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-location-crosshairs"></i><span>' + (e.code === 1 ? 'اسمح للمتصفح باستخدام موقعك (من إعدادات الموقع) ثم أعد فتح الصفحة' : 'تعذّر تحديد الموقع — شغّل GPS') + '</span>'; },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 });
+  } else { $('gps').innerHTML = '<span>هذا المتصفح لا يدعم تحديد الموقع</span>'; }
+
+  // ===== البيانات =====
+  function tag(k, rej) { return '<span class="tag ' + (rej ? 't-rej' : 't-' + k) + '">' + (rej ? 'مرفوضة' : LABEL[k]) + '</span>'; }
+  function load() {
+    return api('/me/api/status').then(function (d) {
+      if (!d.ok) { toast(d.error || 'خطأ'); return; }
+      S = d;
+      offset = new Date(d.now.replace(' ', 'T')).getTime() - Date.now();
+      $('date').textContent = new Date(d.now.replace(' ', 'T')).toLocaleDateString('ar-JO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      $('moves').innerHTML = d.moves.map(function (m) { return '<li><span>' + tag(m.kind) + (m.site_name ? ' <span class="muted">' + esc(m.site_name) + '</span>' : '') + '</span><b dir="ltr">' + m.time.slice(0, 5) + '</b></li>'; }).join('') || '<li class="muted">لا توجد حركات اليوم</li>';
+      $('recent').innerHTML = d.recent.map(function (m) { return '<li><span>' + tag(m.kind, m.status !== 'accepted') + ' <span class="muted">' + esc(m.date) + (m.reason ? ' — ' + esc(m.reason) : '') + '</span></span><b dir="ltr">' + m.time.slice(0, 5) + '</b></li>'; }).join('') || '<li class="muted">لا توجد حركات</li>';
+      $('days').innerHTML = d.month.map(function (r) { return '<tr><td>' + esc(r.date.slice(5)) + '</td><td dir="ltr">' + esc(r.time_in || '—') + '</td><td dir="ltr">' + esc(r.time_out || '—') + '</td><td>' + esc(r.status || '') + (r.late_minutes ? ' <span class="muted">(' + r.late_minutes + 'د)</span>' : '') + '</td><td>' + (r.working_hours || 0) + '</td></tr>'; }).join('') || '<tr><td colspan="5" class="muted">لا توجد بيانات محلّلة لهذا الشهر بعد</td></tr>';
+      $('k-days').textContent = d.summary.days; $('k-late').textContent = d.summary.late_days; $('k-min').textContent = d.summary.late_minutes; $('k-abs').textContent = d.summary.absent; $('k-hours').textContent = d.summary.hours;
+      render();
+    });
+  }
+  document.querySelectorAll('.act').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var k = b.dataset.k;
+      if (!POS || busy) return;
+      if (!confirm('تسجيل «' + LABEL[k] + '» الآن؟')) return;
+      busy = true; render();
+      api('/me/api/punch', { method: 'POST', body: JSON.stringify({ kind: k, lat: POS.coords.latitude, lng: POS.coords.longitude, accuracy: POS.coords.accuracy }) })
+        .then(function (d) { toast(d.ok ? d.message : d.error, d.ok); })
+        .catch(function () { toast('تعذّر الاتصال بالخادم — تحقق من الإنترنت'); })
+        .then(function () { busy = false; return load(); });
+    });
+  });
+  document.querySelectorAll('.tabs button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('.tabs button').forEach(function (x) { x.classList.toggle('on', x === b); });
+      ['today', 'month', 'acc'].forEach(function (t) { $('t-' + t).classList.toggle('hide', t !== b.dataset.t); });
+    });
+  });
+  window.changePw = function () {
+    api('/me/api/password', { method: 'POST', body: JSON.stringify({ current: $('pw0').value, 'new': $('pw1').value }) })
+      .then(function (d) { toast(d.ok ? 'تم تغيير كلمة المرور' : d.error, d.ok); if (d.ok) { $('pw0').value = $('pw1').value = ''; } });
+  };
+  load();
+  setInterval(load, 60000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) load(); });
+})();
+</script>
+</body>
+</html>

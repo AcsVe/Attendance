@@ -49,6 +49,9 @@
     <button class="nav-item" data-tab="holidays" onclick="showTab('holidays')"><i class="fas fa-umbrella-beach"></i> العطل الرسمية</button>
     <button class="nav-item" data-tab="permissions" onclick="showTab('permissions')"><i class="fas fa-user-clock"></i> أذونات التأخير/المغادرة</button>
     <button class="nav-item" data-tab="employees" onclick="showTab('employees')"><i class="fas fa-users"></i> الموظفون</button>
+    <button class="nav-item" data-tab="mobile-moves" onclick="showTab('mobile-moves')"><i class="fas fa-satellite"></i> حركات الهاتف والمتابعة</button>
+    <button class="nav-item" data-tab="mobile-accounts" onclick="showTab('mobile-accounts')"><i class="fas fa-mobile-screen"></i> حسابات تطبيق الهاتف</button>
+    <button class="nav-item" data-tab="mobile-sites" onclick="showTab('mobile-sites')"><i class="fas fa-draw-polygon"></i> مواقع العمل (Geofence)</button>
     <button class="nav-item" data-tab="devices" onclick="showTab('devices')"><i class="fas fa-fingerprint"></i> إدارة الأجهزة</button>
     <button class="nav-item" data-tab="dept-times" onclick="showTab('dept-times')"><i class="fas fa-building"></i> أوقات الأقسام</button>
     <button class="nav-item" data-tab="settings" onclick="showTab('settings')"><i class="fas fa-cog"></i> الإعدادات العامة</button>
@@ -624,7 +627,13 @@
       <div class="card">
         <div class="card-title"><i class="fas fa-list"></i> قائمة الموظفين</div>
         <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">رقم البصمة (device_uid) هو الرابط بين الموظف وجهاز البصمة - إجباري لأي عملية بتبويب "إدارة الأجهزة" (سحب/رفع/نسخ).</p>
-        <button class="btn btn-red btn-sm" style="margin-bottom:8px" onclick="bulkDeleteSelected('employeesTable', id => '/api/employees/' + id, () => { loadEmployees(); loadMetaInto(); })"><i class="fas fa-trash"></i> حذف المحدد</button>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px">
+          <button class="btn btn-red btn-sm" onclick="bulkDeleteSelected('employeesTable', id => '/api/employees/' + id, () => { loadEmployees(); loadMetaInto(); })"><i class="fas fa-trash"></i> حذف المحدد</button>
+          <input list="empDeptList" id="empMoveDept" class="search-input" placeholder="القسم الجديد" style="max-width:200px">
+          <datalist id="empDeptList"></datalist>
+          <button class="btn btn-outline btn-sm" onclick="empMoveDept()"><i class="fas fa-people-arrows"></i> نقل المحدد إلى القسم</button>
+          <span id="empDeptCounts" style="font-size:.82rem;color:var(--muted)"></span>
+        </div>
         <div class="table-wrap">
           <table class="dt-filterable">
             <thead><tr><th class="no-filter"><input type="checkbox" onchange="toggleSelectAll('employeesTable', this.checked)"></th><th>الاسم</th><th>القسم</th><th>رقم البصمة</th><th>حذف</th></tr></thead>
@@ -633,6 +642,8 @@
         </div>
       </div>
     </div>
+
+    {% include '_mobile_tabs.html' %}
 
     <!-- ============ DEVICE MANAGEMENT (ZKTeco) ============ -->
     <div class="tab-panel" id="tab-devices">
@@ -1203,5 +1214,8 @@
 <div class="toast" id="toast"></div>
 
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="{{ url_for('static', filename='js/mobile_admin.js') }}"></script>
 </body>
 </html>

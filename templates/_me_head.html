@@ -1,0 +1,25 @@
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link rel="manifest" href="{{ url_for('static', filename='manifest-me.json') }}">
+  <meta name="theme-color" content="#1B6E8C">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icons/favicon-32.png') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="دوامي">
+  <meta name="mobile-web-app-capable" content="yes">
+  <style>
+    :root{--p:#1B6E8C;--pd:#124A5F;--pl:#4FA3C0;--s:#2E4E7A;--bg:#f0f4f5;--t:#1e2a2b;--m:#6b7c7e;--b:#d4e4e6;--ok:#1e8e5a;--warn:#d9822b;--bad:#c0392b}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--t);min-height:100vh;-webkit-tap-highlight-color:transparent}
+    .wrap{max-width:520px;margin:0 auto;padding:14px 14px calc(24px + env(safe-area-inset-bottom))}
+    .card{background:#fff;border-radius:16px;box-shadow:0 2px 14px rgba(27,110,140,.10);padding:16px;margin-bottom:12px}
+    .btn{border:0;border-radius:12px;font:700 1rem 'Tajawal',sans-serif;padding:13px 16px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+    .btn-p{background:var(--p);color:#fff}.btn-l{background:#eef4f6;color:var(--pd)}
+    input{width:100%;padding:13px 14px;border:1.5px solid var(--b);border-radius:12px;font:500 1rem 'Tajawal',sans-serif;background:#fff}
+    input:focus{outline:none;border-color:var(--p)}
+    label{display:block;font-weight:700;font-size:.9rem;margin:10px 0 6px;color:var(--pd)}
+    .muted{color:var(--m);font-size:.86rem}
+    .err{background:#fdecea;color:var(--bad);border-radius:12px;padding:11px 13px;font-weight:700;font-size:.92rem;margin:10px 0}
+  </style>
