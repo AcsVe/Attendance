@@ -44,6 +44,14 @@
         <option value="enable">تفعيل الحساب</option><option value="disable">إيقاف الحساب</option>
         <option value="anywhere_on">السماح بالتسجيل من أي مكان</option><option value="anywhere_off">إلغاء «من أي مكان»</option>
         <option value="delete">حذف الحساب</option>
+        <optgroup label="الموظف">
+          <option value="emp:suspend">تعليق الموظف (لا يدخل التطبيق ولا يظهر في المتابعة)</option>
+          <option value="emp:activate">إلغاء التعليق</option>
+          <option value="mode:both">طريقة التوثيق: جهاز البصمة + الهاتف</option>
+          <option value="mode:mobile">طريقة التوثيق: الهاتف فقط (سحابي)</option>
+          <option value="mode:device">طريقة التوثيق: جهاز البصمة فقط</option>
+          <option value="notify">إرسال إشعار للمحددين…</option>
+        </optgroup>
       </select>
       <span style="border-inline-start:1px solid #e5cfa6;height:26px"></span>
       <input list="maDeptList" id="maMoveDept" class="search-input" placeholder="القسم">
@@ -52,7 +60,7 @@
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th><input type="checkbox" id="maAll" onchange="maCheckAll(this.checked)"></th><th>الموظف</th><th>القسم</th><th>اسم المستخدم</th><th>الهاتف المرتبط</th><th>آخر حركة</th><th>الحالة</th><th></th></tr></thead>
+        <thead><tr><th><input type="checkbox" id="maAll" onchange="maCheckAll(this.checked)"></th><th>الموظف</th><th>القسم</th><th>التوثيق</th><th>اسم المستخدم</th><th>الهاتف المرتبط</th><th>آخر حركة</th><th>الحالة</th><th></th></tr></thead>
         <tbody id="maTable"></tbody>
       </table>
     </div>
@@ -66,7 +74,9 @@
       <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="msLeave"> خصم الخروج المؤقت من ساعات العمل</label>
       <div class="form-group"><label>أقصى خطأ مقبول في دقة الموقع (متر)</label><input type="number" id="msAcc" min="10" max="1000"></div>
       <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="msApp"> التسجيل من تطبيق الموظف (APK) فقط — يكشف تطبيقات الموقع الوهمي</label>
-      <div class="form-group"><label>الحركة المشبوهة (موقع ثابت تماماً، قفزة غير منطقية، خارج شبكة العمل)</label>
+      <div class="form-group"><label>بصمة الوجه / الإصبع قبل كل حركة</label>
+        <select id="msBio" class="search-input"><option value="off">إيقاف</option><option value="optional">اختيارية (لمن يفعّلها)</option><option value="required">إلزامية لكل الموظفين</option></select></div>
+            <div class="form-group"><label>الحركة المشبوهة (موقع ثابت تماماً، قفزة غير منطقية، خارج شبكة العمل)</label>
         <select id="msSusp" class="search-input"><option value="flag">تُقبل مع علامة ⚠ للمراجعة</option><option value="reject">تُرفض</option></select></div>
     </div>
     <button class="btn btn-primary" onclick="msSave()"><i class="fas fa-save"></i> حفظ الإعدادات</button>
@@ -147,5 +157,27 @@
       <button class="btn btn-outline" id="maModalPrint" style="display:none" onclick="maPrint()"><i class="fas fa-print"></i> طباعة</button>
       <button class="btn btn-outline" onclick="document.getElementById('maModal').classList.remove('open')">إغلاق</button>
     </div>
+  </div>
+</div>
+
+<!-- ============ بطاقة الموظف ============ -->
+<div class="modal-overlay" id="ecModal">
+  <div class="modal" style="max-width:920px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+      <div class="modal-title" id="ecTitle" style="margin:0">ملف الموظف</div>
+      <button class="btn btn-outline btn-sm" onclick="document.getElementById('ecModal').classList.remove('open')">✕</button>
+    </div>
+    <div class="subtab-nav" style="margin:12px 0">
+      <button class="subtab-btn active" data-ec="info" onclick="ecTab('info')">البيانات</button>
+      <button class="subtab-btn" data-ec="att" onclick="ecTab('att')">الدوام</button>
+      <button class="subtab-btn" data-ec="ov" onclick="ecTab('ov')">استثناء الموقع</button>
+      <button class="subtab-btn" data-ec="msg" onclick="ecTab('msg')">إشعار</button>
+      <button class="subtab-btn" data-ec="log" onclick="ecTab('log')">السجل</button>
+    </div>
+    <div class="ec-pane" id="ec-info"></div>
+    <div class="ec-pane" id="ec-att" style="display:none"></div>
+    <div class="ec-pane" id="ec-ov" style="display:none"></div>
+    <div class="ec-pane" id="ec-msg" style="display:none"></div>
+    <div class="ec-pane" id="ec-log" style="display:none"></div>
   </div>
 </div>

@@ -66,6 +66,7 @@ case "$1" in
     pip install "Flask==3.0.3" "Werkzeug==3.0.3" "requests" "waitress==3.0.2" "pg8000==1.31.5" "APScheduler==3.10.4" tzdata \
                 "openpyxl>=3.1.5" "xlrd==2.0.1" "reportlab==4.2.2" "arabic-reshaper==3.0.0" "python-bidi==0.4.2"
     pip install "pandas>=2.2.2,<4" || pkg install -y python-pandas || die "$(T "تعذّر تثبيت pandas" "Could not install pandas")"
+    pkg install -y python-cryptography >/dev/null 2>&1 || pip install cryptography || say "$(T "تنبيه: cryptography غير مثبتة — بصمة المتصفح (WebAuthn) معطّلة" "Note: cryptography missing — browser biometrics disabled")"
     say "$(T "تم. الخطوة التالية: bash ~/attendance/standby/phone.sh configure" "Done. Next: bash ~/attendance/standby/phone.sh configure")"
     ;;
 

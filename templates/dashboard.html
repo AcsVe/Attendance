@@ -634,11 +634,20 @@
           <input list="empDeptList" id="empMoveDept" class="search-input" placeholder="القسم الجديد" style="max-width:200px">
           <datalist id="empDeptList"></datalist>
           <button class="btn btn-outline btn-sm" onclick="empMoveDept()"><i class="fas fa-people-arrows"></i> نقل المحدد إلى القسم</button>
+          <select class="search-input" style="max-width:230px" onchange="empBulkAction(this.value); this.value=''">
+            <option value="">إجراءات أخرى للمحدد…</option>
+            <option value="emp:suspend">تعليق (إيقاف مؤقت)</option>
+            <option value="emp:activate">إلغاء التعليق</option>
+            <option value="mode:both">التوثيق: جهاز البصمة + الهاتف</option>
+            <option value="mode:mobile">التوثيق: الهاتف فقط (سحابي)</option>
+            <option value="mode:device">التوثيق: جهاز البصمة فقط</option>
+            <option value="notify">إرسال إشعار</option>
+          </select>
           <span id="empDeptCounts" style="font-size:.82rem;color:var(--muted)"></span>
         </div>
         <div class="table-wrap">
           <table class="dt-filterable">
-            <thead><tr><th class="no-filter"><input type="checkbox" onchange="toggleSelectAll('employeesTable', this.checked)"></th><th>الاسم</th><th>القسم</th><th>رقم البصمة</th><th>حذف</th></tr></thead>
+            <thead><tr><th class="no-filter"><input type="checkbox" onchange="toggleSelectAll('employeesTable', this.checked)"></th><th>الاسم</th><th>القسم</th><th>رقم البصمة</th><th>ملف / حذف</th></tr></thead>
             <tbody id="employeesTable"></tbody>
           </table>
         </div>
@@ -1080,17 +1089,18 @@
     <!-- ============ AUDIT LOG ============ -->
     <div class="tab-panel" id="tab-audit">
       <div class="card">
-        <div class="filter-bar">
-          <select id="auditType" class="search-input" onchange="loadAuditLog()">
-            <option value="الكل">كل الأنواع</option>
-            <option value="manual_entry">إدخال يدوي</option>
-            <option value="date_exception">استثناء تاريخ</option>
-            <option value="official_holiday">عطلة رسمية</option>
-            <option value="late_permission">إذن تأخير</option>
-            <option value="departure_permission">إذن مغادرة</option>
-          </select>
-          <input class="search-input" type="text" id="auditSearch" placeholder="🔍 بحث بالموظف أو المستخدم..." oninput="loadAuditLog()">
+        <p style="font-size:.84rem;color:var(--muted);margin-bottom:10px;line-height:1.8">كل عملية حساسة تُسجَّل هنا تلقائياً مع المستخدم والوقت: الدخول والمحاولات الفاشلة، تعديل وحذف الموظفين، الحسابات والأجهزة، استثناءات الموقع، الإشعارات، المواقع، الأذونات والإدخالات اليدوية، الإعدادات، المستخدمين والصلاحيات، النسخ الاحتياطي.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+          <input class="search-input" type="text" id="auditSearch" style="flex:2 1 240px;width:auto" placeholder="🔍 بحث بالموظف أو المستخدم أو القيمة..." oninput="clearTimeout(window._auT);window._auT=setTimeout(loadAuditLog,300)">
+          <select id="auditType" class="search-input" style="flex:1 1 170px;width:auto" onchange="loadAuditLog()"><option value="">كل الأنواع</option></select>
+          <select id="auditAction" class="search-input" style="flex:1 1 170px;width:auto" onchange="loadAuditLog()"><option value="">كل العمليات</option></select>
+          <label style="font-size:.85rem;display:flex;gap:4px;align-items:center;flex:1 1 170px">من <input type="date" id="auditFrom" class="search-input" onchange="loadAuditLog()"></label>
+          <label style="font-size:.85rem;display:flex;gap:4px;align-items:center;flex:1 1 170px">إلى <input type="date" id="auditTo" class="search-input" onchange="loadAuditLog()"></label>
+          <select id="auditLimit" class="search-input" style="flex:1 1 170px;width:auto" onchange="loadAuditLog()"><option value="500">500</option><option value="1000" selected>1000</option><option value="5000">5000</option><option value="50000">الكل</option></select>
+          <button class="btn btn-outline btn-sm" onclick="auditExport()"><i class="fas fa-file-csv"></i> تصدير CSV</button>
+          <button class="btn btn-outline btn-sm" onclick="['auditSearch','auditType','auditAction','auditFrom','auditTo'].forEach(i=>document.getElementById(i).value='');loadAuditLog()">مسح الفلاتر</button>
         </div>
+        <div id="auditSummary" style="font-size:.85rem;color:var(--muted);margin:6px 0 10px"></div>
         <div class="table-wrap">
           <table class="dt-filterable">
             <thead><tr><th>الوقت</th><th>المستخدم</th><th>العملية</th><th>النوع</th><th>الموظف</th><th>التاريخ المتأثر</th><th>القيمة السابقة</th><th>القيمة الجديدة</th><th>السبب</th></tr></thead>

@@ -1427,29 +1427,58 @@ async function deleteDeparturePermission(id) {
 }
 
 /* ============ AUDIT LOG ============ */
-const AUDIT_ACTION_LABELS = { create: 'إضافة/تعديل', update: 'تعديل', delete: 'حذف' };
+const AUDIT_ACTION_LABELS = {
+  create: 'إضافة', update: 'تعديل', delete: 'حذف', login: 'تسجيل دخول', login_failed: 'محاولة دخول فاشلة',
+  backup: 'نسخ احتياطي', import: 'استيراد', sync: 'مزامنة', pull: 'سحب من الجهاز', users_bulk: 'إجراء جماعي على المستخدمين',
+  employee_edit: 'تعديل بيانات موظف', employee_delete: 'حذف موظف', employees_suspend: 'تعليق موظفين', employees_activate: 'إلغاء تعليق',
+  employees_mode: 'تغيير طريقة التوثيق', bulk_dept: 'نقل إلى قسم', notify: 'إرسال إشعار',
+  geofence_override: 'منح استثناء موقع', geofence_override_revoke: 'إلغاء استثناء موقع',
+  mobile_account: 'إنشاء حساب تطبيق', mobile_create: 'إنشاء حسابات تطبيق', mobile_reset_password: 'كلمات مرور جديدة',
+  mobile_unbind: 'فكّ ربط الهاتف', mobile_disable: 'إيقاف حسابات', mobile_enable: 'تفعيل حسابات', mobile_delete: 'حذف حسابات',
+  mobile_anywhere_on: 'السماح من أي مكان', mobile_anywhere_off: 'إلغاء «أي مكان»', mobile_settings: 'إعدادات التطبيق',
+  site_add: 'إضافة موقع عمل', site_edit: 'تعديل موقع عمل', site_delete: 'حذف موقع عمل',
+};
 const AUDIT_TARGET_LABELS = {
-  manual_entry: 'إدخال يدوي', date_exception: 'استثناء تاريخ', official_holiday: 'عطلة رسمية',
-  late_permission: 'إذن تأخير', departure_permission: 'إذن مغادرة',
+  manual_entry: 'إدخال يدوي', date_exception: 'استثناء تاريخ', date_exception_bulk: 'استثناء تاريخ (جماعي)', official_holiday: 'عطلة رسمية',
+  late_permission: 'إذن تأخير', departure_permission: 'إذن مغادرة', absence_reason: 'سبب غياب', forced_absence: 'غياب مفروض',
+  forced_absence_bulk: 'غياب مفروض (جماعي)', user: 'المستخدمون', settings: 'الإعدادات', employee: 'الموظفون', employees: 'الموظفون (جماعي)',
+  employee_accounts: 'حسابات التطبيق', work_site: 'مواقع العمل', device: 'أجهزة البصمة', device_attendance: 'سجلات الجهاز',
+  device_users: 'مستخدمو الجهاز', device_sqlite: 'استيراد SQLite', device_mdb: 'استيراد MDB', onedrive: 'OneDrive', gdrive: 'Google Drive',
+  push: 'إرسال مزامنة', receive: 'استقبال مزامنة', employees_from_sqlite: 'استيراد موظفين', mobile: 'تطبيق الهاتف',
 };
 
-async function loadAuditLog() {
+function _auditParams() {
   const p = new URLSearchParams();
-  const targetType = document.getElementById('auditType').value;
-  const q = document.getElementById('auditSearch').value;
-  if (targetType) p.set('target_type', targetType);
-  if (q) p.set('q', q);
-  const data = await api('/api/audit-log?' + p.toString());
+  [['q', 'auditSearch'], ['target_type', 'auditType'], ['action_type', 'auditAction'], ['from', 'auditFrom'], ['to', 'auditTo'], ['limit', 'auditLimit']]
+    .forEach(([k, id]) => { const v = document.getElementById(id).value; if (v) p.set(k, v); });
+  return p;
+}
+
+function auditExport() {
+  const p = _auditParams(); p.set('format', 'csv'); p.set('limit', '50000');
+  window.location = '/api/audit-log?' + p.toString();
+}
+
+async function loadAuditLog() {
+  const data = await api('/api/audit-log?' + _auditParams().toString());
   if (!data) return;
+  const fill = (id, list, labels, allLabel) => {
+    const sel = document.getElementById(id), cur = sel.value;
+    sel.innerHTML = `<option value="">${allLabel}</option>` + list.map(f => `<option value="${escapeHtml(f.k)}">${escapeHtml(labels[f.k] || f.k)} (${f.n})</option>`).join('');
+    sel.value = cur;
+  };
+  fill('auditType', data.facets.target_type, AUDIT_TARGET_LABELS, 'كل الأنواع');
+  fill('auditAction', data.facets.action_type, AUDIT_ACTION_LABELS, 'كل العمليات');
+  document.getElementById('auditSummary').textContent = `${data.total} عملية مطابقة` + (data.shown < data.total ? ` — يُعرض أحدث ${data.shown}` : '');
   const tbody = document.getElementById('auditTable');
   tbody.innerHTML = data.rows.map(r => `
-    <tr>
-      <td>${escapeHtml(r.timestamp)}</td><td dir="ltr" style="text-align:right">${escapeHtml(r.username || '')}</td>
+    <tr${r.action_type === 'login_failed' ? ' style="background:#fff5f5"' : ''}>
+      <td style="white-space:nowrap">${escapeHtml(r.timestamp)}</td><td dir="ltr" style="text-align:right">${escapeHtml(r.username || '')}</td>
       <td>${escapeHtml(AUDIT_ACTION_LABELS[r.action_type] || r.action_type)}</td>
       <td>${escapeHtml(AUDIT_TARGET_LABELS[r.target_type] || r.target_type)}</td>
       <td>${escapeHtml(r.employee_name || '')}</td><td>${escapeHtml(r.date_affected || '')}</td>
-      <td>${escapeHtml(r.old_value || '')}</td><td>${escapeHtml(r.new_value || '')}</td><td>${escapeHtml(r.reason || '')}</td>
-    </tr>`).join('') || '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:16px">لا توجد سجلات تدقيق بعد</td></tr>';
+      <td><small>${escapeHtml(r.old_value || '')}</small></td><td><small>${escapeHtml(r.new_value || '')}</small></td><td>${escapeHtml(r.reason || '')}</td>
+    </tr>`).join('') || '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:16px">لا توجد سجلات مطابقة</td></tr>';
 }
 
 /* ============ EMPLOYEES ============ */
@@ -1579,13 +1608,13 @@ async function loadEmployees() {
   if (!data) return;
   const tbody = document.getElementById('employeesTable');
   tbody.innerHTML = data.rows.map(r => `
-    <tr><td><input type="checkbox" class="row-check" data-id="${r.id}"></td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.dept || '')}</td><td dir="ltr" style="text-align:right">${escapeHtml(r.device_uid || '—')}</td>
-    <td><button class="btn btn-red btn-sm" onclick="deleteEmployee(${r.id})" ${PERMS.can_manage_employees ? '' : 'disabled title="ليس لديك صلاحية لهذا الإجراء"'}><i class="fas fa-trash"></i></button></td></tr>
+    <tr><td><input type="checkbox" class="row-check" data-id="${r.id}"></td><td><a href="#" onclick="openEmployeeCard(${r.id});return false" style="font-weight:700;color:var(--primary-dark)">${escapeHtml(r.name)}</a>${r.active === 0 ? ' <span class="badge badge-absent">معلّق</span>' : ''}</td><td>${escapeHtml(r.dept || '')}</td><td dir="ltr" style="text-align:right">${escapeHtml(r.device_uid || '—')}</td>
+    <td style="white-space:nowrap"><button class="btn btn-outline btn-sm" title="ملف الموظف" onclick="openEmployeeCard(${r.id})"><i class="fas fa-id-card"></i></button> <button class="btn btn-red btn-sm" onclick="deleteEmployee(${r.id})" ${PERMS.can_manage_employees ? '' : 'disabled title="ليس لديك صلاحية لهذا الإجراء"'}><i class="fas fa-trash"></i></button></td></tr>
   `).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">لا يوجد موظفون بعد</td></tr>';
 }
 
 async function deleteEmployee(id) {
-  if (!confirm('حذف هذا الموظف؟')) return;
+  if (!confirm('حذف هذا الموظف نهائياً؟\nيُحذف حساب التطبيق معه. لإيقافه مؤقتاً استخدم «تعليق» من ملف الموظف.')) return;
   await api('/api/employees/' + id, { method: 'DELETE' });
   toast('تم الحذف');
   loadEmployees();

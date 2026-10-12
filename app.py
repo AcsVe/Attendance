@@ -18,7 +18,7 @@ from functools import wraps
 from datetime import datetime, timedelta
 
 from flask import (Flask, render_template, request, jsonify, session,
-                    redirect, url_for, send_file)
+                    redirect, url_for, send_file, Response)
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 import pandas as pd
@@ -112,6 +112,15 @@ def get_logo_path(settings=None):
 # ============================================================
 # ===== سجل التدقيق =====
 # ============================================================
+def _audit_now():
+    """وقت محلي (المنطقة الزمنية ATT_TZ) بدل UTC الافتراضي في SQLite"""
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo(os.environ.get('ATT_TZ', 'Asia/Amman'))).strftime('%Y-%m-%d %H:%M:%S')
+    except Exception:
+        return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+
 def log_audit(conn, action_type, target_type, employee_name=None, date_affected=None,
               old_value=None, new_value=None, reason=None):
     """يسجّل عملية حساسة بسجل التدقيق. لا يرمي استثناء عند الفشل حتى لا
@@ -119,9 +128,9 @@ def log_audit(conn, action_type, target_type, employee_name=None, date_affected=
     try:
         conn.execute(
             "INSERT INTO audit_log (username, action_type, target_type, employee_name, "
-            "date_affected, old_value, new_value, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "date_affected, old_value, new_value, reason, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (session.get('username', ''), action_type, target_type, employee_name,
-             date_affected, old_value, new_value, reason)
+             date_affected, old_value, new_value, reason, _audit_now())
         )
     except Exception:
         pass
@@ -349,8 +358,11 @@ def login():
     conn = db.get_db()
     user = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
     if user is None or not check_password_hash(user['password_hash'], password):
-        conn.close()
         _login_failed(key)
+        session['username'] = ''
+        log_audit(conn, 'login_failed', 'user', new_value=f"{username[:60]} — {(request.headers.get('CF-Connecting-IP') or request.remote_addr or '')[:45]}")
+        conn.commit()
+        conn.close()
         return render_template('login.html', error='اسم المستخدم أو كلمة المرور غير صحيحة',
                                 settings=db.get_all_settings())
     _LOGIN_FAILS.pop(key, None)
@@ -1098,7 +1110,12 @@ def api_employees():
 @login_required
 def api_employee_delete(emp_id):
     conn = db.get_db()
+    emp = conn.execute("SELECT name FROM employees WHERE id = ?", (emp_id,)).fetchone()
+    for t in ('employee_accounts', 'geofence_overrides', 'employee_notifications', 'webauthn_credentials'):
+        conn.execute(f"DELETE FROM {t} WHERE employee_id = ?", (emp_id,))
     conn.execute("DELETE FROM employees WHERE id = ?", (emp_id,))
+    if emp:
+        log_audit(conn, 'employee_delete', 'employee', emp['name'], new_value='حذف الموظف وحساب التطبيق')
     conn.commit()
     conn.close()
     return jsonify({'ok': True})
@@ -1585,7 +1602,12 @@ def run_full_analysis(conn):
     تُستخدم أيضاً من مهمة الجدولة التلقائية (scheduler.py) دون تكرار
     الكود أو الحاجة لطلب HTTP داخلي. تُرجع عدد الصفوف الناتجة.
     """
-    punches_rows = conn.execute("SELECT name, date, dept, time_in, time_out FROM punches").fetchall()
+    # طريقة توثيق الدوام لكل موظف: device = جهاز البصمة فقط، mobile = تطبيق الهاتف فقط، both = الاثنين
+    punches_rows = conn.execute(
+        "SELECT p.name, p.date, p.dept, p.time_in, p.time_out FROM punches p "
+        "LEFT JOIN employees e ON e.name = p.name "
+        "WHERE NOT (COALESCE(e.attendance_mode, 'both') = 'device' AND COALESCE(p.batch_id, '') = 'mobile') "
+        "AND NOT (COALESCE(e.attendance_mode, 'both') = 'mobile' AND COALESCE(p.batch_id, '') != 'mobile')").fetchall()
     punches_df = pd.DataFrame([dict(r) for r in punches_rows])
 
     settings = db.get_all_settings()
@@ -1820,9 +1842,18 @@ def api_settings():
             'sat_time_enabled', 'sat_attendance_time', 'sat_departure_time', 'excluded_depts',
             'sync_central_url', 'sync_api_key',
         }
+        old = db.get_all_settings()
+        changed = []
         for k, v in data.items():
             if k in allowed_keys and not (k in SECRET_SETTINGS and v == SECRET_MASK):
+                if str(old.get(k, '')) != str(v):
+                    changed.append(k if k in SECRET_SETTINGS else f"{k}: {old.get(k, '')} → {v}")
                 db.set_setting(k, str(v))
+        if changed:
+            c = db.get_db()
+            log_audit(c, 'update', 'settings', new_value=' | '.join(changed)[:1000])
+            c.commit()
+            c.close()
         return jsonify({'ok': True})
     return jsonify({'ok': True, 'settings': mask_secrets(db.get_all_settings())})
 
@@ -2425,18 +2456,61 @@ def api_departure_permission_delete(perm_id):
 @app.route('/api/audit-log')
 @login_required
 def api_audit_log():
-    conn = db.get_db()
-    q = request.args.get('q', '').strip().lower()
-    target_type = request.args.get('target_type', '').strip()
-    rows = [dict(r) for r in conn.execute(
-        "SELECT * FROM audit_log ORDER BY timestamp DESC, id DESC LIMIT 500").fetchall()]
-    conn.close()
-    if target_type and target_type != 'الكل':
-        rows = [r for r in rows if r['target_type'] == target_type]
+    """سجل التدقيق: فلترة بالفترة والنوع والعملية والبحث + ملخص بالأعداد + تصدير CSV.
+    مستخدم بأقسام محددة يرى فقط ما يخص موظفي أقسامه (والعمليات العامة لا تظهر له)."""
+    a = request.args
+    where, params = [], []
+    if a.get('from'):
+        where.append("timestamp >= ?"); params.append(a['from'][:10])
+    if a.get('to'):
+        where.append("timestamp < date(?, '+1 day')"); params.append(a['to'][:10])
+    base_where = list(where); base_params = list(params)
+    tt = (a.get('target_type') or '').strip()
+    if tt and tt != 'الكل':
+        where.append("target_type = ?"); params.append(tt)
+    at = (a.get('action_type') or '').strip()
+    if at:
+        where.append("action_type = ?"); params.append(at)
+    q = (a.get('q') or '').strip()
     if q:
-        rows = [r for r in rows if q in (r['employee_name'] or '').lower()
-                or q in (r['username'] or '').lower() or q in (r['reason'] or '').lower()]
-    return jsonify({'ok': True, 'rows': rows})
+        where.append("(employee_name LIKE ? OR username LIKE ? OR reason LIKE ? OR new_value LIKE ? OR old_value LIKE ?)")
+        params += [f'%{q}%'] * 5
+    try:
+        limit = max(50, min(int(a.get('limit') or 1000), 50000))
+    except ValueError:
+        limit = 1000
+    conn = db.get_db()
+    sql_w = (' WHERE ' + ' AND '.join(where)) if where else ''
+    rows = [dict(r) for r in conn.execute(
+        f"SELECT * FROM audit_log{sql_w} ORDER BY timestamp DESC, id DESC LIMIT ?", params + [limit]).fetchall()]
+    total = conn.execute(f"SELECT COUNT(*) FROM audit_log{sql_w}", params).fetchone()[0]
+    bw = (' WHERE ' + ' AND '.join(base_where)) if base_where else ''
+    facets = {
+        'target_type': [dict(r) for r in conn.execute(
+            f"SELECT target_type AS k, COUNT(*) AS n FROM audit_log{bw} GROUP BY target_type ORDER BY n DESC", base_params)],
+        'action_type': [dict(r) for r in conn.execute(
+            f"SELECT action_type AS k, COUNT(*) AS n FROM audit_log{bw} GROUP BY action_type ORDER BY n DESC", base_params)],
+    }
+    conn.close()
+    allowed = allowed_departments()
+    if allowed:
+        conn = db.get_db()
+        names = {r['name'] for r in conn.execute(
+            f"SELECT name FROM employees WHERE dept IN ({','.join('?' * len(allowed))})", list(allowed))}
+        conn.close()
+        rows = [r for r in rows if r['employee_name'] in names]
+        total = len(rows)
+    if a.get('format') == 'csv':
+        import csv, io
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(['الوقت', 'المستخدم', 'العملية', 'النوع', 'الموظف', 'التاريخ المتأثر', 'القيمة السابقة', 'القيمة الجديدة', 'السبب'])
+        for r in rows:
+            w.writerow([r['timestamp'], r['username'], r['action_type'], r['target_type'], r['employee_name'] or '',
+                        r['date_affected'] or '', r['old_value'] or '', r['new_value'] or '', r['reason'] or ''])
+        return Response('\ufeff' + buf.getvalue(), content_type='text/csv; charset=utf-8',
+                        headers={'Content-Disposition': 'attachment; filename=audit_log.csv'})
+    return jsonify({'ok': True, 'rows': rows, 'total': total, 'shown': len(rows), 'facets': facets})
 
 
 # ============================================================
@@ -3141,6 +3215,7 @@ def api_users():
                  int(perms['can_push_devices']), int(perms['can_edit_org_settings']))
             )
             _set_user_departments(conn, cur.lastrowid, data.get('allowed_departments'))
+            log_audit(conn, 'create', 'user', new_value=f"{username} ({role})")
             conn.commit()
         except sqlite3.IntegrityError:
             conn.close()
@@ -3182,6 +3257,9 @@ def api_user_edit(user_id):
             return jsonify({'ok': False, 'error': 'المستخدم غير موجود'}), 404
         if 'allowed_departments' in data:
             _set_user_departments(conn, user_id, data.get('allowed_departments'))
+        target = conn.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
+        log_audit(conn, 'update', 'user', new_value=f"{target['username'] if target else user_id} ← {role} "
+                  + ' '.join(k for k, v in perms.items() if v))
         conn.commit()
         conn.close()
         if user_id == session.get('user_id'):
@@ -3193,7 +3271,10 @@ def api_user_edit(user_id):
     if user_id == session.get('user_id'):
         return jsonify({'ok': False, 'error': 'لا يمكن حذف المستخدم الحالي أثناء تسجيل دخوله'}), 400
     conn = db.get_db()
+    target = conn.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
     conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    if target:
+        log_audit(conn, 'delete', 'user', old_value=target['username'])
     conn.commit()
     conn.close()
     return jsonify({'ok': True})

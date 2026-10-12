@@ -3,6 +3,10 @@ package org.iajaward.attendance;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.KeyguardManager;
+import android.hardware.biometrics.BiometricManager;
+import android.hardware.biometrics.BiometricPrompt;
+import android.os.CancellationSignal;
 import android.app.DownloadManager;
 import android.content.ActivityNotFoundException;
 import android.content.ContentValues;
@@ -54,6 +58,7 @@ public class MainActivity extends Activity {
     private static final int REQ_LOCATION = 11;
     private static final int REQ_FILE = 12;
     private static final int REQ_STORAGE = 13;
+    private static final int REQ_CONFIRM = 14;
 
     private WebView web;
     private LocationManager locationManager;
@@ -160,6 +165,10 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQ_CONFIRM) {
+            bioResult(resultCode == RESULT_OK, resultCode == RESULT_OK ? "" : "أُلغي التحقق");
+            return;
+        }
         if (requestCode == REQ_FILE && fileCallback != null) {
             fileCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data));
             fileCallback = null;
@@ -349,6 +358,14 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String version() { return BuildConfig.VERSION_NAME; }
 
+        /** هل يدعم الهاتف التحقق الحيوي (بصمة/وجه/رمز القفل)؟ */
+        @JavascriptInterface
+        public boolean canAuthenticate() { return canBio(); }
+
+        /** يطلب التحقق؛ النتيجة تصل إلى window.attBioResult(ok, msg) */
+        @JavascriptInterface
+        public void authenticate(String title) { runOnUiThread(() -> startBio(title)); }
+
         @JavascriptInterface
         public boolean isEmployeeApp() { return BuildConfig.EMPLOYEE; }
 
@@ -394,6 +411,59 @@ public class MainActivity extends Activity {
             }
             String fname = (name == null || name.isEmpty()) ? ("attendance-" + System.currentTimeMillis() + "." + ext) : name;
             saveBytes(fname, mime == null || mime.isEmpty() ? "application/octet-stream" : mime, Base64.decode(b64, Base64.DEFAULT));
+        }
+    }
+
+    /* ===== التحقق الحيوي: بصمة الإصبع / الوجه / رمز قفل الهاتف ===== */
+    private void bioResult(boolean ok, String msg) {
+        String safe = msg == null ? "" : msg.replace("\\", " ").replace("'", " ").replace("\n", " ");
+        runOnUiThread(() -> web.evaluateJavascript("window.attBioResult&&window.attBioResult(" + ok + ",'" + safe + "')", null));
+    }
+
+    private boolean canBio() {
+        if (Build.VERSION.SDK_INT >= 29) {
+            BiometricManager bm = (BiometricManager) getSystemService(Context.BIOMETRIC_SERVICE);
+            if (bm != null) {
+                int r = Build.VERSION.SDK_INT >= 30
+                        ? bm.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK | BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+                        : bm.canAuthenticate();
+                if (r == BiometricManager.BIOMETRIC_SUCCESS) return true;
+            }
+        }
+        KeyguardManager km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+        return km != null && km.isDeviceSecure();
+    }
+
+    @SuppressWarnings("deprecation")
+    private void confirmWithKeyguard(String title) {
+        KeyguardManager km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+        Intent i = km == null ? null : km.createConfirmDeviceCredentialIntent(title, "أكّد هويتك لتسجيل الحركة");
+        if (i == null) { bioResult(false, "لا يوجد قفل شاشة أو بصمة على هذا الهاتف"); return; }
+        try { startActivityForResult(i, REQ_CONFIRM); } catch (Exception e) { bioResult(false, "تعذّر فتح التحقق"); }
+    }
+
+    private void startBio(String title) {
+        if (Build.VERSION.SDK_INT < 28) { confirmWithKeyguard(title); return; }
+        try {
+            BiometricPrompt.Builder b = new BiometricPrompt.Builder(this)
+                    .setTitle(title == null || title.isEmpty() ? "تأكيد الهوية" : title)
+                    .setSubtitle("بصمة الإصبع أو الوجه");
+            if (Build.VERSION.SDK_INT >= 30) {
+                b.setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK | BiometricManager.Authenticators.DEVICE_CREDENTIAL);
+            } else if (Build.VERSION.SDK_INT == 29) {
+                b.setDeviceCredentialAllowed(true);
+            } else {
+                b.setNegativeButton("رمز القفل", getMainExecutor(), (d, w) -> confirmWithKeyguard(title));
+            }
+            b.build().authenticate(new CancellationSignal(), getMainExecutor(), new BiometricPrompt.AuthenticationCallback() {
+                @Override public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) { bioResult(true, ""); }
+                @Override public void onAuthenticationError(int code, CharSequence err) {
+                    if (Build.VERSION.SDK_INT < 29 && code == BiometricPrompt.BIOMETRIC_ERROR_HW_NOT_PRESENT) { confirmWithKeyguard(title); return; }
+                    bioResult(false, err == null ? "أُلغي التحقق" : err.toString());
+                }
+            });
+        } catch (Exception e) {
+            confirmWithKeyguard(title);
         }
     }
 

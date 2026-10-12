@@ -305,6 +305,46 @@ def init_db():
     for col, typ in (('flags', "TEXT"), ('source', "TEXT")):
         if col not in mp_cols:
             cur.execute(f"ALTER TABLE mobile_punches ADD COLUMN {col} {typ}")
+    # ===== ملف الموظف: طريقة توثيق الدوام + استثناءات Geofence + إشعارات + البصمة الحيوية =====
+    emp_cols = {r['name'] for r in cur.execute("PRAGMA table_info(employees)").fetchall()}
+    if 'attendance_mode' not in emp_cols:   # device = جهاز البصمة فقط، mobile = الهاتف فقط، both = الاثنين
+        cur.execute("ALTER TABLE employees ADD COLUMN attendance_mode TEXT NOT NULL DEFAULT 'both'")
+    for col in ('phone', 'email', 'job_title', 'notes'):
+        if col not in emp_cols:
+            cur.execute(f"ALTER TABLE employees ADD COLUMN {col} TEXT")
+    cur.execute('''CREATE TABLE IF NOT EXISTS geofence_overrides (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id INTEGER NOT NULL,
+        starts_at TEXT NOT NULL,
+        ends_at TEXT NOT NULL,
+        no_location INTEGER NOT NULL DEFAULT 0,
+        reason TEXT NOT NULL,
+        created_by TEXT,
+        revoked INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+    )''')
+    cur.execute('''CREATE TABLE IF NOT EXISTS employee_notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT,
+        created_by TEXT,
+        read_at TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+    )''')
+    cur.execute('''CREATE TABLE IF NOT EXISTS webauthn_credentials (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id INTEGER NOT NULL,
+        cred_id TEXT UNIQUE NOT NULL,
+        public_key TEXT NOT NULL,
+        alg INTEGER,
+        sign_count INTEGER NOT NULL DEFAULT 0,
+        label TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+    )''')
     user_cols = {r['name'] for r in cur.execute("PRAGMA table_info(users)").fetchall()}
     for col in ('last_login_at', 'last_login_ip'):
         if col not in user_cols:
@@ -422,6 +462,7 @@ def get_all_settings():
         'mobile_require_geofence': '1',   # منع التسجيل خارج مواقع العمل
         'mobile_leave_deduct': '1',       # الخروج المؤقت يُخصم من ساعات العمل
         'mobile_require_app': '0',        # التسجيل من تطبيق الموظف (APK) فقط — لا من المتصفح
+        'mobile_biometric': 'off',        # بصمة الوجه/الإصبع قبل كل حركة: off / optional / required
         'mobile_suspicious': 'flag',      # الحركة المشبوهة (موقع ثابت/قفزة/شبكة أخرى): flag = تُقبل مع علامة، reject = تُرفض
         'sync_central_url': '',
         'sync_api_key': '',

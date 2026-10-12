@@ -49,3 +49,4 @@ waitress==3.0.2
 
 # المنطقة الزمنية (Asia/Amman) لأوقات تطبيق الهاتف — مطلوبة على Windows
 tzdata
+cryptography>=41

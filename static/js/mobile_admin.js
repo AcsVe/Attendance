@@ -16,6 +16,8 @@ const OSM_ATTR = '&copy; OpenStreetMap';
 const mEsc = s => escapeHtml(s == null ? '' : String(s));
 
 /* ================= الحسابات ================= */
+const MODE_LABEL = { both: 'الجهاز + الهاتف', mobile: 'الهاتف (سحابي)', device: 'جهاز البصمة' };
+
 let maRows = [], maDept = null, maState = '';   // maDept: null = كل الأقسام، '' = بدون قسم
 
 async function loadAccounts() {
@@ -57,14 +59,14 @@ function maRender() {
   document.getElementById('maTotal').textContent = maRows.length;
   document.getElementById('maTable').innerHTML = rows.map(r => `
     <tr><td><input type="checkbox" class="row-check" data-id="${r.id}" onchange="maCount()"></td>
-      <td><b>${mEsc(r.name)}</b>${r.device_uid ? `<br><small style="color:var(--muted)">بصمة ${mEsc(r.device_uid)}</small>` : ''}</td>
-      <td>${mEsc(r.dept || '—')}</td>
+      <td><a href="#" onclick="openEmployeeCard(${r.id});return false" style="font-weight:800;color:var(--primary-dark)">${mEsc(r.name)}</a>${r.active ? '' : ' <span class="badge badge-absent">معلّق</span>'}${r.device_uid ? `<br><small style="color:var(--muted)">بصمة ${mEsc(r.device_uid)}</small>` : ''}</td>
+      <td>${mEsc(r.dept || '—')}</td><td><small>${MODE_LABEL[r.attendance_mode || 'both']}</small></td>
       <td dir="ltr" style="text-align:right">${r.has_account ? mEsc(r.username) : '<span style="color:var(--muted)">—</span>'}</td>
       <td>${r.device_label ? `${mEsc(r.device_label)}<br><small style="color:var(--muted)">${mEsc(r.bound_at || '')}</small>` : (r.has_account ? '<span class="badge badge-late">لم يُربط بعد</span>' : '—')}</td>
       <td><small>${mEsc(r.last_move || '—')}</small></td>
       <td>${!r.has_account ? '<span class="badge badge-none">بدون حساب</span>' : (r.acc_active ? '<span class="badge badge-ontime">مفعّل</span>' : '<span class="badge badge-absent">موقوف</span>')}${r.anywhere ? ' <span class="badge badge-holiday" title="يسجّل من أي مكان">أي مكان</span>' : ''}</td>
       <td><button class="btn btn-outline btn-sm" onclick="maEdit(${r.id})" title="تعديل اسم المستخدم/كلمة المرور"><i class="fas fa-pen"></i></button></td></tr>`).join('')
-    || '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:16px">لا يوجد موظفون مطابقون</td></tr>';
+    || '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:16px">لا يوجد موظفون مطابقون</td></tr>';
   document.getElementById('maAll').checked = false;
   maCount();
 }
@@ -81,6 +83,17 @@ const MA_LABELS = {
 async function maBulk(action) {
   const ids = maChecked();
   if (!ids.length) { toast('حدّد موظفاً واحداً على الأقل', true); return; }
+  if (action === 'notify') { ecNotifyDialog(ids); return; }
+  if (action.startsWith('emp:') || action.startsWith('mode:')) {
+    const [kind, value] = action.split(':');
+    const label = document.querySelector(`#maMore option[value="${action}"]`).textContent;
+    if (!confirm(`${label}؟\n(${ids.length} موظف)`)) return;
+    const d = await api('/api/mobile/employees/bulk', { method: 'POST', body: JSON.stringify({ ids, action: kind === 'emp' ? value : 'mode', value }) });
+    if (!d) return;
+    toast(`تم: ${d.count} موظف`);
+    loadAccounts();
+    return;
+  }
   if (!confirm(`${MA_LABELS[action]}؟\n(${ids.length} موظف)`)) return;
   const d = await api('/api/mobile/accounts/bulk', { method: 'POST', body: JSON.stringify({ ids, action }) });
   if (!d) return;
@@ -165,6 +178,7 @@ async function loadMobileSettings() {
   document.getElementById('msAcc').value = s.mobile_max_accuracy;
   document.getElementById('msApp').checked = s.mobile_require_app === '1';
   document.getElementById('msSusp').value = s.mobile_suspicious || 'flag';
+  document.getElementById('msBio').value = s.mobile_biometric || 'off';
   if (!PERMS.can_edit_org_settings) document.querySelectorAll('#mobileSettingsCard input, #mobileSettingsCard button').forEach(e => { e.disabled = true; });
 }
 
@@ -174,6 +188,7 @@ async function msSave() {
     mobile_require_geofence: document.getElementById('msGeo').checked, mobile_leave_deduct: document.getElementById('msLeave').checked,
     mobile_max_accuracy: document.getElementById('msAcc').value,
     mobile_require_app: document.getElementById('msApp').checked, mobile_suspicious: document.getElementById('msSusp').value,
+    mobile_biometric: document.getElementById('msBio').value,
   }) });
   toast('حُفظت إعدادات التطبيق');
 }
@@ -316,7 +331,7 @@ async function loadLive() {
   document.getElementById('liveDate').textContent = d.date;
   document.getElementById('liveChips').innerHTML = `<button>الكل <b>${d.total}</b></button>` +
     ['in', 'leave', 'out', 'none'].map(k => `<button>${ST_LABEL[k]} <b>${d.state[k]}</b></button>`).join('');
-  document.getElementById('liveTable').innerHTML = d.rows.map(r => `<tr><td><b>${mEsc(r.name)}</b></td><td>${mEsc(r.dept || '')}</td>
+  document.getElementById('liveTable').innerHTML = d.rows.map(r => `<tr><td><a href="#" onclick="openEmployeeCard(${r.id});return false"><b>${mEsc(r.name)}</b></a></td><td>${mEsc(r.dept || '')}</td>
     <td><span class="m-state m-st-${r.state}">${ST_LABEL[r.state]}</span></td><td>${r.time ? `${mEsc(r.kind_label)} <b dir="ltr">${r.time}</b>` : '—'}</td><td>${mEsc(r.site || '')}</td></tr>`).join('')
     || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">لا يوجد موظفون لهم حسابات تطبيق بعد</td></tr>';
   setTimeout(() => {
@@ -418,3 +433,175 @@ async function empMoveDept() {
     document.getElementById('empDeptList').innerHTML = Object.keys(counts).filter(k => k !== 'بدون قسم').map(k => `<option value="${mEsc(k)}">`).join('');
   };
 })();
+
+
+/* ================= بطاقة الموظف ================= */
+let ecData = null;
+const ec$ = id => document.getElementById(id);
+
+function ecTab(t) {
+  document.querySelectorAll('.ec-pane').forEach(p => { p.style.display = p.id === 'ec-' + t ? '' : 'none'; });
+  document.querySelectorAll('#ecModal .subtab-btn').forEach(b => b.classList.toggle('active', b.dataset.ec === t));
+}
+
+async function openEmployeeCard(id) {
+  const d = await api('/api/mobile/employee/' + id);
+  if (!d) return;
+  ecData = d;
+  const e = d.employee, a = d.account, s = d.summary;
+  ec$('ecTitle').innerHTML = `${mEsc(e.name)} <small style="color:var(--muted);font-weight:600">${mEsc(e.dept || 'بدون قسم')}${e.job_title ? ' · ' + mEsc(e.job_title) : ''}</small> ${e.active ? '<span class="badge badge-ontime">فعّال</span>' : '<span class="badge badge-absent">معلّق</span>'}`;
+  const can = PERMS.can_manage_employees ? '' : 'disabled';
+  ec$('ec-info').innerHTML = `
+    <div class="form-grid trio">
+      <div class="form-group"><label>الاسم</label><input type="text" id="ecName" value="${mEsc(e.name)}" ${can}></div>
+      <div class="form-group"><label>القسم</label><input type="text" id="ecDept" list="maDeptList" value="${mEsc(e.dept || '')}" ${can}></div>
+      <div class="form-group"><label>رقم البصمة على الجهاز</label><input type="text" id="ecUid" dir="ltr" value="${mEsc(e.device_uid || '')}" ${can}></div>
+      <div class="form-group"><label>المسمى الوظيفي</label><input type="text" id="ecJob" value="${mEsc(e.job_title || '')}" ${can}></div>
+      <div class="form-group"><label>الهاتف</label><input type="tel" id="ecPhone" dir="ltr" value="${mEsc(e.phone || '')}" ${can}></div>
+      <div class="form-group"><label>البريد</label><input type="email" id="ecEmail" dir="ltr" value="${mEsc(e.email || '')}" ${can}></div>
+      <div class="form-group"><label>طريقة توثيق الدوام</label><select id="ecMode" class="search-input" ${can}>
+        <option value="both">جهاز البصمة + تطبيق الهاتف (الأبكر حضوراً والأخير انصرافاً)</option>
+        <option value="mobile">تطبيق الهاتف فقط (سحابي) — تُتجاهل بصمات الجهاز</option>
+        <option value="device">جهاز البصمة فقط — التطبيق لا يسجّل</option></select></div>
+      <div class="form-group"><label>الحالة</label><select id="ecActive" class="search-input" ${can}><option value="1">فعّال</option><option value="0">معلّق (لا يدخل التطبيق ولا يظهر في المتابعة)</option></select></div>
+      <div class="form-group"><label>ملاحظات</label><input type="text" id="ecNotes" value="${mEsc(e.notes || '')}" ${can}></div>
+    </div>
+    <button class="btn btn-primary" onclick="ecSave()" ${can}><i class="fas fa-save"></i> حفظ</button>
+    <div class="card" style="margin-top:14px;background:#f8fbfc">
+      <div class="card-title"><i class="fas fa-mobile-screen"></i> حساب التطبيق</div>
+      ${a ? `<div style="line-height:2">اسم المستخدم: <b dir="ltr">${mEsc(a.username)}</b> · ${a.active ? 'مفعّل' : '<b style="color:#c0392b">موقوف</b>'}${a.anywhere ? ' · يسجّل من أي مكان' : ''}<br>
+        الهاتف: ${a.device_label ? mEsc(a.device_label) + ' <small>(' + mEsc(a.bound_at || '') + ')</small>' : 'لم يُربط بعد'} · آخر دخول: ${mEsc(a.last_login_at || '—')} · البصمة الحيوية: ${d.bio ? 'مفعّلة' : '—'}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+          <button class="btn btn-outline btn-sm" onclick="ecAcc('reset_password')"><i class="fas fa-key"></i> كلمة مرور جديدة</button>
+          <button class="btn btn-outline btn-sm" onclick="ecAcc('unbind')"><i class="fas fa-link-slash"></i> فكّ ربط الهاتف</button>
+          <button class="btn btn-outline btn-sm" onclick="ecAcc('${a.active ? 'disable' : 'enable'}')">${a.active ? 'إيقاف الحساب' : 'تفعيل الحساب'}</button></div>`
+      : `<p style="color:var(--muted)">لا يوجد حساب تطبيق.</p><button class="btn btn-primary btn-sm" onclick="ecAcc('create')"><i class="fas fa-user-plus"></i> إنشاء حساب</button>`}
+    </div>`;
+  ec$('ecMode').value = e.attendance_mode || 'both';
+  ec$('ecActive').value = e.active ? '1' : '0';
+  ec$('ec-att').innerHTML = `
+    <div class="stats-grid" style="margin-bottom:10px">
+      <div class="stat-card green" style="cursor:default"><div class="stat-val">${s.days}</div><div class="stat-label">أيام حضور (الشهر)</div></div>
+      <div class="stat-card orange" style="cursor:default"><div class="stat-val">${s.late_days}</div><div class="stat-label">أيام تأخير · ${s.late_minutes} د</div></div>
+      <div class="stat-card red" style="cursor:default"><div class="stat-val">${s.absent}</div><div class="stat-label">غياب</div></div>
+      <div class="stat-card" style="cursor:default"><div class="stat-val">${s.hours}</div><div class="stat-label">ساعات العمل</div></div>
+    </div>
+    <p style="font-size:.85rem;color:var(--muted)">مصادر البصمات هذا الشهر: جهاز البصمة ${d.sources.device || 0} يوم · الهاتف ${d.sources.mobile || 0} يوم · طريقة التوثيق: <b>${MODE_LABEL[e.attendance_mode || 'both']}</b></p>
+    <div class="table-wrap" style="max-height:260px;overflow:auto"><table><thead><tr><th>التاريخ</th><th>حضور</th><th>انصراف</th><th>الحالة</th><th>تأخير</th><th>ساعات</th></tr></thead><tbody>
+      ${d.days.map(x => `<tr><td>${mEsc(x.date)}</td><td dir="ltr">${mEsc(x.time_in || '—')}</td><td dir="ltr">${mEsc(x.time_out || '—')}</td><td>${mEsc(x.status || '')}</td><td>${x.late_minutes || 0}</td><td>${x.working_hours || 0}</td></tr>`).join('') || '<tr><td colspan="6" style="color:var(--muted)">لا توجد بيانات محلّلة لهذا الشهر</td></tr>'}
+    </tbody></table></div>
+    <h4 style="margin:12px 0 6px;color:var(--primary-dark)">آخر حركات الهاتف</h4>
+    <div class="table-wrap" style="max-height:260px;overflow:auto"><table><thead><tr><th>التاريخ</th><th>الوقت</th><th>الحركة</th><th>الموقع</th><th>الحالة</th><th></th></tr></thead><tbody>
+      ${d.moves.map(m => `<tr${m.status === 'rejected' ? ' style="background:#fff5f5"' : (m.flags ? ' style="background:#fffbeb"' : '')}><td>${mEsc(m.date)}</td><td dir="ltr">${mEsc(m.time.slice(0, 5))}</td><td>${mEsc(m.kind_label)}</td>
+        <td>${mEsc(m.site_name || '—')}${m.distance_m != null ? ' <small>(' + Math.round(m.distance_m) + ' م)</small>' : ''}</td>
+        <td>${m.status === 'accepted' ? 'مقبولة' : '<span style="color:#c0392b">' + mEsc(m.reason || 'مرفوضة') + '</span>'}${m.flags ? '<br><small style="color:#b45309">⚠ ' + mEsc(m.flags) + '</small>' : ''}</td>
+        <td>${m.lat != null ? `<a target="_blank" href="https://www.google.com/maps?q=${m.lat},${m.lng}"><i class="fas fa-map-location-dot"></i></a>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" style="color:var(--muted)">لا توجد حركات</td></tr>'}
+    </tbody></table></div>`;
+  const nowIso = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  ec$('ec-ov').innerHTML = `
+    <p style="font-size:.86rem;color:var(--muted);line-height:1.8">للحالات النادرة فقط: مهمة رسمية خارج المدرسة، عطل في GPS الهاتف، تغيير مؤقت لمكان العمل.
+      خلال المدة يستطيع الموظف التسجيل من أي مكان (ويُحفظ موقعه وتُعلَّم حركاته «استثناء موقع» للمراجعة). يصله إشعار بذلك.</p>
+    <div class="form-grid">
+      <div class="form-group"><label>المدة</label><select id="ovPreset" class="search-input" onchange="ec$('ovCustom').style.display=this.value==='custom'?'':'none'">
+        <option value="2">ساعتان</option><option value="4">4 ساعات</option><option value="today">حتى نهاية اليوم</option><option value="24">24 ساعة</option><option value="72">3 أيام</option><option value="168">أسبوع</option><option value="custom">من — إلى…</option></select></div>
+      <div class="form-group"><label>السبب (يظهر للموظف وفي السجل) *</label><input type="text" id="ovReason" placeholder="مثال: مهمة رسمية في مديرية التربية"></div>
+    </div>
+    <div class="form-grid" id="ovCustom" style="display:none">
+      <div class="form-group"><label>من</label><input type="datetime-local" id="ovFrom" value="${nowIso}"></div>
+      <div class="form-group"><label>إلى</label><input type="datetime-local" id="ovTo"></div>
+    </div>
+    <label style="display:flex;gap:8px;align-items:center;font-weight:600;margin:6px 0"><input type="checkbox" id="ovNoLoc"> السماح حتى بدون تحديد الموقع (عطل GPS)</label>
+    <button class="btn btn-primary" onclick="ecOverride()" ${can}><i class="fas fa-unlock"></i> منح الاستثناء</button>
+    <h4 style="margin:14px 0 6px;color:var(--primary-dark)">الاستثناءات</h4>
+    <div class="table-wrap"><table><thead><tr><th>من</th><th>إلى</th><th>السبب</th><th>بواسطة</th><th>الحالة</th><th></th></tr></thead><tbody>
+      ${d.overrides.map(o => `<tr><td>${mEsc(o.starts_at)}</td><td>${mEsc(o.ends_at)}</td><td>${mEsc(o.reason)}${o.no_location ? ' <small>(بدون موقع)</small>' : ''}</td><td>${mEsc(o.created_by || '')}</td>
+        <td>${o.revoked ? '<span class="badge badge-none">أُلغي</span>' : o.active ? '<span class="badge badge-ontime">ساري</span>' : '<span class="badge badge-none">منتهٍ/لاحق</span>'}</td>
+        <td>${!o.revoked ? `<button class="btn btn-red btn-sm" onclick="ecRevoke(${o.id})" ${can}>إلغاء</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" style="color:var(--muted)">لا توجد استثناءات</td></tr>'}
+    </tbody></table></div>`;
+  ec$('ec-msg').innerHTML = `
+    <div class="form-group"><label>العنوان *</label><input type="text" id="ecMsgTitle" placeholder="مثال: تذكير بموعد الاجتماع"></div>
+    <div class="form-group"><label>النص</label><textarea id="ecMsgBody" rows="4" style="width:100%;border:1px solid var(--border);border-radius:10px;padding:10px;font-family:inherit"></textarea></div>
+    <button class="btn btn-primary" onclick="ecNotify([${e.id}], ec$('ecMsgTitle').value, ec$('ecMsgBody').value)"><i class="fas fa-paper-plane"></i> إرسال إلى تطبيق الموظف</button>
+    <h4 style="margin:14px 0 6px;color:var(--primary-dark)">الإشعارات المرسلة</h4>
+    <ul style="list-style:none;padding:0">${d.notifications.map(n => `<li style="border-bottom:1px dashed var(--border);padding:7px 0"><b>${mEsc(n.title)}</b> <small style="color:var(--muted)">${mEsc(n.created_at)} · ${mEsc(n.created_by || '')} · ${n.read_at ? 'قُرئ ' + mEsc(n.read_at) : 'لم يُقرأ'}</small>${n.body ? '<div style="white-space:pre-line;color:var(--muted)">' + mEsc(n.body) + '</div>' : ''}</li>`).join('') || '<li style="color:var(--muted)">لا توجد</li>'}</ul>`;
+  ec$('ec-log').innerHTML = `<div class="table-wrap"><table><thead><tr><th>الوقت</th><th>المستخدم</th><th>العملية</th><th>التفاصيل</th></tr></thead><tbody>
+    ${d.audit.map(x => `<tr><td>${mEsc(x.timestamp)}</td><td>${mEsc(x.username || '')}</td><td>${mEsc(AUDIT_ACTION_LABELS[x.action_type] || x.action_type)}</td><td><small>${x.old_value ? mEsc(x.old_value) + ' ← ' : ''}${mEsc(x.new_value || '')}${x.reason ? ' — ' + mEsc(x.reason) : ''}</small></td></tr>`).join('') || '<tr><td colspan="4" style="color:var(--muted)">لا توجد عمليات مسجّلة على هذا الموظف</td></tr>'}
+    </tbody></table></div>`;
+  ecTab('info');
+  ec$('ecModal').classList.add('open');
+}
+
+async function ecSave() {
+  const e = ecData.employee;
+  const body = { name: ec$('ecName').value.trim(), dept: ec$('ecDept').value.trim(), device_uid: ec$('ecUid').value.trim(), job_title: ec$('ecJob').value,
+    phone: ec$('ecPhone').value, email: ec$('ecEmail').value, notes: ec$('ecNotes').value, attendance_mode: ec$('ecMode').value, active: ec$('ecActive').value === '1' };
+  if (body.name !== e.name && !confirm(`تغيير الاسم إلى «${body.name}»؟ ينتقل الاسم الجديد إلى كل سجلاته السابقة.`)) return;
+  const d = await api('/api/mobile/employee/' + e.id, { method: 'PUT', body: JSON.stringify(body) });
+  if (!d) return;
+  toast(d.changed.length ? 'حُفظت التعديلات' : 'لا تغييرات');
+  openEmployeeCard(e.id);
+  if (currentTab === 'mobile-accounts') loadAccounts();
+  if (currentTab === 'employees') loadEmployees();
+}
+
+async function ecAcc(action) {
+  const id = ecData.employee.id;
+  if (!confirm((MA_LABELS[action] || action) + '؟')) return;
+  const d = await api('/api/mobile/accounts/bulk', { method: 'POST', body: JSON.stringify({ ids: [id], action }) });
+  if (!d) return;
+  if (d.credentials && d.credentials.length) { ec$('ecModal').classList.remove('open'); maShowCreds(d.credentials); }
+  else { toast('تم'); openEmployeeCard(id); }
+}
+
+async function ecOverride() {
+  const p = ec$('ovPreset').value, body = { reason: ec$('ovReason').value.trim(), no_location: ec$('ovNoLoc').checked };
+  if (p === 'custom') { body.starts_at = ec$('ovFrom').value; body.ends_at = ec$('ovTo').value; }
+  else if (p === 'today') { const t = new Date(); t.setHours(23, 59, 0, 0); body.ends_at = new Date(t.getTime() - t.getTimezoneOffset() * 60000).toISOString().slice(0, 16); }
+  else body.hours = +p;
+  const d = await api(`/api/mobile/employee/${ecData.employee.id}/override`, { method: 'POST', body: JSON.stringify(body) });
+  if (!d) return;
+  toast('مُنح الاستثناء وأُبلغ الموظف');
+  openEmployeeCard(ecData.employee.id);
+  setTimeout(() => ecTab('ov'), 50);
+}
+
+async function ecRevoke(id) {
+  if (!confirm('إلغاء هذا الاستثناء الآن؟')) return;
+  await api('/api/mobile/override/' + id, { method: 'DELETE' });
+  toast('أُلغي الاستثناء');
+  openEmployeeCard(ecData.employee.id);
+  setTimeout(() => ecTab('ov'), 50);
+}
+
+async function ecNotify(ids, title, body) {
+  if (!title || !title.trim()) { toast('اكتب عنوان الإشعار', true); return; }
+  const d = await api('/api/mobile/notify', { method: 'POST', body: JSON.stringify({ ids, title, body }) });
+  if (!d) return;
+  toast(`أُرسل الإشعار إلى ${d.count} موظف — يظهر في تطبيقهم`);
+  if (ids.length === 1 && ecData && ecData.employee.id === ids[0]) { openEmployeeCard(ids[0]); setTimeout(() => ecTab('msg'), 50); }
+}
+
+function ecNotifyDialog(ids) {
+  document.getElementById('maModalTitle').textContent = `إرسال إشعار إلى ${ids.length} موظف`;
+  document.getElementById('maModalBody').innerHTML = `<div class="form-group"><label>العنوان *</label><input type="text" id="bnTitle"></div>
+    <div class="form-group"><label>النص</label><textarea id="bnBody" rows="4" style="width:100%;border:1px solid var(--border);border-radius:10px;padding:10px;font-family:inherit"></textarea></div>`;
+  ['maModalCsv', 'maModalPrint'].forEach(x => { document.getElementById(x).style.display = 'none'; });
+  const save = document.getElementById('maModalSave');
+  save.style.display = '';
+  save.innerHTML = '<i class="fas fa-paper-plane"></i> إرسال';
+  save.onclick = async () => { await ecNotify(ids, document.getElementById('bnTitle').value, document.getElementById('bnBody').value); document.getElementById('maModal').classList.remove('open'); save.innerHTML = '<i class="fas fa-save"></i> حفظ'; };
+  document.getElementById('maModal').classList.add('open');
+}
+
+
+/* إجراءات جماعية من تبويب «الموظفون» */
+async function empBulkAction(action) {
+  if (!action) return;
+  const ids = Array.from(document.querySelectorAll('#employeesTable .row-check:checked')).map(c => +c.dataset.id);
+  if (!ids.length) { toast('حدّد موظفاً واحداً على الأقل', true); return; }
+  if (action === 'notify') { ecNotifyDialog(ids); return; }
+  const [kind, value] = action.split(':');
+  if (!confirm(`تطبيق الإجراء على ${ids.length} موظف؟`)) return;
+  const d = await api('/api/mobile/employees/bulk', { method: 'POST', body: JSON.stringify({ ids, action: kind === 'emp' ? value : 'mode', value }) });
+  if (d) { toast(`تم: ${d.count} موظف`); loadEmployees(); }
+}

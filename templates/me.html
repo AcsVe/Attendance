@@ -36,7 +36,8 @@
     <a class="btn btn-l" style="padding:9px 12px" href="{{ url_for('mobile.me_logout') }}" onclick="return confirm('تسجيل الخروج من التطبيق؟')"><i class="fas fa-sign-out-alt"></i></a>
   </div>
 
-  <div class="tabs"><button class="on" data-t="today">اليوم</button><button data-t="month">الشهر</button><button data-t="acc">حسابي</button></div>
+  <div class="tabs"><button class="on" data-t="today">اليوم</button><button data-t="month">الشهر</button><button data-t="notes">الإشعارات <span id="unread" class="tag t-out hide" style="padding:0 7px">0</span></button><button data-t="acc">حسابي</button></div>
+  <div class="card hide" id="ovBanner" style="background:#e6f1f6;color:var(--pd);font-weight:700;font-size:.9rem"></div>
 
   <div id="t-today">
     <div class="card">
@@ -66,7 +67,16 @@
     <div class="card"><b style="color:var(--pd)">آخر الحركات من الهاتف</b><ul class="tl" id="recent" style="margin-top:6px"></ul></div>
   </div>
 
+  <div id="t-notes" class="hide">
+    <div class="card"><b style="color:var(--pd)">إشعارات الإدارة</b><ul class="tl" id="notes" style="margin-top:6px"></ul></div>
+  </div>
+
   <div id="t-acc" class="hide">
+    <div class="card" id="bioCard">
+      <b style="color:var(--pd)"><i class="fas fa-fingerprint"></i> بصمة الوجه / الإصبع</b>
+      <p class="muted" id="bioText" style="margin:6px 0 10px;line-height:1.7"></p>
+      <button class="btn btn-p hide" id="bioBtn" style="width:100%"><i class="fas fa-fingerprint"></i> تفعيل البصمة على هذا الهاتف</button>
+    </div>
     <div class="card">
       <b style="color:var(--pd)">تغيير كلمة المرور</b>
       <label>كلمة المرور الحالية</label><input type="password" id="pw0" autocomplete="current-password">
@@ -110,15 +120,17 @@
   // ===== الموقع =====
   function where() {
     var g = $('gps');
+    if (S && S.mode === 'device') { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-fingerprint"></i><span>دوامك يُوثَّق عبر جهاز البصمة فقط</span>'; return { ok: false }; }
+    if (S && S.override && S.override.no_location && !POS) { g.className = 'gps ok'; g.innerHTML = '<i class="fas fa-unlock"></i><span>استثناء: التسجيل مسموح بدون تحديد الموقع</span>'; return { ok: true }; }
     if (!POS) return { ok: false };
     var acc = POS.coords.accuracy, best = null, bd = null;
     (S && S.sites || []).forEach(function (s) { var d = dist(POS.coords.latitude, POS.coords.longitude, s.lat, s.lng); if (bd === null || d - s.radius < bd - best.radius) { best = s; bd = d; } });
-    var inside = S && (S.anywhere || (best && bd - Math.min(acc, 30) <= best.radius));
+    var inside = S && (S.anywhere || S.override || (best && bd - Math.min(acc, 30) <= best.radius));
     var accOk = !S || acc <= S.max_accuracy;
     if (S && S.require_app && !NATIVE) { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-mobile-screen"></i><span>التسجيل متاح من تطبيق الموظف فقط — <a href="/app">نزّل التطبيق</a></span>'; return { ok: false }; }
     if (POS.mock) { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-ban"></i><span>تم اكتشاف تطبيق موقع وهمي على هاتفك — أغلقه للتمكن من التسجيل</span>'; return { ok: false }; }
     if (!accOk) { g.className = 'gps wait'; g.innerHTML = '<i class="fas fa-satellite-dish fa-beat-fade"></i><span>دقة الموقع ضعيفة (' + Math.round(acc) + ' م) — انتظر قليلاً</span>'; }
-    else if (inside) { g.className = 'gps ok'; g.innerHTML = '<i class="fas fa-circle-check"></i><span>' + (S.anywhere ? 'مسموح لك التسجيل من أي مكان' : 'أنت داخل موقع العمل: ' + esc(best.name)) + ' · دقة ' + Math.round(acc) + ' م</span>'; }
+    else if (inside) { g.className = 'gps ok'; g.innerHTML = '<i class="fas fa-circle-check"></i><span>' + (S.override ? 'استثناء مؤقت: مسموح لك التسجيل من هذا المكان' : S.anywhere ? 'مسموح لك التسجيل من أي مكان' : 'أنت داخل موقع العمل: ' + esc(best.name)) + ' · دقة ' + Math.round(acc) + ' م</span>'; }
     else if (best) { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-location-dot"></i><span>خارج موقع العمل — ' + Math.round(bd) + ' م عن «' + esc(best.name) + '» (المسموح ' + best.radius + ' م)</span>'; }
     else { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-triangle-exclamation"></i><span>لم تُحدَّد مواقع عمل لقسمك — راجع الإدارة</span>'; }
     return { ok: inside && accOk };
@@ -153,20 +165,81 @@
       $('moves').innerHTML = d.moves.map(function (m) { return '<li><span>' + tag(m.kind) + (m.site_name ? ' <span class="muted">' + esc(m.site_name) + '</span>' : '') + '</span><b dir="ltr">' + m.time.slice(0, 5) + '</b></li>'; }).join('') || '<li class="muted">لا توجد حركات اليوم</li>';
       $('recent').innerHTML = d.recent.map(function (m) { return '<li><span>' + tag(m.kind, m.status !== 'accepted') + ' <span class="muted">' + esc(m.date) + (m.reason ? ' — ' + esc(m.reason) : '') + '</span></span><b dir="ltr">' + m.time.slice(0, 5) + '</b></li>'; }).join('') || '<li class="muted">لا توجد حركات</li>';
       $('days').innerHTML = d.month.map(function (r) { return '<tr><td>' + esc(r.date.slice(5)) + '</td><td dir="ltr">' + esc(r.time_in || '—') + '</td><td dir="ltr">' + esc(r.time_out || '—') + '</td><td>' + esc(r.status || '') + (r.late_minutes ? ' <span class="muted">(' + r.late_minutes + 'د)</span>' : '') + '</td><td>' + (r.working_hours || 0) + '</td></tr>'; }).join('') || '<tr><td colspan="5" class="muted">لا توجد بيانات محلّلة لهذا الشهر بعد</td></tr>';
+      $('notes').innerHTML = d.notifications.map(function (n) { return '<li style="display:block"><b>' + (n.read_at ? '' : '🔵 ') + esc(n.title) + '</b> <span class="muted" style="float:left">' + esc(n.created_at.slice(0, 16)) + '</span>' + (n.body ? '<div class="muted" style="white-space:pre-line;margin-top:4px">' + esc(n.body) + '</div>' : '') + '</li>'; }).join('') || '<li class="muted">لا توجد إشعارات</li>';
+      $('unread').textContent = d.unread; $('unread').classList.toggle('hide', !d.unread);
+      var ob = $('ovBanner'); ob.classList.toggle('hide', !d.override);
+      if (d.override) ob.innerHTML = '<i class="fas fa-unlock"></i> استثناء من الإدارة: يمكنك التسجيل من خارج موقع العمل حتى ' + esc(d.override.until) + (d.override.no_location ? ' (حتى بدون تحديد الموقع)' : '') + '<br><span class="muted">' + esc(d.override.reason) + '</span>';
+      renderBio();
       $('k-days').textContent = d.summary.days; $('k-late').textContent = d.summary.late_days; $('k-min').textContent = d.summary.late_minutes; $('k-abs').textContent = d.summary.absent; $('k-hours').textContent = d.summary.hours;
       render();
     });
   }
+  // ===== البصمة الحيوية =====
+  function b2u(buf) { var s = ''; new Uint8Array(buf).forEach(function (c) { s += String.fromCharCode(c); }); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+  function u2b(s) { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; var b = atob(s), a = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); return a.buffer; }
+  var bioWaiter = null;
+  window.attBioResult = function (ok, msg) { if (bioWaiter) { var w = bioWaiter; bioWaiter = null; ok ? w.resolve({ bio: true }) : w.reject(msg || 'لم يتم التحقق'); } };
+  function nativeBioAvailable() { try { return NATIVE && NATIVE.canAuthenticate && NATIVE.canAuthenticate(); } catch (e) { return false; } }
+  function bioStep() {
+    return new Promise(function (resolve, reject) {
+      var mode = S && S.biometric || 'off';
+      if (mode === 'off') return resolve({});
+      if (NATIVE) {
+        if (!nativeBioAvailable()) return mode === 'required' ? reject('فعّل قفل الشاشة أو البصمة/الوجه في إعدادات الهاتف أولاً') : resolve({});
+        bioWaiter = { resolve: resolve, reject: reject };
+        try { NATIVE.authenticate('تأكيد الهوية لتسجيل الحركة'); } catch (e) { bioWaiter = null; reject('تعذّر فتح نافذة البصمة'); }
+        return;
+      }
+      if (!window.PublicKeyCredential || !S.webauthn) return mode === 'required' ? reject('هذا المتصفح لا يدعم البصمة — استخدم تطبيق الموظف') : resolve({});
+      if (!S.bio_enrolled) return mode === 'required' ? reject('فعّل البصمة على هذا الهاتف من «حسابي» أولاً') : resolve({});
+      api('/me/api/webauthn/options', { method: 'POST', body: JSON.stringify({ purpose: 'auth' }) }).then(function (o) {
+        if (!o.ok) throw o.error;
+        var pk = o.publicKey; pk.challenge = u2b(pk.challenge);
+        pk.allowCredentials = pk.allowCredentials.map(function (c) { return { type: 'public-key', id: u2b(c.id) }; });
+        return navigator.credentials.get({ publicKey: pk });
+      }).then(function (c) {
+        resolve({ webauthn: { id: c.id, clientDataJSON: b2u(c.response.clientDataJSON), authenticatorData: b2u(c.response.authenticatorData), signature: b2u(c.response.signature) } });
+      }).catch(function (e) { reject(typeof e === 'string' ? e : 'لم يتم التحقق بالبصمة'); });
+    });
+  }
+  function renderBio() {
+    var mode = S.biometric, t = $('bioText'), btn = $('bioBtn');
+    $('bioCard').classList.toggle('hide', mode === 'off');
+    if (mode === 'off') return;
+    var need = mode === 'required' ? 'مطلوبة من الإدارة قبل كل حركة.' : 'اختيارية — إن فعّلتها تُطلب قبل كل حركة.';
+    if (NATIVE) { t.textContent = 'البصمة ' + need + (nativeBioAvailable() ? ' هاتفك جاهز.' : ' فعّل قفل الشاشة أو البصمة في إعدادات الهاتف.'); btn.classList.add('hide'); return; }
+    if (!window.PublicKeyCredential || !S.webauthn) { t.textContent = 'هذا المتصفح لا يدعم البصمة — استخدم تطبيق الموظف (أندرويد) أو Safari على آيفون.'; btn.classList.add('hide'); return; }
+    t.textContent = 'البصمة ' + need + (S.bio_enrolled ? ' ✓ مفعّلة على هذا الهاتف.' : ' لم تُفعَّل بعد.');
+    btn.classList.toggle('hide', !!S.bio_enrolled);
+  }
+  $('bioBtn').addEventListener('click', function () {
+    api('/me/api/webauthn/options', { method: 'POST', body: JSON.stringify({ purpose: 'register' }) }).then(function (o) {
+      if (!o.ok) throw o.error;
+      var pk = o.publicKey; pk.challenge = u2b(pk.challenge); pk.user.id = u2b(pk.user.id);
+      pk.excludeCredentials = (pk.excludeCredentials || []).map(function (c) { return { type: 'public-key', id: u2b(c.id) }; });
+      return navigator.credentials.create({ publicKey: pk });
+    }).then(function (c) {
+      var r = c.response;
+      if (!r.getPublicKey) throw 'المتصفح قديم — حدّثه أو استخدم تطبيق الموظف';
+      return api('/me/api/webauthn/register', { method: 'POST', body: JSON.stringify({ id: c.id, publicKey: b2u(r.getPublicKey()), alg: r.getPublicKeyAlgorithm ? r.getPublicKeyAlgorithm() : -7, clientDataJSON: b2u(r.clientDataJSON) }) });
+    }).then(function (d) { toast(d.ok ? 'تم تفعيل البصمة على هذا الهاتف' : d.error, d.ok); load(); })
+      .catch(function (e) { toast(typeof e === 'string' ? e : 'لم يتم التفعيل'); });
+  });
+
   document.querySelectorAll('.act').forEach(function (b) {
     b.addEventListener('click', function () {
       var k = b.dataset.k;
-      if (!POS || busy) return;
+      var noLoc = S && S.override && S.override.no_location && !POS;
+      if ((!POS && !noLoc) || busy) return;
       if (!confirm('تسجيل «' + LABEL[k] + '» الآن؟')) return;
       busy = true; render();
-      var lat = POS.coords.latitude.toFixed(7), lng = POS.coords.longitude.toFixed(7), hdr = {};
-      if (NATIVE) { var ts = String(Date.now()); hdr = { 'X-App': 'android', 'X-App-Ts': ts, 'X-App-Sig': NATIVE.sign(k + '|' + lat + '|' + lng + '|' + ts) }; }
-      api('/me/api/punch', { method: 'POST', headers: hdr, body: JSON.stringify({ kind: k, lat: lat, lng: lng, accuracy: POS.coords.accuracy, mock: !!POS.mock, rooted: NATIVE ? !!NATIVE.isRooted() : false, samples: SAMPLES }) })
-        .then(function (d) { toast(d.ok ? d.message : d.error, d.ok); })
+      bioStep().then(function (bio) {
+        var lat = POS ? POS.coords.latitude.toFixed(7) : null, lng = POS ? POS.coords.longitude.toFixed(7) : null, hdr = {};
+        if (NATIVE) { var ts = String(Date.now()); hdr = { 'X-App': 'android', 'X-App-Ts': ts, 'X-App-Sig': NATIVE.sign(k + '|' + lat + '|' + lng + '|' + ts + '|' + (bio.bio ? 1 : 0)) }; }
+        return api('/me/api/punch', { method: 'POST', headers: hdr, body: JSON.stringify({ kind: k, lat: lat, lng: lng, accuracy: POS ? POS.coords.accuracy : null, mock: !!(POS && POS.mock),
+          rooted: NATIVE ? !!NATIVE.isRooted() : false, samples: SAMPLES, bio: !!bio.bio, webauthn: bio.webauthn || null }) })
+          .then(function (d) { toast(d.ok ? d.message : d.error, d.ok); });
+      }, function (msg) { toast(msg); })
         .catch(function () { toast('تعذّر الاتصال بالخادم — تحقق من الإنترنت'); })
         .then(function () { busy = false; return load(); });
     });
@@ -174,7 +247,8 @@
   document.querySelectorAll('.tabs button').forEach(function (b) {
     b.addEventListener('click', function () {
       document.querySelectorAll('.tabs button').forEach(function (x) { x.classList.toggle('on', x === b); });
-      ['today', 'month', 'acc'].forEach(function (t) { $('t-' + t).classList.toggle('hide', t !== b.dataset.t); });
+      ['today', 'month', 'notes', 'acc'].forEach(function (t) { $('t-' + t).classList.toggle('hide', t !== b.dataset.t); });
+      if (b.dataset.t === 'notes' && S && S.unread) { api('/me/api/notifications/read', { method: 'POST' }).then(load); }
     });
   });
   window.changePw = function () {

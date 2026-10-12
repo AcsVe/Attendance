@@ -127,10 +127,27 @@ def sites_for(conn, dept):
     return [s for s in site_rows(conn, True) if not s['depts'] or (dept or '') in s['depts']]
 
 
-def check_location(conn, emp, acc, lat, lng, accuracy, cfg):
+def active_override(conn, emp_id):
+    """استثناء Geofence ساري الآن لهذا الموظف (لحالات نادرة: مهمة خارجية، عطل GPS…)"""
+    now = now_local().strftime('%Y-%m-%d %H:%M')
+    r = conn.execute("SELECT * FROM geofence_overrides WHERE employee_id = ? AND revoked = 0 AND starts_at <= ? AND ends_at >= ? "
+                     "ORDER BY no_location DESC, ends_at DESC LIMIT 1", (emp_id, now, now)).fetchone()
+    return dict(r) if r else None
+
+
+def check_location(conn, emp, acc, lat, lng, accuracy, cfg, override=None):
     """يرجع (ok, reason, site, distance)"""
+    if override and override.get('no_location') and (lat is None or lng is None):
+        return True, '', None, None
     if lat is None or lng is None:
         return False, 'لم يصل موقع الهاتف — فعّل خدمة الموقع (GPS) واسمح للمتصفح باستخدامه', None, None
+    if override:
+        best, best_d = None, None
+        for s in sites_for(conn, emp['dept']):
+            d = haversine_m(lat, lng, s['lat'], s['lng'])
+            if best_d is None or d < best_d:
+                best, best_d = s, d
+        return True, '', best, best_d
     max_acc = float(cfg.get('mobile_max_accuracy') or 150)
     if accuracy is not None and accuracy > max_acc:
         return False, f'دقة الموقع ضعيفة ({int(accuracy)} م) — انتظر قليلاً في مكان مفتوح ثم أعد المحاولة', None, None
@@ -177,7 +194,8 @@ def check_integrity(conn, emp, kind, data, lat, lng, accuracy, site, cfg):
     source = 'browser'
     if request.headers.get('X-App'):
         ts = request.headers.get('X-App-Ts', '')
-        msg = f"{kind}|{data.get('lat')}|{data.get('lng')}|{ts}".encode()
+        js = lambda v: 'null' if v is None else v   # noqa: E731 — نفس تمثيل الجافاسكربت
+        msg = f"{kind}|{js(data.get('lat'))}|{js(data.get('lng'))}|{ts}|{1 if data.get('bio') else 0}".encode()
         good = hmac.new(APP_KEY.encode(), msg, _h.sha256).hexdigest()
         try:
             fresh = abs(time.time() * 1000 - float(ts)) < 180000
@@ -240,8 +258,9 @@ def today_moves(conn, emp_id, date_str):
 
 def _merge_punch(conn, emp, date_str, time_str, kind):
     """الحضور/الانصراف في جدول البصمات (سجل واحد لليوم: أبكر حضور وآخر انصراف)"""
-    row = conn.execute("SELECT id, time_in, time_out FROM punches WHERE name = ? AND date = ? ORDER BY id LIMIT 1",
-                       (emp['name'], date_str)).fetchone()
+    # سجل الهاتف منفصل عن سجلات الجهاز (التحليل يدمج الاثنين حسب طريقة توثيق الموظف)
+    row = conn.execute("SELECT id, time_in, time_out FROM punches WHERE name = ? AND date = ? AND batch_id = 'mobile' "
+                       "ORDER BY id LIMIT 1", (emp['name'], date_str)).fetchone()
     if row:
         tin, tout = row['time_in'] or '', row['time_out'] or ''
         if kind == 'in':
@@ -435,7 +454,16 @@ def me_status(conn, acc, emp, cfg):
         "ORDER BY id DESC LIMIT 30", (emp['id'],)).fetchall()]
     for r in recent:
         r['kind_label'] = KINDS.get(r['kind'], r['kind'])
+    ov = active_override(conn, emp['id'])
+    notes = [dict(r) for r in conn.execute(
+        "SELECT id, title, body, created_at, read_at FROM employee_notifications WHERE employee_id = ? ORDER BY id DESC LIMIT 30",
+        (emp['id'],)).fetchall()]
+    creds = conn.execute("SELECT COUNT(*) FROM webauthn_credentials WHERE employee_id = ?", (emp['id'],)).fetchone()[0]
     return jsonify({
+        'mode': emp['attendance_mode'] or 'both',
+        'override': {'until': ov['ends_at'], 'reason': ov['reason'], 'no_location': bool(ov['no_location'])} if ov else None,
+        'notifications': notes, 'unread': sum(1 for n in notes if not n['read_at']),
+        'biometric': cfg.get('mobile_biometric', 'off'), 'bio_enrolled': creds > 0, 'webauthn': _webauthn_ready(),
         'ok': True, 'now': now.strftime('%Y-%m-%d %H:%M:%S'), 'date': d,
         'name': emp['name'], 'dept': emp['dept'] or '',
         'enabled': cfg.get('mobile_enabled', '1') == '1',
@@ -482,13 +510,25 @@ def me_punch(conn, acc, emp, cfg):
     recent = conn.execute("SELECT created_at FROM mobile_punches WHERE employee_id = ? AND status = 'accepted' "
                           "AND created_at >= datetime('now', '-30 seconds')", (emp['id'],)).fetchone()
 
-    ok, reason, site, dist = check_location(conn, emp, acc, lat, lng, accuracy, cfg)
+    if (emp['attendance_mode'] or 'both') == 'device':
+        return jsonify({'ok': False, 'error': 'دوامك يُوثَّق عبر جهاز البصمة فقط — راجع الإدارة إن احتجت التسجيل من الهاتف'}), 403
+    override = active_override(conn, emp['id'])
+    ok, reason, site, dist = check_location(conn, emp, acc, lat, lng, accuracy, cfg, override)
     flags, source = [], 'browser'
-    if lat is not None:
-        bad, flags, source = check_integrity(conn, emp, kind, data, lat, lng, accuracy, site if ok else None, cfg)
-        if ok and bad:
+    bio_err = check_biometric(conn, acc, emp, kind, data, cfg)
+    if ok and bio_err:
+        ok, reason = False, bio_err
+    if override:
+        flags.append(f"استثناء موقع: {override['reason']}")
+    if (lat is not None or request.headers.get('X-App')) and ok:
+        bad, more, source = check_integrity(conn, emp, kind, data, lat, lng, accuracy, None if override else site, cfg)
+        flags += more
+        if bad and not (override and bad.startswith('لم يُقبل التسجيل لاشتباه')):
             ok, reason = False, bad
-        elif not ok and data.get('mock') and source == 'app':
+    elif lat is not None or request.headers.get('X-App'):
+        bad, more, source = check_integrity(conn, emp, kind, data, lat, lng, accuracy, None, cfg)
+        flags += more
+        if data.get('mock') and source == 'app':
             reason = bad or reason
     if ok and kind not in NEXT.get(last, ['in']):
         ok, reason = False, f'لا يمكن تسجيل «{KINDS[kind]}» الآن — آخر حركة: {KINDS.get(last, "لا شيء")}'
@@ -512,7 +552,11 @@ def me_punch(conn, acc, emp, cfg):
         return jsonify({'ok': False, 'error': reason, 'rejected': True}), 400
     if kind in ('in', 'out', 'leave_back'):
         schedule_analysis()
-    return jsonify({'ok': True, 'message': f'تم تسجيل {KINDS[kind]} الساعة {t[:5]}' + (f' — {site["name"]}' if site else ''),
+    if override and (not site or dist is None or dist > (site['radius_m'] or 0)):
+        where = ' — باستثناء موقع' + (f' ({dist / 1000:.1f} كم عن «{site["name"]}»)' if site and dist is not None else '')
+    else:
+        where = f' — {site["name"]}' if site else ''
+    return jsonify({'ok': True, 'message': f'تم تسجيل {KINDS[kind]} الساعة {t[:5]}' + where,
                     'time': t[:5]})
 
 
@@ -544,6 +588,13 @@ def _unique_username(conn, base):
         i += 1
         name = f'{base}{i}'
     return name
+
+
+def _audit_emp(conn, action, target, name, value=None):
+    try:
+        _admin().log_audit(conn, action, target, employee_name=name, new_value=value)
+    except Exception:
+        pass
 
 
 def _audit(conn, action, target, value=None):
@@ -584,13 +635,13 @@ def api_accounts():
                     return jsonify({'ok': False, 'error': 'اسم المستخدم وكلمة المرور مطلوبان'}), 400
                 conn.execute("INSERT INTO employee_accounts (employee_id, username, password_hash, anywhere) VALUES (?, ?, ?, ?)",
                              (emp['id'], username, generate_password_hash(password), 1 if data.get('anywhere') else 0))
-            _audit(conn, 'mobile_account', 'employee', emp['name'])
+            _audit_emp(conn, 'mobile_account', 'employee_accounts', emp['name'], username)
             conn.commit()
             return jsonify({'ok': True})
 
         today = now_local().strftime('%Y-%m-%d')
         rows = []
-        q = """SELECT e.id, e.name, e.dept, e.device_uid, e.active, a.username, a.active AS acc_active, a.anywhere,
+        q = """SELECT e.id, e.name, e.dept, e.device_uid, e.active, e.attendance_mode, a.username, a.active AS acc_active, a.anywhere,
                       a.device_label, a.bound_at, a.last_login_at, a.id AS acc_id
                FROM employees e LEFT JOIN employee_accounts a ON a.employee_id = e.id ORDER BY e.dept, e.name"""
         last = {r['employee_id']: dict(r) for r in conn.execute(
@@ -650,7 +701,7 @@ def api_accounts_bulk():
             else:
                 return jsonify({'ok': False, 'error': 'إجراء غير معروف'}), 400
             n += 1
-        _audit(conn, f'mobile_{action}', 'employee_accounts', f'{n} موظف')
+            _audit_emp(conn, f'mobile_{action}', 'employee_accounts', e['name'])
         conn.commit()
         return jsonify({'ok': True, 'count': n, 'credentials': out})
     finally:
@@ -762,22 +813,32 @@ def api_site_edit(site_id):
 @admin_required
 def api_mobile_settings():
     keys = ('mobile_enabled', 'mobile_bind_device', 'mobile_max_accuracy', 'mobile_require_geofence', 'mobile_leave_deduct',
-            'mobile_require_app', 'mobile_suspicious')
+            'mobile_require_app', 'mobile_suspicious', 'mobile_biometric')
     if request.method == 'POST':
         data = request.get_json(silent=True) or {}
+        old, changed = settings(), []
         for k in keys:
             if k in data:
                 v = data[k]
                 if k == 'mobile_suspicious':
                     v = 'reject' if v == 'reject' else 'flag'
+                elif k == 'mobile_biometric':
+                    v = v if v in ('off', 'optional', 'required') else 'off'
                 elif k == 'mobile_max_accuracy':
                     try:
                         v = str(max(10, min(1000, int(float(v)))))
                     except (TypeError, ValueError):
                         continue
-                elif k != 'mobile_suspicious':
+                elif k not in ('mobile_suspicious', 'mobile_biometric'):
                     v = '1' if v in (True, 1, '1', 'true', 'on') else '0'
+                if str(old.get(k, '')) != str(v):
+                    changed.append(f"{k}: {old.get(k, '')} → {v}")
                 db.set_setting(k, v)
+        if changed:
+            c = db.get_db()
+            _audit(c, 'mobile_settings', 'settings', ' | '.join(changed))
+            c.commit()
+            c.close()
         return jsonify({'ok': True})
     cfg = settings()
     return jsonify({'ok': True, 'settings': {k: cfg.get(k) for k in keys}})
@@ -917,3 +978,366 @@ def me_app_info():
     """للتطبيق: هل التسجيل يتطلب التطبيق؟ (بدون بيانات حساسة)"""
     cfg = settings()
     return jsonify({'ok': True, 'require_app': cfg.get('mobile_require_app', '0') == '1'})
+
+
+
+# =====================================================
+#   البصمة الحيوية (Face ID / بصمة الإصبع) قبل الحركة
+#   • في تطبيق أندرويد: نافذة البصمة من النظام نفسه، والنتيجة داخل توقيع الحركة
+#   • في المتصفح (آيفون/أندرويد): WebAuthn — مفتاح خاص لا يغادر الهاتف ويتحقق منه الخادم
+# =====================================================
+import base64 as _b64
+
+
+def _b64u(b):
+    return _b64.urlsafe_b64encode(b).rstrip(b'=').decode()
+
+
+def _unb64u(s):
+    s = (s or '').strip()
+    return _b64.urlsafe_b64decode(s + '=' * (-len(s) % 4))
+
+
+def _webauthn_ready():
+    import importlib.util
+    return importlib.util.find_spec('cryptography') is not None
+
+
+def _rp():
+    host = (request.host or '').split(':')[0]
+    return host, f"{request.scheme}://{request.host}"
+
+
+def _check_client_data(cdj_b64, kind):
+    cd = json.loads(_unb64u(cdj_b64).decode('utf-8'))
+    chal = session.pop('wa_chal', None)
+    rp_id, origin = _rp()
+    if cd.get('type') != kind or not chal or cd.get('challenge') != chal:
+        raise ValueError('طلب البصمة منتهي الصلاحية — أعد المحاولة')
+    if cd.get('origin') not in (origin, origin.replace('http://', 'https://')):
+        raise ValueError('مصدر غير صحيح')
+    return cd
+
+
+def verify_assertion(conn, emp_id, a):
+    """يتحقق من توقيع WebAuthn (مفتاح الهاتف) — يرجع '' إن صح أو سبب الخطأ"""
+    if not _webauthn_ready():
+        return 'التحقق بالبصمة غير متاح على الخادم (ثبّت مكتبة cryptography)'
+    try:
+        from cryptography.exceptions import InvalidSignature
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import ec, padding
+        cred = conn.execute("SELECT * FROM webauthn_credentials WHERE employee_id = ? AND cred_id = ?",
+                            (emp_id, a.get('id', ''))).fetchone()
+        if not cred:
+            return 'البصمة غير مسجّلة لهذا الحساب — سجّلها من «حسابي»'
+        cdj = _unb64u(a.get('clientDataJSON'))
+        _check_client_data(a.get('clientDataJSON'), 'webauthn.get')
+        auth = _unb64u(a.get('authenticatorData'))
+        rp_id, _origin = _rp()
+        if auth[:32] != hashlib.sha256(rp_id.encode()).digest():
+            return 'البصمة لا تخص هذا الموقع'
+        flags = auth[32]
+        if not (flags & 0x01 and flags & 0x04):
+            return 'لم يتم التحقق من هوية صاحب الهاتف (البصمة/الوجه)'
+        key = serialization.load_der_public_key(_unb64u(cred['public_key']))
+        data = auth + hashlib.sha256(cdj).digest()
+        sig = _unb64u(a.get('signature'))
+        if isinstance(key, ec.EllipticCurvePublicKey):
+            key.verify(sig, data, ec.ECDSA(hashes.SHA256()))
+        else:
+            key.verify(sig, data, padding.PKCS1v15(), hashes.SHA256())
+        count = int.from_bytes(auth[33:37], 'big')
+        if count and cred['sign_count'] and count <= cred['sign_count']:
+            return 'تم رفض البصمة (عداد غير صحيح)'
+        conn.execute("UPDATE webauthn_credentials SET sign_count = ? WHERE id = ?", (count, cred['id']))
+        return ''
+    except InvalidSignature:
+        return 'توقيع البصمة غير صحيح'
+    except ValueError as e:
+        return str(e)
+    except Exception as e:   # noqa: BLE001
+        return f'تعذّر التحقق من البصمة: {type(e).__name__}'
+
+
+def check_biometric(conn, acc, emp, kind, data, cfg):
+    mode = cfg.get('mobile_biometric', 'off')
+    if mode == 'off':
+        return ''
+    enrolled = conn.execute("SELECT COUNT(*) FROM webauthn_credentials WHERE employee_id = ?", (emp['id'],)).fetchone()[0]
+    from_app = bool(request.headers.get('X-App'))
+    if from_app:
+        if data.get('bio'):
+            return ''   # نتيجة البصمة داخل توقيع التطبيق (يتحقق منه check_integrity)
+        return 'أكّد هويتك بالبصمة أو الوجه أولاً' if mode == 'required' else ''
+    if data.get('webauthn'):
+        return verify_assertion(conn, emp['id'], data['webauthn'])
+    if mode == 'required':
+        return 'سجّل بصمة الوجه/الإصبع من «حسابي» أولاً' if not enrolled else 'أكّد هويتك بالبصمة أو الوجه أولاً'
+    return ''
+
+
+@bp.route('/me/api/webauthn/options', methods=['POST'])
+@_me_json
+def me_webauthn_options(conn, acc, emp, cfg):
+    chal = _b64u(secrets.token_bytes(32))
+    session['wa_chal'] = chal
+    rp_id, _o = _rp()
+    purpose = (request.get_json(silent=True) or {}).get('purpose')
+    if purpose == 'register':
+        existing = [r['cred_id'] for r in conn.execute("SELECT cred_id FROM webauthn_credentials WHERE employee_id = ?", (emp['id'],))]
+        return jsonify({'ok': True, 'publicKey': {
+            'challenge': chal, 'rp': {'id': rp_id, 'name': 'تسجيل الدوام'},
+            'user': {'id': _b64u(f"emp-{emp['id']}".encode()), 'name': acc['username'], 'displayName': emp['name']},
+            'pubKeyCredParams': [{'type': 'public-key', 'alg': -7}, {'type': 'public-key', 'alg': -257}],
+            'authenticatorSelection': {'authenticatorAttachment': 'platform', 'userVerification': 'required', 'residentKey': 'discouraged'},
+            'timeout': 60000, 'attestation': 'none',
+            'excludeCredentials': [{'type': 'public-key', 'id': c} for c in existing]}})
+    creds = [r['cred_id'] for r in conn.execute("SELECT cred_id FROM webauthn_credentials WHERE employee_id = ?", (emp['id'],))]
+    if not creds:
+        return jsonify({'ok': False, 'error': 'سجّل بصمة الوجه/الإصبع من «حسابي» أولاً'}), 400
+    return jsonify({'ok': True, 'publicKey': {
+        'challenge': chal, 'rpId': rp_id, 'timeout': 60000, 'userVerification': 'required',
+        'allowCredentials': [{'type': 'public-key', 'id': c} for c in creds]}})
+
+
+@bp.route('/me/api/webauthn/register', methods=['POST'])
+@_me_json
+def me_webauthn_register(conn, acc, emp, cfg):
+    d = request.get_json(silent=True) or {}
+    if not _webauthn_ready():
+        return jsonify({'ok': False, 'error': 'غير متاح على الخادم'}), 400
+    try:
+        _check_client_data(d.get('clientDataJSON'), 'webauthn.create')
+        from cryptography.hazmat.primitives import serialization
+        serialization.load_der_public_key(_unb64u(d.get('publicKey')))   # يتأكد أنه مفتاح صالح
+    except Exception as e:   # noqa: BLE001
+        return jsonify({'ok': False, 'error': f'تعذّر تسجيل البصمة: {e}'}), 400
+    conn.execute("INSERT OR REPLACE INTO webauthn_credentials (employee_id, cred_id, public_key, alg, label) VALUES (?, ?, ?, ?, ?)",
+                 (emp['id'], d.get('id'), d.get('publicKey'), int(d.get('alg') or -7), _device_label()))
+    conn.commit()
+    return jsonify({'ok': True})
+
+
+# =====================================================
+#   إشعارات الموظف
+# =====================================================
+@bp.route('/me/api/notifications/read', methods=['POST'])
+@_me_json
+def me_notifications_read(conn, acc, emp, cfg):
+    conn.execute("UPDATE employee_notifications SET read_at = ? WHERE employee_id = ? AND read_at IS NULL",
+                 (now_local().strftime('%Y-%m-%d %H:%M'), emp['id']))
+    conn.commit()
+    return jsonify({'ok': True})
+
+
+@bp.route('/api/mobile/notify', methods=['POST'])
+@admin_required
+def api_notify():
+    d = request.get_json(silent=True) or {}
+    ids = [int(i) for i in (d.get('ids') or []) if str(i).isdigit()]
+    title, body = (d.get('title') or '').strip()[:200], (d.get('body') or '').strip()[:3000]
+    if not ids or not title:
+        return jsonify({'ok': False, 'error': 'حدّد الموظفين واكتب عنوان الإشعار'}), 400
+    conn = db.get_db()
+    try:
+        emps = [r for r in conn.execute(f"SELECT id, name, dept FROM employees WHERE id IN ({','.join('?' * len(ids))})", ids)
+                if _employee_scope_ok(r['dept'])]
+        for e in emps:
+            conn.execute("INSERT INTO employee_notifications (employee_id, title, body, created_by, created_at) VALUES (?, ?, ?, ?, ?)",
+                         (e['id'], title, body, session.get('username', ''), now_local().strftime('%Y-%m-%d %H:%M:%S')))
+        _audit(conn, 'notify', 'employee', f'{title} ← {len(emps)} موظف')
+        conn.commit()
+        return jsonify({'ok': True, 'count': len(emps)})
+    finally:
+        conn.close()
+
+
+# =====================================================
+#   ملف الموظف (بطاقة الموظف للإدارة)
+# =====================================================
+RENAME_TABLES = ('punches', 'manual_time_entries', 'date_exceptions', 'late_permissions', 'departure_permissions',
+                 'report_cache', 'forced_absences', 'absence_reasons', 'mobile_punches')
+
+
+@bp.route('/api/mobile/employee/<int:emp_id>')
+@admin_required
+def api_employee_card(emp_id):
+    conn = db.get_db()
+    try:
+        emp = conn.execute("SELECT * FROM employees WHERE id = ?", (emp_id,)).fetchone()
+        if not emp or not _employee_scope_ok(emp['dept']):
+            return jsonify({'ok': False, 'error': 'الموظف غير موجود'}), 404
+        acc = conn.execute("SELECT username, active, anywhere, device_label, bound_at, last_login_at FROM employee_accounts "
+                           "WHERE employee_id = ?", (emp_id,)).fetchone()
+        month = now_local().strftime('%Y-%m')
+        days = [dict(r) for r in conn.execute(
+            "SELECT date, time_in, time_out, status, late_minutes, working_hours FROM report_cache WHERE name = ? "
+            "AND date LIKE ? ORDER BY date DESC", (emp['name'], month + '%')).fetchall()]
+        moves = [dict(r) for r in conn.execute(
+            "SELECT date, time, kind, status, reason, site_name, distance_m, accuracy, source, flags, lat, lng FROM mobile_punches "
+            "WHERE employee_id = ? ORDER BY id DESC LIMIT 40", (emp_id,)).fetchall()]
+        for m in moves:
+            m['kind_label'] = KINDS.get(m['kind'], m['kind'])
+        overrides = [dict(r) for r in conn.execute(
+            "SELECT * FROM geofence_overrides WHERE employee_id = ? ORDER BY id DESC LIMIT 20", (emp_id,)).fetchall()]
+        now = now_local().strftime('%Y-%m-%d %H:%M')
+        for o in overrides:
+            o['active'] = not o['revoked'] and o['starts_at'] <= now <= o['ends_at']
+        notes = [dict(r) for r in conn.execute(
+            "SELECT title, body, created_by, created_at, read_at FROM employee_notifications WHERE employee_id = ? ORDER BY id DESC LIMIT 20",
+            (emp_id,)).fetchall()]
+        sources = {r['src']: r['n'] for r in conn.execute(
+            "SELECT CASE WHEN batch_id = 'mobile' THEN 'mobile' ELSE 'device' END AS src, COUNT(*) AS n FROM punches "
+            "WHERE name = ? AND date LIKE ? GROUP BY src", (emp['name'], month + '%'))}
+        audit = [dict(r) for r in conn.execute(
+            "SELECT timestamp, username, action_type, old_value, new_value, reason FROM audit_log WHERE employee_name = ? ORDER BY id DESC LIMIT 60",
+            (emp['name'],)).fetchall()]
+        return jsonify({'ok': True, 'employee': dict(emp), 'account': dict(acc) if acc else None, 'days': days, 'moves': moves,
+                        'overrides': overrides, 'notifications': notes, 'sources': sources, 'audit': audit,
+                        'bio': conn.execute("SELECT COUNT(*) FROM webauthn_credentials WHERE employee_id = ?", (emp_id,)).fetchone()[0],
+                        'summary': {'days': sum(1 for x in days if x['time_in']),
+                                    'late_days': sum(1 for x in days if (x['late_minutes'] or 0) > 0),
+                                    'late_minutes': sum(int(x['late_minutes'] or 0) for x in days),
+                                    'absent': sum(1 for x in days if x['status'] == 'غائب'),
+                                    'hours': round(sum(float(x['working_hours'] or 0) for x in days), 1)}})
+    finally:
+        conn.close()
+
+
+@bp.route('/api/mobile/employee/<int:emp_id>', methods=['PUT'])
+@admin_required
+def api_employee_update(emp_id):
+    d = request.get_json(silent=True) or {}
+    conn = db.get_db()
+    try:
+        emp = conn.execute("SELECT * FROM employees WHERE id = ?", (emp_id,)).fetchone()
+        if not emp or not _employee_scope_ok(emp['dept']):
+            return jsonify({'ok': False, 'error': 'الموظف غير موجود'}), 404
+        name = (d.get('name') if 'name' in d else emp['name'] or '').strip()
+        if not name:
+            return jsonify({'ok': False, 'error': 'الاسم مطلوب'}), 400
+        if name != emp['name'] and conn.execute("SELECT 1 FROM employees WHERE name = ? AND id != ?", (name, emp_id)).fetchone():
+            return jsonify({'ok': False, 'error': 'يوجد موظف آخر بنفس الاسم'}), 400
+        mode = d.get('attendance_mode', emp['attendance_mode'] or 'both')
+        if mode not in ('device', 'mobile', 'both'):
+            mode = 'both'
+        fields = {
+            'name': name, 'dept': (d.get('dept', emp['dept']) or '').strip(),
+            'device_uid': (d.get('device_uid', emp['device_uid']) or '').strip(),
+            'active': 1 if d.get('active', emp['active']) else 0, 'attendance_mode': mode,
+            'job_title': (d.get('job_title', emp['job_title']) or '').strip()[:120],
+            'phone': (d.get('phone', emp['phone']) or '').strip()[:40],
+            'email': (d.get('email', emp['email']) or '').strip()[:120],
+            'notes': (d.get('notes', emp['notes']) or '').strip()[:2000],
+        }
+        conn.execute("UPDATE employees SET name = ?, dept = ?, device_uid = ?, active = ?, attendance_mode = ?, job_title = ?, "
+                     "phone = ?, email = ?, notes = ?, synced = 0 WHERE id = ?", (*fields.values(), emp_id))
+        changed = [k for k in fields if str(fields[k] or '') != str(emp[k] or '')]
+        if name != emp['name']:   # تغيير الاسم ينتقل إلى كل السجلات المرتبطة به
+            tables = {r['name'] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+            for t in RENAME_TABLES:
+                if t in tables and 'name' in {c['name'] for c in conn.execute(f"PRAGMA table_info({t})")}:
+                    conn.execute(f"UPDATE {t} SET name = ? WHERE name = ?", (name, emp['name']))
+        if fields['dept'] != (emp['dept'] or '') and d.get('history', True):
+            conn.execute("UPDATE punches SET dept = ? WHERE name = ?", (fields['dept'], name))
+        try:
+            _admin().log_audit(conn, 'employee_edit', 'employee', employee_name=name,
+                               old_value=', '.join(f'{k}={emp[k]}' for k in changed), new_value=', '.join(f'{k}={fields[k]}' for k in changed))
+        except Exception:
+            pass
+        conn.commit()
+        if changed and any(k in changed for k in ('name', 'dept', 'attendance_mode', 'active')):
+            schedule_analysis(1)
+        return jsonify({'ok': True, 'changed': changed})
+    finally:
+        conn.close()
+
+
+@bp.route('/api/mobile/employee/<int:emp_id>/override', methods=['POST'])
+@admin_required
+def api_override_add(emp_id):
+    d = request.get_json(silent=True) or {}
+    reason = (d.get('reason') or '').strip()
+    if len(reason) < 3:
+        return jsonify({'ok': False, 'error': 'اكتب سبب الاستثناء'}), 400
+    now = now_local()
+    try:
+        starts = datetime.strptime((d.get('starts_at') or now.strftime('%Y-%m-%dT%H:%M'))[:16], '%Y-%m-%dT%H:%M')
+        ends = datetime.strptime(d['ends_at'][:16], '%Y-%m-%dT%H:%M') if d.get('ends_at') else now + timedelta(hours=float(d.get('hours') or 2))
+    except (ValueError, KeyError):
+        return jsonify({'ok': False, 'error': 'وقت غير صحيح'}), 400
+    if ends <= starts or ends - starts > timedelta(days=31):
+        return jsonify({'ok': False, 'error': 'المدة يجب أن تكون بين دقائق و 31 يوماً'}), 400
+    conn = db.get_db()
+    try:
+        emp = conn.execute("SELECT id, name, dept FROM employees WHERE id = ?", (emp_id,)).fetchone()
+        if not emp or not _employee_scope_ok(emp['dept']):
+            return jsonify({'ok': False, 'error': 'الموظف غير موجود'}), 404
+        conn.execute("INSERT INTO geofence_overrides (employee_id, starts_at, ends_at, no_location, reason, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                     (emp_id, starts.strftime('%Y-%m-%d %H:%M'), ends.strftime('%Y-%m-%d %H:%M'), 1 if d.get('no_location') else 0,
+                      reason[:300], session.get('username', ''), now_local().strftime('%Y-%m-%d %H:%M:%S')))
+        try:
+            _admin().log_audit(conn, 'geofence_override', 'employee', employee_name=emp['name'],
+                               new_value=f"{starts:%Y-%m-%d %H:%M} ← {ends:%Y-%m-%d %H:%M}" + (' (بدون موقع)' if d.get('no_location') else ''), reason=reason)
+        except Exception:
+            pass
+        if d.get('notify', True):
+            conn.execute("INSERT INTO employee_notifications (employee_id, title, body, created_by, created_at) VALUES (?, ?, ?, ?, ?)",
+                         (emp_id, 'سُمح لك بالتسجيل من خارج موقع العمل',
+                          f"حتى {ends:%Y-%m-%d %H:%M}" + (' — حتى بدون تحديد الموقع' if d.get('no_location') else '') + f"\nالسبب: {reason}",
+                          session.get('username', ''), now_local().strftime('%Y-%m-%d %H:%M:%S')))
+        conn.commit()
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
+
+
+@bp.route('/api/mobile/override/<int:ov_id>', methods=['DELETE'])
+@admin_required
+def api_override_revoke(ov_id):
+    conn = db.get_db()
+    try:
+        ov = conn.execute("SELECT o.*, e.name, e.dept FROM geofence_overrides o JOIN employees e ON e.id = o.employee_id WHERE o.id = ?",
+                          (ov_id,)).fetchone()
+        if not ov or not _employee_scope_ok(ov['dept']):
+            return jsonify({'ok': False, 'error': 'غير موجود'}), 404
+        conn.execute("UPDATE geofence_overrides SET revoked = 1 WHERE id = ?", (ov_id,))
+        try:
+            _admin().log_audit(conn, 'geofence_override_revoke', 'employee', employee_name=ov['name'], reason=ov['reason'])
+        except Exception:
+            pass
+        conn.commit()
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
+
+
+@bp.route('/api/mobile/employees/bulk', methods=['POST'])
+@admin_required
+def api_employees_bulk():
+    """تعليق/تفعيل الموظفين وطريقة توثيق الدوام لعدة موظفين"""
+    d = request.get_json(silent=True) or {}
+    ids = [int(i) for i in (d.get('ids') or []) if str(i).isdigit()]
+    action, value = d.get('action'), d.get('value')
+    if not ids:
+        return jsonify({'ok': False, 'error': 'حدّد موظفاً واحداً على الأقل'}), 400
+    conn = db.get_db()
+    try:
+        emps = [r for r in conn.execute(f"SELECT id, name, dept FROM employees WHERE id IN ({','.join('?' * len(ids))})", ids)
+                if _employee_scope_ok(r['dept'])]
+        for e in emps:
+            if action == 'suspend':
+                conn.execute("UPDATE employees SET active = 0, synced = 0 WHERE id = ?", (e['id'],))
+            elif action == 'activate':
+                conn.execute("UPDATE employees SET active = 1, synced = 0 WHERE id = ?", (e['id'],))
+            elif action == 'mode' and value in ('device', 'mobile', 'both'):
+                conn.execute("UPDATE employees SET attendance_mode = ? WHERE id = ?", (value, e['id']))
+            else:
+                return jsonify({'ok': False, 'error': 'إجراء غير معروف'}), 400
+            _audit_emp(conn, f'employees_{action}', 'employee', e['name'], value or '')
+        conn.commit()
+        schedule_analysis(1)
+        return jsonify({'ok': True, 'count': len(emps)})
+    finally:
+        conn.close()
