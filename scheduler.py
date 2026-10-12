@@ -9,7 +9,7 @@
 """
 import json
 import logging
-from datetime import datetime, date as date_cls
+from datetime import datetime
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -55,7 +55,6 @@ def run_scheduled_report(manual_trigger=False):
     # الاستيراد هنا (لا بأعلى الملف) لتفادي أي حلقة استيراد مع app.py،
     # الذي يستورد هذا الملف بدوره لتشغيل المجدول عند بدء التطبيق.
     import app as app_module
-    from attendance_engine import parse_time_str
     from pdf_export import build_report_pdf
     import email_sender
 

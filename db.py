@@ -19,14 +19,19 @@ def get_db():
     db_dir = os.path.dirname(DB_PATH)
     if db_dir:
         os.makedirs(db_dir, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 30000")   # طلبات متزامنة (خادم متعدد الخيوط) تنتظر بدل «database is locked»
     return conn
 
 
 def init_db():
     conn = get_db()
+    try:
+        conn.execute("PRAGMA journal_mode = WAL")   # قراءة وكتابة متزامنة بأمان أكبر
+    except sqlite3.DatabaseError:
+        pass
     cur = conn.cursor()
 
     # ===== المستخدمون والصلاحيات - نفس نموذج النسخة المكتبية بالضبط: 3
@@ -257,7 +262,7 @@ def init_db():
         cur.execute(
             "INSERT INTO users (username, password_hash, full_name, role, can_manage_employees, "
             "can_manage_departments, can_push_devices, can_edit_org_settings) VALUES (?, ?, ?, ?, 1, 1, 1, 1)",
-            ('admin', generate_password_hash('admin123'), 'مدير النظام', 'admin')
+            ('admin', generate_password_hash(os.environ.get('ATTENDANCE_ADMIN_PASSWORD') or 'admin123'), 'مدير النظام', 'admin')
         )
         conn.commit()
 

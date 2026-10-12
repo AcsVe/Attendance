@@ -11,7 +11,6 @@
 على خادم لينكس بمرحلة النشر الثانية).
 """
 from zk import ZK
-from zk.exception import ZKNetworkError, ZKErrorConnection, ZKErrorResponse
 from zk_devices import set_user_overwrite
 
 try:

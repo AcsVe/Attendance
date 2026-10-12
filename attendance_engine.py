@@ -6,7 +6,7 @@
 خاص بيوم السبت تحديداً (يتفوّق على وقت القسم/العام فقط لمن حضر فعلياً
 يوم السبت - الغياب يوم السبت يبقى "عطلة أسبوعية" دائماً).
 """
-from datetime import datetime, date as date_cls
+from datetime import datetime
 import pandas as pd
 
 

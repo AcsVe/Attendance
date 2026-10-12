@@ -1,0 +1,18 @@
+# بيانات محلية — لا تُرفع أبداً إلى GitHub
+.env
+.secret_key
+*.db
+*.db-wal
+*.db-shm
+*.sqlite3
+data/
+backups/
+logs/
+static/uploads/
+venv/
+.venv/
+pyexe.txt
+__pycache__/
+*.pyc
+*.json.key
+service_account*.json

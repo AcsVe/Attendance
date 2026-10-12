@@ -89,7 +89,7 @@ def import_from_mdb(path, date_from=None, date_to=None, uid_to_employee=None):
     buckets = {}
     unmatched_uids = set()
     for row in raw_rows:
-        userid, checktime, checktype, name_on_device = row[0], row[1], row[2], row[3]
+        userid, checktime = row[0], row[1]
         uid = str(userid).strip()
         name = uid_to_employee.get(uid)
         if not name:

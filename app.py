@@ -18,7 +18,7 @@ from functools import wraps
 from datetime import datetime, timedelta
 
 from flask import (Flask, render_template, request, jsonify, session,
-                    redirect, url_for, send_file, g)
+                    redirect, url_for, send_file)
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 import pandas as pd
@@ -39,7 +39,47 @@ import onedrive_backup
 import gdrive_backup
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('ATTENDANCE_SECRET_KEY', 'change-this-secret-key-in-production')
+
+
+def _secret_key():
+    """مفتاح الجلسات: من .env، وإلا يُولَّد مرة واحدة ويُحفظ بجانب قاعدة البيانات (لا مفتاح افتراضي معروف)"""
+    key = os.environ.get('ATTENDANCE_SECRET_KEY') or os.environ.get('SECRET_KEY')
+    if key:
+        return key
+    path = os.path.join(os.path.dirname(os.path.abspath(db.DB_PATH)), '.secret_key')
+    try:
+        with open(path, encoding='utf-8') as fh:
+            key = fh.read().strip()
+    except OSError:
+        key = ''
+    if not key:
+        import secrets as _s
+        key = _s.token_urlsafe(48)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w', encoding='utf-8') as fh:
+            fh.write(key)
+    return key
+
+
+app.secret_key = _secret_key()
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    SESSION_COOKIE_SECURE=(os.environ.get('BASE_URL', '').startswith('https://')),
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=int(os.environ.get('SESSION_HOURS', '12') or 12)),
+)
+
+# أسرار لا تُرسل للمتصفح أبداً — تظهر كنجوم، وإرسال النجوم كما هي يعني «بدون تغيير»
+SECRET_SETTINGS = ('smtp_sender_password', 'graph_client_secret', 'sync_api_key')
+SECRET_MASK = '••••••••'
+
+
+def mask_secrets(d):
+    return {k: (SECRET_MASK if k in SECRET_SETTINGS and v else v) for k, v in d.items()}
+
+# حماية مصدر الصفحات (تشفير + منع الزر الأيمن والاختصارات) — انظر utils/page_shield.py
+from utils.page_shield import install as _shield  # noqa: E402
+_shield(app)
 
 # ===== شعار المؤسسة - يُحفَظ كملف واحد تحت static/uploads/ (اسم ثابت
 # "org_logo.<امتداد>")، والامتداد الفعلي يُحفَظ بإعداد org_logo_filename
@@ -136,7 +176,20 @@ PERMISSION_REQUIRED_ENDPOINTS = {
     'api_devices_import_mdb': 'can_push_devices',
     'api_devices_import_sqlite': 'can_push_devices',
     'api_sync_push': 'can_push_devices',
+
+    # إعدادات البريد والجدولة والنسخ الاحتياطي ومسح السجلات — لمن يملك صلاحية إعدادات المؤسسة فقط
+    'api_schedule': 'can_edit_org_settings',
+    'api_schedule_test_email': 'can_edit_org_settings',
+    'api_schedule_run_now': 'can_edit_org_settings',
+    'api_backup_onedrive': 'can_edit_org_settings',
+    'api_backup_onedrive_run': 'can_edit_org_settings',
+    'api_backup_gdrive': 'can_edit_org_settings',
+    'api_backup_gdrive_run': 'can_edit_org_settings',
+    'api_punches_clear': 'can_edit_org_settings',
 }
+
+# دور «اطّلاع فقط» (viewer): لا يعدّل شيئاً — مسموح له فقط بهذه الطلبات غير GET (حسابات وتقارير بلا حفظ)
+VIEWER_ALLOWED_WRITES = {'api_overtime', 'api_overtime_export_csv', 'api_change_password', 'login', 'logout'}
 
 # مسارات admin فقط بغض النظر عن أي صلاحية دقيقة - إدارة المستخدمين حصراً
 # (تبويب "المستخدمون" بالكامل مخفي عن غير admin بالواجهة أيضاً، مطابقةً
@@ -194,9 +247,36 @@ def enforce_role_permissions():
     لمسار admin فقط من غير admin، أو لمسار يتطلب صلاحية دقيقة معيّنة
     والمستخدم الحالي لا يملكها. أي مسار آخر غير مذكور بالقائمتين مفتوح
     لأي مستخدم مسجَّل دخول - تماماً كسلوك النسخة المكتبية الأصلي."""
+    endpoint = request.endpoint or ''
+    # حماية من الطلبات المزوّرة من مواقع أخرى (CSRF): أي طلب تعديل يجب أن يأتي من نفس الموقع
+    if request.method not in ('GET', 'HEAD', 'OPTIONS') and endpoint != 'api_sync_receive':
+        origin = request.headers.get('Origin') or request.headers.get('Referer') or ''
+        if origin:
+            from urllib.parse import urlparse
+            if urlparse(origin).netloc.lower() != (request.host or '').lower():
+                return jsonify({'ok': False, 'error': 'طلب مرفوض (مصدر غير موثوق)'}), 403
     if not session.get('user_id'):
         return
-    endpoint = request.endpoint or ''
+    # الصلاحيات تُقرأ من قاعدة البيانات مع كل طلب: حذف مستخدم أو تغيير دوره يسري فوراً
+    conn = db.get_db()
+    try:
+        user = conn.execute("SELECT * FROM users WHERE id = ?", (session['user_id'],)).fetchone()
+        depts = [r['dept'] for r in conn.execute(
+            "SELECT dept FROM user_departments WHERE user_id = ?", (session['user_id'],)).fetchall()] if user else []
+    finally:
+        conn.close()
+    if user is None:
+        session.clear()
+        if request.path.startswith('/api/'):
+            return jsonify({'ok': False, 'error': 'يرجى تسجيل الدخول أولاً'}), 401
+        return redirect(url_for('login'))
+    session['role'] = user['role'] or 'viewer'
+    for perm in _PERMISSION_KEYS:
+        session[perm] = bool(user[perm])
+    session['allowed_depts'] = depts
+    if (session['role'] == 'viewer' and request.method not in ('GET', 'HEAD')
+            and endpoint not in VIEWER_ALLOWED_WRITES):
+        return jsonify({'ok': False, 'error': 'حسابك للاطّلاع فقط — لا يمكنه التعديل'}), 403
     if endpoint in ADMIN_ONLY_ENDPOINTS and session.get('role') != 'admin':
         return jsonify({'ok': False, 'error': 'هذا الإجراء مخصَّص لمدير النظام (admin) فقط'}), 403
     required_perm = PERMISSION_REQUIRED_ENDPOINTS.get(endpoint)
@@ -219,6 +299,22 @@ def _no_cache_login(resp):
     return resp
 
 
+_LOGIN_FAILS = {}   # {ip|user: [أوقات المحاولات الخاطئة]}
+
+
+def _login_blocked(key, limit=5, window=900):
+    import time
+    now = time.time()
+    tries = [t for t in _LOGIN_FAILS.get(key, []) if now - t < window]
+    _LOGIN_FAILS[key] = tries
+    return len(tries) >= limit
+
+
+def _login_failed(key):
+    import time
+    _LOGIN_FAILS.setdefault(key, []).append(time.time())
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'GET':
@@ -228,17 +324,24 @@ def login():
 
     username = request.form.get('username', '').strip()
     password = request.form.get('password', '')
+    key = f"{request.remote_addr}|{username.lower()}"
+    if _login_blocked(key):
+        return render_template('login.html', error='محاولات كثيرة خاطئة — انتظر 15 دقيقة ثم حاول مجدداً',
+                                settings=db.get_all_settings()), 429
     conn = db.get_db()
     user = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
     if user is None or not check_password_hash(user['password_hash'], password):
         conn.close()
+        _login_failed(key)
         return render_template('login.html', error='اسم المستخدم أو كلمة المرور غير صحيحة',
                                 settings=db.get_all_settings())
+    _LOGIN_FAILS.pop(key, None)
 
     dept_rows = conn.execute("SELECT dept FROM user_departments WHERE user_id = ?", (user['id'],)).fetchall()
     conn.close()
 
     session.clear()
+    session.permanent = True
     session['user_id'] = user['id']
     session['username'] = user['username']
     session['full_name'] = user['full_name'] or user['username']
@@ -540,13 +643,15 @@ def api_schedule():
         for key in _SCHEDULE_KEYS:
             if key in data:
                 value = data[key]
+                if key in SECRET_SETTINGS and value == SECRET_MASK:
+                    continue   # لم يُغيَّر
                 if key in ('schedule_enabled', 'schedule_pull_before'):
                     value = '1' if value else '0'
                 db.set_setting(key, str(value if value is not None else ''))
         return jsonify({'ok': True})
 
     settings = db.get_all_settings()
-    result = {k: settings.get(k, '') for k in _SCHEDULE_KEYS}
+    result = mask_secrets({k: settings.get(k, '') for k in _SCHEDULE_KEYS})
     result['schedule_days'] = json.loads(result.get('schedule_days_json') or '[]')
     result['schedule_last_run_at'] = settings.get('schedule_last_run_at', '')
     result['schedule_last_run_status'] = settings.get('schedule_last_run_status', '')
@@ -1303,7 +1408,7 @@ def _read_csv_auto_encoding(path):
         except (UnicodeDecodeError, UnicodeError) as e:
             last_error = e
             continue
-        except pd.errors.ParserError as e:
+        except pd.errors.ParserError:
             # ===== الترميز نفسه صحيح (نجح فك التشفير) لكن الفاصل ما زال
             # غير متطابق حتى بعد الكشف التلقائي - نتوقف هنا بدل تجربة
             # ترميزات أخرى (لن تحل مشكلة الفاصل) ونرجّع الخطأ كما هو =====
@@ -1692,10 +1797,10 @@ def api_settings():
             'sync_central_url', 'sync_api_key',
         }
         for k, v in data.items():
-            if k in allowed_keys:
+            if k in allowed_keys and not (k in SECRET_SETTINGS and v == SECRET_MASK):
                 db.set_setting(k, str(v))
         return jsonify({'ok': True})
-    return jsonify({'ok': True, 'settings': db.get_all_settings()})
+    return jsonify({'ok': True, 'settings': mask_secrets(db.get_all_settings())})
 
 
 @app.route('/api/settings/logo', methods=['POST', 'DELETE'])
@@ -1797,7 +1902,8 @@ def api_sync_receive():
         return jsonify({'ok': False, 'error': 'هذه النسخة غير مُعدَّة لاستقبال مزامنة (لا يوجد مفتاح مزامنة '
                                                 'بإعداداتها)'}), 401
     provided_key = (request.headers.get('X-Sync-Key') or '').strip()
-    if provided_key != expected_key:
+    import hmac
+    if not hmac.compare_digest(provided_key.encode(), expected_key.encode()):
         return jsonify({'ok': False, 'error': 'مفتاح المزامنة غير صحيح'}), 401
 
     payload = request.get_json(force=True, silent=True) or {}
@@ -2999,6 +3105,9 @@ def api_users():
         if not (username and password):
             conn.close()
             return jsonify({'ok': False, 'error': 'اسم المستخدم وكلمة المرور إجباريان'}), 400
+        if len(password) < 8:
+            conn.close()
+            return jsonify({'ok': False, 'error': 'كلمة المرور 8 أحرف على الأقل'}), 400
         try:
             cur = conn.execute(
                 "INSERT INTO users (username, password_hash, full_name, role, can_manage_employees, "
@@ -3077,9 +3186,9 @@ def api_change_password():
     if not user or not check_password_hash(user['password_hash'], current):
         conn.close()
         return jsonify({'ok': False, 'error': 'كلمة المرور الحالية غير صحيحة'}), 400
-    if len(new) < 4:
+    if len(new) < 8:
         conn.close()
-        return jsonify({'ok': False, 'error': 'كلمة المرور الجديدة قصيرة جداً'}), 400
+        return jsonify({'ok': False, 'error': 'كلمة المرور الجديدة قصيرة جداً (8 أحرف على الأقل)'}), 400
     conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (generate_password_hash(new), session['user_id']))
     conn.commit()
     conn.close()
@@ -3096,4 +3205,7 @@ if __name__ == '__main__':
         scheduler.start_scheduler()
     # threaded=True: يمنع طلب طويل (رفع/استيراد ملف ضخم) من "تجميد" بقية
     # الطلبات (مثل فحوصات الحالة الدورية بالواجهة) لحين انتهائه
-    app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)
+    # وضع التطوير (debug) فقط عند طلبه صراحة — لا يُشغَّل أبداً على الشبكة لأنه يسمح بتنفيذ أوامر من المتصفح
+    _debug = os.environ.get('FLASK_DEBUG') == '1'
+    app.run(host='127.0.0.1' if _debug else '0.0.0.0', port=int(os.environ.get('PORT') or 5000),
+            debug=_debug, threaded=True)

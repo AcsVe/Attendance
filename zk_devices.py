@@ -10,7 +10,6 @@
 يُلتقط ويُعاد كنص عربي واضح بدل ما يكسر الطلب بالكامل - المستخدم يشوف بالضبط
 أي جهاز فشل ولماذا، تماماً متل تنبيهات النسخة المكتبية.
 """
-import time
 import threading
 from collections import deque
 from datetime import datetime
