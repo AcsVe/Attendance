@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>لوحة التحكم — نظام تحليل الحضور والانصراف</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <!-- ===== إعدادات تثبيت التطبيق (PWA) على أندرويد/ويندوز/آيفون ===== -->
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+  <meta name="theme-color" content="#1B6E8C">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icons/favicon-32.png') }}">
+  <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='icons/favicon-16.png') }}">
+  <link rel="shortcut icon" href="{{ url_for('static', filename='icons/favicon.ico') }}">
+  <!-- آيفون/آيباد (Safari لا يقرأ manifest.json لأيقونة الشاشة الرئيسية) -->
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="الحضور والانصراف">
+  <meta name="mobile-web-app-capable" content="yes">
+</head>
+<body data-role="{{ role }}"
+      data-can-manage-employees="{{ perms.can_manage_employees|int }}"
+      data-can-manage-departments="{{ perms.can_manage_departments|int }}"
+      data-can-push-devices="{{ perms.can_push_devices|int }}"
+      data-can-edit-org-settings="{{ perms.can_edit_org_settings|int }}">
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    {% if settings.org_logo_filename %}
+      <div class="sidebar-logo-chip"><img src="{{ url_for('static', filename='uploads/' + settings.org_logo_filename) }}" alt="شعار المؤسسة" style="max-height:32px;max-width:150px;vertical-align:middle"></div>
+    {% else %}
+      <div class="sidebar-logo-chip"><i class="fas fa-fingerprint"></i>&nbsp;<span class="sidebar-logo-title">نظام الحضور</span></div>
+    {% endif %}
+    <div class="sidebar-logo-text">{{ settings.org_name or 'الجمعية الثقافية العربية - الرائد العربي' }}</div>
+  </div>
+  <div class="sidebar-nav">
+    <button class="nav-item active" data-tab="dashboard" onclick="showTab('dashboard')"><i class="fas fa-chart-pie"></i> لوحة التحكم</button>
+    <button class="nav-item" data-tab="upload" onclick="showTab('upload')"><i class="fas fa-file-upload"></i> رفع البيانات والتحليل</button>
+    <button class="nav-item" data-tab="reports" onclick="showTab('reports')"><i class="fas fa-table"></i> التقارير</button>
+    <button class="nav-item" data-tab="overtime" onclick="showTab('overtime')"><i class="fas fa-business-time"></i> العمل الإضافي</button>
+    <button class="nav-item" data-tab="compare" onclick="showTab('compare')"><i class="fas fa-chart-bar"></i> المقارنات</button>
+    <button class="nav-item" data-tab="blueprint" onclick="showTab('blueprint')"><i class="fas fa-map"></i> Blueprint</button>
+    <button class="nav-item" data-tab="export" onclick="showTab('export')"><i class="fas fa-file-export"></i> تصدير</button>
+    <button class="nav-item" data-tab="manual" onclick="showTab('manual')"><i class="fas fa-edit"></i> الإدخال اليدوي</button>
+    <button class="nav-item" data-tab="exceptions" onclick="showTab('exceptions')"><i class="fas fa-user-slash"></i> استثناءات التواريخ</button>
+    <button class="nav-item" data-tab="absence-reasons" onclick="showTab('absence-reasons')"><i class="fas fa-comment-medical"></i> أسباب الغياب</button>
+    <button class="nav-item" data-tab="holidays" onclick="showTab('holidays')"><i class="fas fa-umbrella-beach"></i> العطل الرسمية</button>
+    <button class="nav-item" data-tab="permissions" onclick="showTab('permissions')"><i class="fas fa-user-clock"></i> أذونات التأخير/المغادرة</button>
+    <button class="nav-item" data-tab="employees" onclick="showTab('employees')"><i class="fas fa-users"></i> الموظفون</button>
+    <button class="nav-item" data-tab="devices" onclick="showTab('devices')"><i class="fas fa-fingerprint"></i> إدارة الأجهزة</button>
+    <button class="nav-item" data-tab="dept-times" onclick="showTab('dept-times')"><i class="fas fa-building"></i> أوقات الأقسام</button>
+    <button class="nav-item" data-tab="settings" onclick="showTab('settings')"><i class="fas fa-cog"></i> الإعدادات العامة</button>
+    <button class="nav-item" data-tab="schedule" onclick="showTab('schedule')"><i class="fas fa-clock"></i> الجدولة التلقائية</button>
+    <button class="nav-item" data-tab="audit" onclick="showTab('audit')"><i class="fas fa-history"></i> سجل التدقيق</button>
+    <button class="nav-item" data-tab="users" onclick="showTab('users')"><i class="fas fa-user-shield"></i> المستخدمون</button>
+  </div>
+  <div class="sidebar-footer">
+    <span style="font-size:.82rem;opacity:.85"><i class="fas fa-user-circle"></i> {{ full_name }}</span>
+    <a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> تسجيل الخروج</a>
+  </div>
+</nav>
+
+<div class="main">
+  <div class="topbar">
+    <div style="display:flex;align-items:center;gap:10px">
+      <button class="hamburger" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
+      <h1 id="pageTitle">لوحة التحكم</h1>
+    </div>
+    <div class="topbar-right">
+      <button class="btn btn-outline btn-sm" onclick="refreshCurrentTab()"><i class="fas fa-sync"></i> تحديث</button>
+      <span style="font-size:.85rem;color:var(--muted)" id="clockEl"></span>
+    </div>
+  </div>
+  <div class="content">
+
+    <!-- ============ DASHBOARD ============ -->
+    <div class="tab-panel active" id="tab-dashboard">
+      <div id="lastImportNotice" style="display:none"></div>
+      <div class="filter-bar">
+        <select id="dashDept" class="search-input" onchange="loadStats()"><option value="">كل الأقسام</option></select>
+        <select id="dashEmployee" class="search-input" onchange="loadStats()"><option value="">كل الموظفين</option></select>
+        <input type="date" id="dashFrom" class="search-input" onchange="loadStats()" style="min-width:140px">
+        <input type="date" id="dashTo" class="search-input" onchange="loadStats()" style="min-width:140px">
+        <button class="btn btn-outline btn-sm" onclick="clearDashFilters()"><i class="fas fa-times"></i> إلغاء الفلترة</button>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card" onclick="goToReport('all')"><div class="stat-val" id="stTotal">-</div><div class="stat-label">إجمالي السجلات</div></div>
+        <div class="stat-card green" onclick="goToReport('ontime')"><div class="stat-val" id="stOntime">-</div><div class="stat-label">في الوقت</div></div>
+        <div class="stat-card orange" onclick="goToReport('late')"><div class="stat-val" id="stLate">-</div><div class="stat-label">متأخرون</div></div>
+        <div class="stat-card red" onclick="goToReport('absent')"><div class="stat-val" id="stAbsent">-</div><div class="stat-label">غائبون</div></div>
+        <div class="stat-card gray" onclick="goToReport('holiday')"><div class="stat-val" id="stHoliday">-</div><div class="stat-label">عطلة أسبوعية</div></div>
+        <div class="stat-card accent" onclick="goToReport('sat_present')"><div class="stat-val" id="stSatPresent">-</div><div class="stat-label">حاضرو السبت</div></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-clock"></i> مؤشرات إضافية</div>
+        <div class="stats-grid" style="margin-bottom:0">
+          <div class="stat-card" style="cursor:default"><div class="stat-val" id="stAvgHours">-</div><div class="stat-label">متوسط ساعات العمل</div></div>
+          <div class="stat-card" style="cursor:default"><div class="stat-val" id="stAvgLate">-</div><div class="stat-label">متوسط دقائق التأخير</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ UPLOAD ============ -->
+    <div class="tab-panel" id="tab-upload">
+      <div class="card" id="syncPushCard" style="display:none">
+        <div class="card-title"><i class="fas fa-cloud-upload-alt"></i> نشر ومزامنة مع القاعدة الرئيسية</div>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">
+          يرفع كل الموظفين والبصمات المضافة/المعدَّلة محلياً منذ آخر مزامنة إلى القاعدة الرئيسية المضبوطة بالإعدادات.
+        </p>
+        <button class="btn btn-primary" onclick="syncPush()"><i class="fas fa-cloud-upload-alt"></i> نشر ومزامنة الآن</button>
+        <div id="syncPushResult" style="margin-top:12px"></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-file-upload"></i> رفع ملف بصمات (CSV / Excel)</div>
+        <div class="form-group">
+          <label>الملف</label>
+          <input type="file" id="uploadFile" accept=".csv,.xlsx,.xls" onchange="onUploadFileChange()">
+        </div>
+        <div class="form-group" style="max-width:520px">
+          <label>أو الصق رابط الملف (Google Drive / OneDrive / Dropbox / أي رابط تنزيل مباشر)</label>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="uploadUrl" dir="ltr" placeholder="https://drive.google.com/file/d/...">
+            <button class="btn btn-primary btn-sm" onclick="loadUploadFromUrl()"><i class="fas fa-cloud-download-alt"></i> تحميل</button>
+          </div>
+        </div>
+        <div id="mappingBox" style="display:none">
+          <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">حدّد أي عمود بالملف يمثّل كل حقل، ثم اضغط "استيراد":</p>
+          <div class="form-grid quad">
+            <div class="form-group"><label>عمود الاسم <span style="color:#c0392b">*</span></label><select id="mapName"></select></div>
+            <div class="form-group"><label>عمود التاريخ <span style="color:#c0392b">*</span></label><select id="mapDate"></select></div>
+            <div class="form-group"><label>عمود وقت الحضور <span style="color:#c0392b">*</span></label><select id="mapTimeIn"></select></div>
+            <div class="form-group"><label>عمود وقت الانصراف <span style="color:#c0392b">*</span></label><select id="mapTimeOut"></select></div>
+          </div>
+          <div class="form-group" style="max-width:300px">
+            <label>عمود القسم (اختياري)</label>
+            <select id="mapDept"><option value="">-- بدون --</option></select>
+          </div>
+          <button class="btn btn-primary" onclick="doUpload()"><i class="fas fa-upload"></i> استيراد</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-cogs"></i> تشغيل التحليل</div>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">
+          بعد استيراد البيانات (مرة واحدة أو عدة دفعات)، اضغط الزر أدناه لتطبيق كل الإعدادات الحالية (الأوقات، المناوبات، وقت السبت، الاستثناءات، الإدخال اليدوي) وبناء التقارير.
+        </p>
+        <button class="btn btn-primary" onclick="runAnalyze()"><i class="fas fa-play"></i> تحليل البيانات الآن</button>
+        <button class="btn btn-red" onclick="clearPunches()"><i class="fas fa-trash"></i> مسح كل البيانات المرفوعة</button>
+        <div id="analyzeResult" style="margin-top:12px"></div>
+      </div>
+    </div>
+
+    <!-- ============ REPORTS ============ -->
+    <div class="tab-panel" id="tab-reports">
+      <div class="card">
+        <div class="filter-bar">
+          <button class="filter-btn active" data-rt="all" onclick="setReportType('all')">الكامل</button>
+          <button class="filter-btn" data-rt="late" onclick="setReportType('late')">المتأخرون</button>
+          <button class="filter-btn" data-rt="absent" onclick="setReportType('absent')">الغائبون</button>
+          <button class="filter-btn" data-rt="ontime" onclick="setReportType('ontime')">في الوقت</button>
+          <button class="filter-btn" data-rt="holiday" onclick="setReportType('holiday')">عطلة أسبوعية</button>
+          <button class="filter-btn" data-rt="sat_present" onclick="setReportType('sat_present')">حاضرو السبت</button>
+        </div>
+        <div class="filter-bar">
+          <select id="repDept" class="search-input" onchange="loadReports(1)"><option value="">كل الأقسام</option></select>
+          <select id="repEmployee" class="search-input" multiple size="4" style="min-width:180px" onchange="loadReports(1)" title="اضغطي Ctrl (أو Cmd على ماك) واختاري لتحديد أكثر من موظف معاً - اتركيها بدون تحديد = كل الموظفين"></select>
+          <button type="button" class="btn btn-outline btn-sm" onclick="selectAllFilteredEmployees('repDept','repEmployee')" title="تحديد كل موظفي القسم المختار حالياً (أو الكل لو ما في قسم محدَّد)"><i class="fas fa-check-double"></i> تحديد كل موظفي القسم</button>
+          <input type="date" id="repFrom" class="search-input" onchange="loadReports(1)" style="min-width:140px">
+          <input type="date" id="repTo" class="search-input" onchange="loadReports(1)" style="min-width:140px">
+          <input class="search-input" type="text" id="repSearch" placeholder="🔍 بحث بالاسم أو القسم..." oninput="loadReports(1)">
+          <button class="btn btn-outline btn-sm" onclick="exportReportsCSV()"><i class="fas fa-file-csv"></i> تصدير CSV</button>
+          <button class="btn btn-outline btn-sm" onclick="exportReportsPDF()"><i class="fas fa-file-pdf"></i> تصدير PDF</button>
+          <button class="btn btn-outline btn-sm" onclick="window.print()"><i class="fas fa-print"></i> طباعة</button>
+        </div>
+        <div class="table-wrap">
+          <table class="dt-filterable">
+            <thead>
+              <tr>
+                <th onclick="sortReports('name')" style="cursor:pointer">الاسم<span id="repArrow-name"></span></th>
+                <th onclick="sortReports('dept')" style="cursor:pointer">القسم<span id="repArrow-dept"></span></th>
+                <th onclick="sortReports('date')" style="cursor:pointer">التاريخ<span id="repArrow-date"></span></th>
+                <th>وقت الحضور</th>
+                <th>وقت الانصراف</th>
+                <th onclick="sortReports('status')" style="cursor:pointer">الحالة<span id="repArrow-status"></span></th>
+                <th onclick="sortReports('late_minutes')" style="cursor:pointer">دقائق التأخير<span id="repArrow-late_minutes"></span></th>
+                <th onclick="sortReports('working_hours')" style="cursor:pointer">ساعات العمل<span id="repArrow-working_hours"></span></th>
+                <th>فترة المناوبة</th>
+              </tr>
+            </thead>
+            <tbody id="reportsTable"></tbody>
+          </table>
+        </div>
+        <div class="pagination" id="reportsPagination"></div>
+      </div>
+    </div>
+
+    <!-- ============ OVERTIME ============ -->
+    <div class="tab-panel" id="tab-overtime">
+      <div class="card">
+        <div class="card-title"><i class="fas fa-business-time"></i> حساب العمل الإضافي</div>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">
+          يقارن وقت الانصراف الفعلي (من آخر تحليل بيانات) بوقت الانصراف المقرر لكل موظف، ولا يحتسب عملاً إضافياً إلا لمن تجاوز فترة السماح المحددة أدناه.
+        </p>
+        <div class="form-grid quad">
+          <div class="form-group" style="grid-column:span 2">
+            <label>الموظفون <span style="color:#c0392b">*</span></label>
+            <select id="otNames" class="search-input" multiple size="4"></select>
+          </div>
+          <div class="form-group"><label>من تاريخ</label><input type="date" id="otFrom" class="search-input"></div>
+          <div class="form-group"><label>إلى تاريخ</label><input type="date" id="otTo" class="search-input"></div>
+          <div class="form-group"><label>فترة السماح (دقيقة)</label><input type="number" id="otGrace" class="search-input" value="0" min="0"></div>
+          <div class="form-group">
+            <label><input type="checkbox" id="otUseCustom" onchange="document.getElementById('otCustomEndWrap').style.display = this.checked ? 'block' : 'none'"> ساعات مخصّصة لهذا الحساب فقط</label>
+          </div>
+          <div class="form-group" id="otCustomEndWrap" style="display:none">
+            <label>وقت الانصراف المقرر المخصّص</label>
+            <input type="time" id="otCustomEnd" class="search-input">
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="calcOvertime()"><i class="fas fa-calculator"></i> احتساب العمل الإضافي</button>
+        <button class="btn btn-outline btn-sm" onclick="exportOvertimeCSV()"><i class="fas fa-file-csv"></i> تصدير CSV</button>
+      </div>
+      <div class="stats-grid" id="otSummaryCards" style="display:none">
+        <div class="stat-card" style="cursor:default"><div class="stat-val" id="otInstances">-</div><div class="stat-label">عدد السجلات</div></div>
+        <div class="stat-card accent" style="cursor:default"><div class="stat-val" id="otTotalDuration">-</div><div class="stat-label">إجمالي العمل الإضافي</div></div>
+        <div class="stat-card orange" style="cursor:default"><div class="stat-val" id="otTopEmployee">-</div><div class="stat-label">الأكثر عملاً إضافياً</div></div>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table class="dt-filterable">
+            <thead>
+              <tr>
+                <th>الاسم</th><th>القسم</th><th>التاريخ</th><th>وقت الانصراف الفعلي</th>
+                <th>وقت الانصراف المقرر</th><th>مدة العمل الإضافي</th><th>عطلة أسبوعية</th>
+              </tr>
+            </thead>
+            <tbody id="otTable"><tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px">اختر الموظفين واضغط "احتساب العمل الإضافي"</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ COMPARISONS ============ -->
+    <div class="tab-panel" id="tab-compare">
+      <div class="card">
+        <div class="card-title"><i class="fas fa-chart-bar"></i> مقارنات إحصائية</div>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px" id="cmpCaption">
+          مقارنة الأقسام من حيث متوسط التأخير ونسبة الالتزام بالوقت.
+        </p>
+        <div class="filter-bar">
+          <button class="filter-btn active" data-cr="dept" onclick="setCompareCriterion('dept')">حسب القسم</button>
+          <button class="filter-btn" data-cr="employee" onclick="setCompareCriterion('employee')">حسب الموظف</button>
+          <button class="filter-btn" data-cr="day" onclick="setCompareCriterion('day')">حسب اليوم</button>
+          <button class="filter-btn" data-cr="week" onclick="setCompareCriterion('week')">حسب الأسبوع</button>
+          <button class="filter-btn" data-cr="month" onclick="setCompareCriterion('month')">حسب الشهر</button>
+        </div>
+        <div class="filter-bar">
+          <input type="date" id="cmpFrom" class="search-input" onchange="loadCompare()" style="min-width:140px">
+          <input type="date" id="cmpTo" class="search-input" onchange="loadCompare()" style="min-width:140px">
+          <button class="btn btn-outline btn-sm" onclick="clearCompareFilters()"><i class="fas fa-times"></i> إلغاء الفلترة</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">متوسط دقائق التأخير (لمن تأخر فعلياً)</div>
+        <div id="cmpChartLate"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">نسبة الالتزام بالوقت %</div>
+        <div id="cmpChartOntime"></div>
+      </div>
+    </div>
+
+    <!-- ============ BLUEPRINT ============ -->
+    <div class="tab-panel" id="tab-blueprint">
+      <div class="card">
+        <div class="card-title"><i class="fas fa-map"></i> Blueprint — نظرة شاملة بصفحة واحدة</div>
+        <div class="filter-bar">
+          <input type="date" id="bpFrom" class="search-input" onchange="loadBlueprint()" style="min-width:140px">
+          <input type="date" id="bpTo" class="search-input" onchange="loadBlueprint()" style="min-width:140px">
+          <button class="btn btn-outline btn-sm" onclick="clearBlueprintFilters()"><i class="fas fa-times"></i> إلغاء الفلترة</button>
+          <button class="btn btn-outline btn-sm" onclick="window.print()"><i class="fas fa-print"></i> طباعة</button>
+        </div>
+      </div>
+      <div id="bpEmpty" style="display:none" class="card">
+        <p style="text-align:center;color:var(--muted);padding:20px">⚠️ لا توجد بيانات مطابقة (شغّل "تحليل البيانات" أولاً إن لم تفعل)</p>
+      </div>
+      <div id="bpContent" style="display:none">
+        <div class="stats-grid">
+          <div class="stat-card" style="cursor:default"><div class="stat-val" id="bpTotal">-</div><div class="stat-label">الإجمالي</div></div>
+          <div class="stat-card green" style="cursor:default"><div class="stat-val" id="bpOntimePct">-</div><div class="stat-label">في الوقت %</div></div>
+          <div class="stat-card orange" style="cursor:default"><div class="stat-val" id="bpLatePct">-</div><div class="stat-label">متأخرون %</div></div>
+          <div class="stat-card accent" style="cursor:default"><div class="stat-val" id="bpAvgHours">-</div><div class="stat-label">متوسط الساعات</div></div>
+          <div class="stat-card" style="cursor:default"><div class="stat-val" id="bpAvgLate">-</div><div class="stat-label">متوسط التأخير (د)</div></div>
+        </div>
+        <div class="card">
+          <div class="card-title">توزيع الحالات</div>
+          <div id="bpStatusPie" style="display:flex;align-items:center;gap:20px;flex-wrap:wrap"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">اتجاه الحضور اليومي</div>
+          <div id="bpDailyPresent"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">اتجاه التأخير اليومي (متوسط الدقائق)</div>
+          <div id="bpDailyLate"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">أكثر الأقسام تأخيراً (متوسط الدقائق)</div>
+          <div id="bpTopDepts"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">أكثر الموظفين تأخيراً (مجموع الدقائق)</div>
+          <div id="bpTopEmployees"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ EXPORT ============ -->
+    <div class="tab-panel" id="tab-export">
+      <div class="card">
+        <div class="card-title"><i class="fas fa-file-export"></i> تصدير مستقل</div>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">
+          حدّد الفلترة أدناه، ثم اختر إما تصدير ملف Excel بعدة أوراق دفعة واحدة (الكل/المتأخرون/الغائبون/في الوقت/عطلة أسبوعية)،
+          أو إرسال هذا التقرير فوراً بالبريد لمستلمي «الجدولة التلقائية» المحفوظين - بغض النظر عن موعد الجدولة نفسه.
+        </p>
+        <div class="filter-bar">
+          <select id="expDept" class="search-input"><option value="">كل الأقسام</option></select>
+          <select id="expEmployee" class="search-input"><option value="">كل الموظفين</option></select>
+          <input type="date" id="expFrom" class="search-input" style="min-width:140px">
+          <input type="date" id="expTo" class="search-input" style="min-width:140px">
+        </div>
+        <div class="filter-bar">
+          <select id="expReportType" class="search-input" style="min-width:220px">
+            <option value="all">الكل</option>
+            <option value="late">المتأخرون فقط</option>
+            <option value="absent">الغائبون فقط</option>
+            <option value="ontime">الحاضرون بالوقت فقط</option>
+            <option value="holiday">عطلة أسبوعية</option>
+          </select>
+        </div>
+        <div class="filter-bar">
+          <button class="btn btn-primary" onclick="exportExcelMultiSheet()"><i class="fas fa-file-excel"></i> تصدير Excel (كل الأوراق)</button>
+          <button class="btn btn-outline" onclick="sendExportEmailNow(this)"><i class="fas fa-paper-plane"></i> إرسال هذا التقرير بالبريد الآن</button>
+        </div>
+        <p style="font-size:.8rem;color:var(--muted)">
+          ملاحظة: نوع التقرير أعلاه يُطبَّق فقط على «إرسال بالبريد» (لأن ملف Excel يحتوي أصلاً كل الأنواع كأوراق منفصلة).
+          يعتمد الإرسال على إعدادات SMTP والمستلمين المحفوظة بتبويب «الجدولة التلقائية».
+        </p>
+        <div id="expResult" style="margin-top:8px"></div>
+      </div>
+    </div>
+
+    <!-- ============ MANUAL ENTRY ============ -->
+    <div class="tab-panel" id="tab-manual">
+      <div class="card">
+        <div class="card-title"><i class="fas fa-edit"></i> إضافة/تعديل إدخال يدوي</div>
+        <div class="form-grid quad">
+          <div class="form-group"><label>الموظف <span style="color:#c0392b">*</span></label>
+            <input type="text" id="manName" list="manNameList" placeholder="اكتب اسم الموظف">
+            <datalist id="manNameList"></datalist>
+          </div>
+          <div class="form-group"><label>التاريخ <span style="color:#c0392b">*</span></label><input type="date" id="manDate"></div>
+          <div class="form-group"><label>وقت الحضور</label><input type="time" id="manTimeIn"></div>
+          <div class="form-group"><label>وقت الانصراف</label><input type="time" id="manTimeOut"></div>
+        </div>
+        <div class="form-group"><label>السبب <span style="color:#c0392b">*</span></label><input type="text" id="manReason" placeholder="سبب التعديل - إجباري للمرجعية"></div>
+        <button class="btn btn-primary" onclick="saveManualEntry()"><i class="fas fa-save"></i> حفظ</button>
+        <div id="manualResult"></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-list"></i> الإدخالات اليدوية المسجَّلة</div>
+        <button class="btn btn-red btn-sm" style="margin-bottom:8px" onclick="bulkDeleteSelected('manualTable', id => '/api/manual-entries/' + id, loadManualEntries)"><i class="fas fa-trash"></i> حذف المحدد</button>
+        <div class="table-wrap">
+          <table class="dt-filterable">
+            <thead><tr><th class="no-filter"><input type="checkbox" onchange="toggleSelectAll('manualTable', this.checked)"></th><th>الموظف</th><th>التاريخ</th><th>وقت الحضور</th><th>وقت الانصراف</th><th>السبب</th><th>تاريخ الإدخال</th><th>حذف</th></tr></thead>
+            <tbody id="manualTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ DATE EXCEPTIONS ============ -->
+    <div class="tab-panel" id="tab-exceptions">
+      <div class="card">
+        <div class="card-title"><i class="fas fa-user-slash"></i> إضافة استثناء تاريخ/موظف</div>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">
+          يُستخدم لاستثناء موظف من الحساب الطبيعي بتاريخ معيّن (مهمة خارجية، إجازة معتمدة...) - يظهر بحالة "استثناء" بدل الحساب العادي، ويتفوّق على كل القواعد الأخرى.
+        </p>
+        <div class="form-grid trio">
+          <div class="form-group"><label>الموظف <span style="color:#c0392b">*</span></label>
+            <input type="text" id="excName" list="excNameList" placeholder="اكتب اسم الموظف">
+            <datalist id="excNameList"></datalist>
+          </div>
+          <div class="form-group"><label>التاريخ <span style="color:#c0392b">*</span></label><input type="date" id="excDate"></div>
+          <div class="form-group"><label>السبب</label><input type="text" id="excReason" placeholder="سبب الاستثناء"></div>
+        </div>
+        <button class="btn btn-primary" onclick="saveDateException()"><i class="fas fa-save"></i> حفظ</button>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-users"></i> إجازة جماعية (لعدة موظفين معاً)</div>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">
+          يطبّق نفس الاستثناء (بنفس السبب) على عدة موظفين وعلى كل يوم ضمن فترة محدَّدة دفعة واحدة - بدل تكرار الإضافة يدوياً لكل موظف/يوم.
+        </p>
+        <div class="form-grid quad">
+          <div class="form-group" style="grid-column:span 2">
+            <label>الموظفون <span style="color:#c0392b">*</span></label>
+            <select id="excBulkNames" class="search-input" multiple size="4"></select>
+          </div>
+          <div class="form-group"><label>من تاريخ</label><input type="date" id="excBulkFrom" class="search-input"></div>
+          <div class="form-group"><label>إلى تاريخ</label><input type="date" id="excBulkTo" class="search-input"></div>
+          <div class="form-group" style="grid-column:span 4"><label>السبب</label><input type="text" id="excBulkReason" class="search-input" placeholder="مثال: إجازة سنوية معتمدة"></div>
+        </div>
+        <button class="btn btn-primary" onclick="applyBulkException()"><i class="fas fa-check-double"></i> تطبيق على كل الفترة المحددة</button>
+        <button class="btn btn-outline btn-sm" onclick="cancelBulkException()"><i class="fas fa-trash"></i> إلغاء عن نفس الموظفين والفترة</button>
+        <div id="excBulkResult" style="margin-top:12px"></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-list"></i> الاستثناءات المسجَّلة</div>
+        <button class="btn btn-red btn-sm" style="margin-bottom:8px" onclick="bulkDeleteSelected('exceptionsTable', id => '/api/date-exceptions/' + id, loadDateExceptions)"><i class="fas fa-trash"></i> حذف المحدد</button>
+        <div class="table-wrap">
+          <table class="dt-filterable">
+            <thead><tr><th class="no-filter"><input type="checkbox" onchange="toggleSelectAll('exceptionsTable', this.checked)"></th><th>الموظف</th><th>التاريخ</th><th>السبب</th><th>حذف</th></tr></thead>
+            <tbody id="exceptionsTable"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-exclamation-triangle"></i> الغياب الإجباري (خصوصاً لأيام العطلة الأسبوعية)</div>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">
+          يختلف عن "الإجازة الجماعية" أعلاه: هذا يجعل الموظف يُحسب "غائباً" فعلياً حتى إذا كان اليوم عطلة أسبوعية أو لم يكن لديه أي بصمة إطلاقاً - مفيد للمناوبين الذين كان من المفترض أن يحضروا في يوم عطلة محدَّد ولم يحضروا. يبقى الاستثناء الشخصي والعطلة الرسمية أعلى أولوية منه دائماً.
+        </p>
+        <div class="form-grid quad">
+          <div class="form-group" style="grid-column:span 2">
+            <label>الموظفون <span style="color:#c0392b">*</span></label>
+            <select id="faNames" class="search-input" multiple size="4"></select>
+          </div>
+          <div class="form-group"><label>من تاريخ</label><input type="date" id="faFrom" class="search-input"></div>
+          <div class="form-group"><label>إلى تاريخ</label><input type="date" id="faTo" class="search-input"></div>
+          <div class="form-group" style="grid-column:span 4"><label>السبب (اختياري)</label><input type="text" id="faReason" class="search-input" placeholder="مثال: مناوبة سبت لم يحضرها"></div>
+        </div>
+        <button class="btn btn-primary" onclick="applyForcedAbsence()"><i class="fas fa-exclamation-triangle"></i> سجّل غياباً إجبارياً على كل الفترة المحددة</button>
+        <button class="btn btn-outline btn-sm" onclick="cancelForcedAbsence()"><i class="fas fa-trash"></i> إلغاء عن نفس الموظفين والفترة</button>
+        <div id="faResult" style="margin-top:12px"></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-list"></i> حالات الغياب الإجباري المسجَّلة</div>
+        <button class="btn btn-red btn-sm" style="margin-bottom:8px" onclick="bulkDeleteSelected('forcedAbsencesTable', id => '/api/forced-absences/' + id, loadForcedAbsences)"><i class="fas fa-trash"></i> حذف المحدد</button>
+        <div class="table-wrap">
+          <table class="dt-filterable">
+            <thead><tr><th class="no-filter"><input type="checkbox" onchange="toggleSelectAll('forcedAbsencesTable', this.checked)"></th><th>الموظف</th><th>التاريخ</th><th>السبب</th><th>حذف</th></tr></thead>
+            <tbody id="forcedAbsencesTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ ABSENCE REASONS ============ -->
+    <div class="tab-panel" id="tab-absence-reasons">
+      <div class="card">
+        <div class="card-title"><i class="fas fa-comment-medical"></i> تصفح الغيابات وتحديد سبب كل يوم</div>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">
+          يعرض كل من احتُسب "غائب" فعلياً بعد آخر تحليل بيانات، مع إمكانية تسجيل/تعديل سبب الغياب لكل يوم - يظهر السبب لاحقاً بجانب اسم الغائب بتقارير البريد المجدولة تلقائياً.
+        </p>
+        <div class="filter-bar">
+          <select id="arDept" class="search-input" onchange="loadAbsenceReasons()"><option value="">كل الأقسام</option></select>
+          <select id="arEmployee" class="search-input" onchange="loadAbsenceReasons()"><option value="">كل الموظفين</option></select>
+          <input type="date" id="arFrom" class="search-input" onchange="loadAbsenceReasons()" style="min-width:140px">
+          <input type="date" id="arTo" class="search-input" onchange="loadAbsenceReasons()" style="min-width:140px">
+          <button class="btn btn-outline btn-sm" onclick="loadAbsenceReasons()"><i class="fas fa-sync"></i> تحديث</button>
+        </div>
+        <button class="btn btn-red btn-sm" style="margin-bottom:8px" onclick="bulkDeleteAbsenceReasons()"><i class="fas fa-trash"></i> حذف المحدد</button>
+        <div class="table-wrap">
+          <table class="dt-filterable">
+            <thead><tr><th class="no-filter"><input type="checkbox" onchange="toggleSelectAll('absenceReasonsTable', this.checked)"></th><th>الاسم</th><th>القسم</th><th>التاريخ</th><th>السبب</th><th></th></tr></thead>
+            <tbody id="absenceReasonsTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ OFFICIAL HOLIDAYS ============ -->
+    <div class="tab-panel" id="tab-holidays">
+      <div class="card">
+        <div class="card-title"><i class="fas fa-umbrella-beach"></i> إضافة عطلة رسمية</div>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">
+          تاريخ يُحتسب "عطلة رسمية" لكل الموظفين (وليس "غائب") - يتفوّق على الحساب العادي والعطلة الأسبوعية، وأقل أولوية فقط من استثناء شخصي.
+        </p>
+        <div class="form-grid trio">
+          <div class="form-group"><label>التاريخ <span style="color:#c0392b">*</span></label><input type="date" id="holDate"></div>
+          <div class="form-group"><label>الوصف</label><input type="text" id="holLabel" placeholder="مثال: عيد الفطر"></div>
+        </div>
+        <button class="btn btn-primary" onclick="saveHoliday()"><i class="fas fa-save"></i> حفظ</button>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-list"></i> العطل المسجَّلة</div>
+        <button class="btn btn-red btn-sm" style="margin-bottom:8px" onclick="bulkDeleteSelected('holidaysTable', id => '/api/official-holidays/' + id, loadHolidays)"><i class="fas fa-trash"></i> حذف المحدد</button>
+        <div class="table-wrap">
+          <table class="dt-filterable">
+            <thead><tr><th class="no-filter"><input type="checkbox" onchange="toggleSelectAll('holidaysTable', this.checked)"></th><th>التاريخ</th><th>الوصف</th><th>حذف</th></tr></thead>
+            <tbody id="holidaysTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ LATE / DEPARTURE PERMISSIONS ============ -->
+    <div class="tab-panel" id="tab-permissions">
+      <div class="card">
+        <div class="card-title"><i class="fas fa-user-clock"></i> إذن تأخير</div>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">
+          إما بعدد دقائق تُخصم من التأخير المحسوب، أو بتحديد "وقت حضور مخصّص" يُعاد الحساب بالكامل بمقارنة معه بدل الوقت الافتراضي.
+        </p>
+        <div class="form-grid">
+          <div class="form-group"><label>الموظف <span style="color:#c0392b">*</span></label>
+            <input type="text" id="lpName" list="lpNameList" placeholder="اكتب اسم الموظف">
+            <datalist id="lpNameList"></datalist>
+          </div>
+          <div class="form-group"><label>التاريخ <span style="color:#c0392b">*</span></label><input type="date" id="lpDate"></div>
+        </div>
+        <div class="form-grid trio">
+          <div class="form-group"><label>دقائق الإذن</label><input type="number" id="lpMinutes" min="0" placeholder="مثال: 15"></div>
+          <div class="form-group"><label>وقت حضور مخصّص (اختياري)</label><input type="time" id="lpCustomAtt"></div>
+          <div class="form-group"><label>ملاحظة</label><input type="text" id="lpLabel" placeholder="سبب الإذن"></div>
+        </div>
+        <button class="btn btn-primary" onclick="saveLatePermission()"><i class="fas fa-save"></i> حفظ</button>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-list"></i> أذونات التأخير المسجَّلة</div>
+        <button class="btn btn-red btn-sm" style="margin-bottom:8px" onclick="bulkDeleteSelected('latePermTable', id => '/api/late-permissions/' + id, loadPermissions)"><i class="fas fa-trash"></i> حذف المحدد</button>
+        <div class="table-wrap">
+          <table class="dt-filterable">
+            <thead><tr><th class="no-filter"><input type="checkbox" onchange="toggleSelectAll('latePermTable', this.checked)"></th><th>الموظف</th><th>التاريخ</th><th>الدقائق</th><th>وقت حضور مخصّص</th><th>ملاحظة</th><th>حذف</th></tr></thead>
+            <tbody id="latePermTable"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><i class="fas fa-walking"></i> إذن مغادرة مؤقتة</div>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">
+          يُخصم من ساعات العمل المحسوبة فقط دون أي تأثير على التأخير أو تصنيف الحالة.
+        </p>
+        <div class="form-grid">
+          <div class="form-group"><label>الموظف <span style="color:#c0392b">*</span></label>
+            <input type="text" id="dpName" list="dpNameList" placeholder="اكتب اسم الموظف">
+            <datalist id="dpNameList"></datalist>
+          </div>
+          <div class="form-group"><label>التاريخ <span style="color:#c0392b">*</span></label><input type="date" id="dpDate"></div>
+        </div>
+        <div class="form-grid trio">
+          <div class="form-group"><label>وقت المغادرة <span style="color:#c0392b">*</span></label><input type="time" id="dpDeparture"></div>
+          <div class="form-group"><label>وقت العودة <span style="color:#c0392b">*</span></label><input type="time" id="dpReturn"></div>
+          <div class="form-group"><label>السبب</label><input type="text" id="dpReason"></div>
+        </div>
+        <button class="btn btn-primary" onclick="saveDeparturePermission()"><i class="fas fa-save"></i> حفظ</button>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-list"></i> أذونات المغادرة المسجَّلة</div>
+        <button class="btn btn-red btn-sm" style="margin-bottom:8px" onclick="bulkDeleteSelected('departPermTable', id => '/api/departure-permissions/' + id, loadPermissions)"><i class="fas fa-trash"></i> حذف المحدد</button>
+        <div class="table-wrap">
+          <table class="dt-filterable">
+            <thead><tr><th class="no-filter"><input type="checkbox" onchange="toggleSelectAll('departPermTable', this.checked)"></th><th>الموظف</th><th>التاريخ</th><th>وقت المغادرة</th><th>وقت العودة</th><th>السبب</th><th>حذف</th></tr></thead>
+            <tbody id="departPermTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ EMPLOYEES ============ -->
+    <div class="tab-panel" id="tab-employees">
+      <div class="card" id="empAddCard">
+        <div class="card-title"><i class="fas fa-user-plus"></i> إضافة موظف</div>
+        <div class="form-grid trio">
+          <div class="form-group"><label>الاسم <span style="color:#c0392b">*</span></label><input type="text" id="empName"></div>
+          <div class="form-group"><label>القسم</label><input type="text" id="empDept"></div>
+          <div class="form-group"><label>رقم البصمة (device_uid)</label><input type="text" id="empDeviceUid" placeholder="الرقم المسجَّل على جهاز البصمة" dir="ltr"></div>
+        </div>
+        <button class="btn btn-primary" onclick="addEmployee()"><i class="fas fa-plus"></i> إضافة</button>
+      </div>
+      <div class="card" id="empImportCard">
+        <div class="card-title"><i class="fas fa-upload"></i> استيراد قائمة (Excel/CSV)</div>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:6px">
+          يجب أن يحتوي الملف على صف عناوين بالأعلى فيه عمود اسم (Name/الاسم) وعمود رقم بصمة
+          (AC-No) إجباري - بدونه لن تنطبق سجلات الحضور المسحوبة من الجهاز على الموظف.
+          عمود القسم (Department/القسم) اختياري.
+        </p>
+        <label style="display:flex;align-items:center;gap:6px;font-weight:normal;font-size:.85rem;margin-bottom:8px">
+          <input type="checkbox" id="empImportUpdateExisting"> تحديث بيانات الموظف الموجود مسبقاً (بدل تجاهله) إذا تكرر نفس رقم البصمة أو الاسم
+        </label>
+        <div class="form-group" style="max-width:520px">
+          <label>ملف من جهازك (Excel/CSV)</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="file" id="empFile" accept=".xlsx,.xls,.csv" style="flex:1">
+            <button class="btn btn-primary btn-sm" onclick="importEmployeesFromFileButton()"><i class="fas fa-file-import"></i> استيراد</button>
+          </div>
+        </div>
+        <div class="form-group" style="max-width:520px;margin-top:10px">
+          <label>أو الصق رابط الملف (Google Drive / OneDrive / Dropbox / أي رابط تنزيل مباشر)</label>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="empImportUrl" dir="ltr" placeholder="https://drive.google.com/file/d/...">
+            <button class="btn btn-primary btn-sm" onclick="importEmployeesFromUrl()"><i class="fas fa-cloud-download-alt"></i> استيراد</button>
+          </div>
+        </div>
+        <div class="form-group" style="max-width:520px;margin-top:10px">
+          <label>أو مسار الملف مباشرة على نفس جهاز الخادم (يُستحسن للملفات الكبيرة أو عند تشغيل النظام مباشرة على جهازك - أسرع وأوثق من الرفع عبر المتصفح)</label>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="empLocalPath" dir="ltr" placeholder="C:\path\to\employees.csv أو /sdcard/employees.csv">
+            <button class="btn btn-primary btn-sm" onclick="importEmployeesFromLocalPath()"><i class="fas fa-hdd"></i> استيراد</button>
+          </div>
+        </div>
+        <div id="empMappingBox" style="display:none;margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+          <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">
+            لم نتمكّن من التعرّف على أعمدة الملف تلقائياً بالاسم - يرجى تحديد العمود الذي يمثّل كل حقل من أعمدة الملف الفعلية، ثم الضغط على "تأكيد الاستيراد":
+          </p>
+          <div class="form-grid trio">
+            <div class="form-group"><label>عمود الاسم <span style="color:#c0392b">*</span></label><select id="empMapName"></select></div>
+            <div class="form-group"><label>عمود القسم (اختياري)</label><select id="empMapDept"><option value="">-- بدون --</option></select></div>
+            <div class="form-group"><label>عمود رقم البصمة (AC-No) <span style="color:#c0392b">*</span></label><select id="empMapAcNo"></select></div>
+          </div>
+          <button class="btn btn-primary" onclick="confirmEmployeeImportMapping()"><i class="fas fa-check"></i> تأكيد الاستيراد</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-list"></i> قائمة الموظفين</div>
+        <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">رقم البصمة (device_uid) هو الرابط بين الموظف وجهاز البصمة - إجباري لأي عملية بتبويب "إدارة الأجهزة" (سحب/رفع/نسخ).</p>
+        <button class="btn btn-red btn-sm" style="margin-bottom:8px" onclick="bulkDeleteSelected('employeesTable', id => '/api/employees/' + id, () => { loadEmployees(); loadMetaInto(); })"><i class="fas fa-trash"></i> حذف المحدد</button>
+        <div class="table-wrap">
+          <table class="dt-filterable">
+            <thead><tr><th class="no-filter"><input type="checkbox" onchange="toggleSelectAll('employeesTable', this.checked)"></th><th>الاسم</th><th>القسم</th><th>رقم البصمة</th><th>حذف</th></tr></thead>
+            <tbody id="employeesTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ DEVICE MANAGEMENT (ZKTeco) ============ -->
+    <div class="tab-panel" id="tab-devices">
+      <div class="subtab-nav">
+        <button class="subtab-btn active" data-subtab="dev-list" onclick="showDeviceSubtab('dev-list')"><i class="fas fa-server"></i> الأجهزة المسجَّلة</button>
+        <button class="subtab-btn" data-subtab="dev-mdb" onclick="showDeviceSubtab('dev-mdb')"><i class="fas fa-database"></i> استيراد ملف خارجي</button>
+        <button class="subtab-btn" data-subtab="dev-live" onclick="showDeviceSubtab('dev-live')"><i class="fas fa-circle" style="color:#e74c3c"></i> مراقبة حية</button>
+        <button class="subtab-btn" data-subtab="dev-pull" onclick="showDeviceSubtab('dev-pull')"><i class="fas fa-sync-alt"></i> مزامنة واستيراد</button>
+        <button class="subtab-btn" data-subtab="dev-push" onclick="showDeviceSubtab('dev-push')"><i class="fas fa-upload"></i> رفع للجهاز</button>
+        <button class="subtab-btn" data-subtab="dev-finger" onclick="showDeviceSubtab('dev-finger')"><i class="fas fa-hand-point-up"></i> نسخ بصمة الإصبع</button>
+        <button class="subtab-btn" data-subtab="dev-door" onclick="showDeviceSubtab('dev-door')"><i class="fas fa-door-open"></i> التحكم بالباب</button>
+        <button class="subtab-btn" data-subtab="dev-face" onclick="showDeviceSubtab('dev-face')"><i class="fas fa-smile"></i> نسخ بصمة الوجه</button>
+        <button class="subtab-btn" data-subtab="dev-maint" onclick="showDeviceSubtab('dev-maint')"><i class="fas fa-exclamation-triangle"></i> حذف وصيانة</button>
+      </div>
+
+      <!-- ===== الأجهزة المسجَّلة ===== -->
+      <div class="device-subtab active" id="devsub-dev-list">
+        <div class="card">
+          <div class="card-title"><i class="fas fa-plus"></i> إضافة جهاز</div>
+          <div class="form-grid quad">
+            <div class="form-group"><label>اسم الجهاز <span style="color:#c0392b">*</span></label><input type="text" id="devName"></div>
+            <div class="form-group"><label>عنوان IP <span style="color:#c0392b">*</span></label><input type="text" id="devIp" dir="ltr" placeholder="192.168.1.201"></div>
+            <div class="form-group"><label>المنفذ (Port)</label><input type="number" id="devPort" value="4370" dir="ltr"></div>
+            <div class="form-group"><label>كلمة سر الاتصال</label><input type="text" id="devPassword" value="0" dir="ltr"></div>
+          </div>
+          <div class="form-group" style="max-width:320px"><label>الموقع/الوصف (اختياري)</label><input type="text" id="devLocation" placeholder="مثال: البوابة الرئيسية"></div>
+          <button class="btn btn-primary" onclick="addDevice()"><i class="fas fa-save"></i> حفظ</button>
+        </div>
+        <div class="card">
+          <div class="card-title"><i class="fas fa-list"></i> الأجهزة المسجَّلة</div>
+          <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">تحتاج الأجهزة أن تكون قابلة للوصول عبر الشبكة (نفس شبكة الخادم) على منفذ TCP المحدَّد (افتراضياً 4370).</p>
+          <button class="btn btn-red btn-sm" style="margin-bottom:8px" onclick="bulkDeleteSelected('devicesTable', id => '/api/devices/' + id, loadDevices)"><i class="fas fa-trash"></i> حذف المحدد</button>
+          <div class="table-wrap">
+            <table class="dt-filterable">
+              <thead><tr><th class="no-filter"><input type="checkbox" onchange="toggleSelectAll('devicesTable', this.checked)"></th><th>الاسم</th><th>IP</th><th>Port</th><th>الموقع</th><th>الحالة</th><th>اختبار الاتصال</th><th>حذف</th></tr></thead>
+              <tbody id="devicesTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== استيراد att.mdb ===== -->
+      <div class="device-subtab" id="devsub-dev-mdb">
+        <div class="card">
+          <div class="card-title"><i class="fas fa-database"></i> استيراد من ملف att.mdb (تصدير برنامج att.exe)</div>
+          <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">
+            يقرأ البصمات الخام مباشرة من جدول CHECKINOUT بالملف - يعمل فقط على خادم ويندوز فيه "Microsoft Access Database Engine" مثبَّت (نفس قيد النسخة المكتبية بالضبط).
+          </p>
+          <div class="form-group" style="max-width:400px"><label>ملف att.mdb</label><input type="file" id="mdbFile" accept=".mdb,.accdb"></div>
+          <div class="form-group" style="max-width:520px">
+            <label>أو الصق رابط الملف (Google Drive / OneDrive / Dropbox / أي رابط تنزيل مباشر)</label>
+            <input type="text" id="mdbUrl" dir="ltr" placeholder="https://drive.google.com/file/d/...">
+          </div>
+          <div class="form-group" style="max-width:520px">
+            <label>أو مسار الملف مباشرة على نفس جهاز الخادم (للملفات الكبيرة جداً - أسرع وأوثق من الرفع)</label>
+            <input type="text" id="mdbLocalPath" dir="ltr" placeholder="C:\path\to\att.mdb أو /sdcard/att.mdb">
+          </div>
+          <div class="form-grid">
+            <div class="form-group"><label>من (اختياري)</label><input type="date" id="mdbFrom"></div>
+            <div class="form-group"><label>إلى (اختياري)</label><input type="date" id="mdbTo"></div>
+          </div>
+          <button class="btn btn-primary" onclick="importMdb()"><i class="fas fa-file-import"></i> استيراد</button>
+          <div id="mdbResult" style="margin-top:12px"></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><i class="fas fa-database"></i> استيراد من قاعدة بيانات SQLite</div>
+          <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">
+            يقرأ البصمات الخام من جدول CHECKINOUT بنفس مخطط att.mdb لكن بصيغة SQLite (‎.db/.sqlite) - يعمل على أي نظام تشغيل بدون أي سائق إضافي (بعكس att.mdb المقيَّد بويندوز).
+            وإذا كان الملف يحتوي أيضاً جدولَي USERINFO/DEPARTMENTS، يمكنه إنشاء/تحديث الموظفين تلقائياً منه (بدل اشتراط إضافتهم يدوياً أولاً).
+          </p>
+          <div class="form-group" style="max-width:400px"><label>ملف SQLite</label><input type="file" id="sqliteFile" accept=".db,.sqlite,.sqlite3"></div>
+          <div class="form-group" style="max-width:520px">
+            <label>أو الصق رابط الملف (Google Drive / OneDrive / Dropbox / أي رابط تنزيل مباشر)</label>
+            <input type="text" id="sqliteUrl" dir="ltr" placeholder="https://drive.google.com/file/d/...">
+          </div>
+          <div class="form-group" style="max-width:520px">
+            <label>أو مسار الملف مباشرة على نفس جهاز الخادم (يُستحسن للملفات الضخمة - عدة غيغابايت - بدل رفعها عبر المتصفح)</label>
+            <input type="text" id="sqliteLocalPath" dir="ltr" placeholder="C:\path\to\att2000.sqlite أو /sdcard/att2000.sqlite">
+          </div>
+          <div class="form-grid">
+            <div class="form-group"><label>من (اختياري)</label><input type="date" id="sqliteFrom"></div>
+            <div class="form-group"><label>إلى (اختياري)</label><input type="date" id="sqliteTo"></div>
+          </div>
+          <label style="display:flex;align-items:center;gap:6px;font-weight:normal;font-size:.85rem;margin-bottom:6px">
+            <input type="checkbox" id="sqliteCreateEmployees" checked> إنشاء/تحديث الموظفين والأقسام تلقائياً من الملف (USERINFO/DEPARTMENTS)
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-weight:normal;font-size:.85rem;margin-bottom:8px">
+            <input type="checkbox" id="sqliteUpdateExistingEmployees" checked> تحديث قسم الموظف الموجود مسبقاً إذا اختلف عن الملف
+          </label>
+          <button class="btn btn-primary" onclick="importSqlite()"><i class="fas fa-file-import"></i> استيراد</button>
+          <div id="sqliteResult" style="margin-top:12px"></div>
+        </div>
+      </div>
+
+      <!-- ===== مراقبة حية ===== -->
+      <div class="device-subtab" id="devsub-dev-live">
+        <div class="card">
+          <div class="card-title"><i class="fas fa-circle" style="color:#e74c3c"></i> مراقبة حية للبصمات (لحظة حدوثها)</div>
+          <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">اختر جهازاً أو أكثر، ثم اضغط "ابدأ المراقبة" - أي بصمة تحدث فعلياً على الجهاز تظهر هنا مباشرة.</p>
+          <div class="device-select-list" id="liveDeviceList"></div>
+          <div style="margin-top:12px">
+            <button class="btn btn-primary btn-sm" id="liveStartBtn" onclick="startLiveCapture()"><i class="fas fa-play"></i> ابدأ المراقبة</button>
+            <button class="btn btn-red btn-sm" id="liveStopBtn" onclick="stopLiveCapture()" disabled><i class="fas fa-stop"></i> إيقاف</button>
+          </div>
+          <div class="log-box" id="liveLog" style="margin-top:14px">لم تبدأ المراقبة بعد...</div>
+        </div>
+      </div>
+
+      <!-- ===== مزامنة واستيراد (سحب البيانات من الأجهزة) ===== -->
+      <div class="device-subtab" id="devsub-dev-pull">
+        <div class="card">
+          <div class="card-title"><i class="fas fa-sync-alt"></i> سحب البصمات من الأجهزة مباشرة (عبر الشبكة)</div>
+          <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">
+            تُطابَق البصمات مع الموظفين عبر "رقم البصمة" المسجَّل بتبويب الموظفين - أي رقم غير مطابق يُعرض بالنتيجة بدلاً من أن تُفقد بصمته.
+          </p>
+          <div class="device-select-list" id="pullDeviceList"></div>
+          <div class="form-grid" style="margin-top:12px">
+            <div class="form-group"><label>من (اختياري)</label><input type="date" id="pullFrom"></div>
+            <div class="form-group"><label>إلى (اختياري)</label><input type="date" id="pullTo"></div>
+          </div>
+          <button class="btn btn-primary" onclick="pullFromDevices()"><i class="fas fa-download"></i> سحب البيانات الآن</button>
+          <div id="pullResult" style="margin-top:12px"></div>
+        </div>
+      </div>
+
+      <!-- ===== رفع للجهاز ===== -->
+      <div class="device-subtab" id="devsub-dev-push">
+        <div class="card">
+          <div class="card-title"><i class="fas fa-upload"></i> رفع قائمة الموظفين إلى الأجهزة</div>
+          <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">يرفع كل الموظفين النشطين الذين لديهم "رقم بصمة" مسجَّل كمستخدمين على الأجهزة المحدَّدة (اسم + رقم فقط - بدون بصمة إصبع/وجه، انظر التبويبات التالية لذلك).</p>
+          <div class="device-select-list" id="pushDeviceList"></div>
+          <button class="btn btn-primary" style="margin-top:12px" onclick="pushToDevices()"><i class="fas fa-upload"></i> رفع الآن</button>
+          <div id="pushResult" style="margin-top:12px"></div>
+        </div>
+      </div>
+
+      <!-- ===== نسخ بصمة الإصبع ===== -->
+      <div class="device-subtab" id="devsub-dev-finger">
+        <div class="card">
+          <div class="card-title"><i class="fas fa-hand-point-up"></i> ⚠️ نسخ بصمة الإصبع بين الأجهزة (تجريبي)</div>
+          <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">ينسخ قوالب بصمة الإصبع المسجَّلة فعلياً على "الجهاز المصدر" لبقية الأجهزة المحدَّدة. اترك خانة "أرقام محدَّدة" فارغة لنسخ كل الموظفين المطابقين.</p>
+          <div class="form-group" style="max-width:320px"><label>الجهاز المصدر</label><select id="fingerSourceDevice"></select></div>
+          <label style="font-weight:600;display:block;margin:10px 0 6px">الأجهزة الهدف</label>
+          <div class="device-select-list" id="fingerTargetList"></div>
+          <div class="form-group" style="max-width:400px;margin-top:10px"><label>أرقام بصمة محدَّدة (مفصولة بفاصلة، اتركها فارغة = الكل)</label><input type="text" id="fingerUids" dir="ltr"></div>
+          <button class="btn btn-primary" style="margin-top:10px" onclick="copyFingerprint()"><i class="fas fa-copy"></i> نسخ الآن</button>
+          <div id="fingerResult" style="margin-top:12px"></div>
+        </div>
+      </div>
+
+      <!-- ===== التحكم بالباب ===== -->
+      <div class="device-subtab" id="devsub-dev-door">
+        <div class="card">
+          <div class="card-title"><i class="fas fa-door-open"></i> فتح قفل الباب عن بُعد</div>
+          <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">يعمل فقط للأجهزة التي لديها قفل باب (ريليه) موصول فعلياً بالجهاز.</p>
+          <div class="form-grid trio">
+            <div class="form-group"><label>الجهاز</label><select id="doorDevice"></select></div>
+            <div class="form-group"><label>مدة الفتح (ثانية)</label><input type="number" id="doorSeconds" value="3" min="1"></div>
+          </div>
+          <button class="btn btn-primary" onclick="unlockDoor()"><i class="fas fa-unlock"></i> فتح الباب الآن</button>
+          <div id="doorResult" style="margin-top:12px"></div>
+        </div>
+      </div>
+
+      <!-- ===== نسخ بصمة الوجه ===== -->
+      <div class="device-subtab" id="devsub-dev-face">
+        <div class="card">
+          <div class="card-title"><i class="fas fa-smile"></i> نسخ بصمة الوجه بين الأجهزة (عبر ZKTime SDK)</div>
+          <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">
+            ⚠️ تحتاج تشغيل النظام على ويندوز مع تثبيت مكوّن <code>zkemkeeper.dll</code> (نفس مكوّن برنامج ZKTime الرسمي) ومكتبة pywin32 - غير متاحة على خادم لينكس.
+          </p>
+          <div class="form-group" style="max-width:320px"><label>الجهاز المصدر</label><select id="faceSourceDevice"></select></div>
+          <label style="font-weight:600;display:block;margin:10px 0 6px">الأجهزة الهدف</label>
+          <div class="device-select-list" id="faceTargetList"></div>
+          <div class="form-grid" style="margin-top:10px">
+            <div class="form-group"><label>أرقام بصمة محدَّدة (اتركها فارغة = الكل)</label><input type="text" id="faceUids" dir="ltr"></div>
+            <div class="form-group"><label>كلمة سر يدوية (إذا كانت كلمة سر الجهاز "للكتابة فقط")</label><input type="text" id="faceManualPassword" dir="ltr"></div>
+          </div>
+          <button class="btn btn-primary" style="margin-top:10px" onclick="copyFace()"><i class="fas fa-copy"></i> نسخ الآن</button>
+          <div id="faceResult" style="margin-top:12px"></div>
+        </div>
+      </div>
+
+      <!-- ===== حذف وصيانة ===== -->
+      <div class="device-subtab" id="devsub-dev-maint">
+        <div class="card">
+          <div class="card-title"><i class="fas fa-exclamation-triangle" style="color:#c0392b"></i> مسح بيانات الحضور من الجهاز</div>
+          <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">يمسح كل سجلات الحضور المخزَّنة على الجهاز نفسه - نفّذها فقط بعد التأكد من نجاح "سحب البيانات". عملية لا يمكن التراجع عنها.</p>
+          <div class="form-group" style="max-width:320px"><label>الجهاز</label><select id="clearAttDevice"></select></div>
+          <button class="btn btn-red" onclick="clearDeviceAttendance()"><i class="fas fa-trash"></i> مسح بيانات الحضور</button>
+          <div id="clearAttResult" style="margin-top:12px"></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><i class="fas fa-user-times" style="color:#c0392b"></i> حذف مستخدمين من الجهاز</div>
+          <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">استعلم أولاً لجلب قائمة المستخدمين المسجَّلين فعلياً على الجهاز، ثم حدّد المطلوب منهم من الجدول واضغط حذف - أو اكتب أرقام بصمة يدوياً كما في السابق. لا يمكن التراجع عن عملية الحذف.</p>
+          <div class="form-grid">
+            <div class="form-group"><label>الجهاز</label><select id="deleteUsersDevice"></select></div>
+            <div class="form-group"><label>أرقام بصمة محدَّدة يدوياً (اختياري - اتركها فارغة إذا كنت ستحدّد من الجدول)</label><input type="text" id="deleteUsersUids" dir="ltr"></div>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="queryDeviceUsers()"><i class="fas fa-search"></i> استعلام من الجهاز</button>
+          <button class="btn btn-red" onclick="deleteDeviceUsers()"><i class="fas fa-user-times"></i> حذف (الكل أو المكتوب يدوياً)</button>
+          <div id="deleteUsersResult" style="margin-top:12px"></div>
+          <div id="deviceUsersQueryWrap" style="display:none;margin-top:14px">
+            <button class="btn btn-red btn-sm" style="margin-bottom:8px" onclick="deleteSelectedDeviceUsers()"><i class="fas fa-trash"></i> حذف المحدد من الجدول</button>
+            <div class="table-wrap">
+              <table class="dt-filterable">
+                <thead><tr><th class="no-filter"><input type="checkbox" onchange="toggleSelectAll('deviceUsersTable', this.checked)"></th><th>uid</th><th>رقم البصمة</th><th>الاسم</th><th>الصلاحية</th></tr></thead>
+                <tbody id="deviceUsersTable"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ DEPT TIMES ============ -->
+    <div class="tab-panel" id="tab-dept-times">
+      <div class="card">
+        <div class="card-title"><i class="fas fa-plus"></i> تخصيص وقت حضور/انصراف حسب القسم</div>
+        <div class="form-grid trio">
+          <div class="form-group"><label>القسم <span style="color:#c0392b">*</span></label><input type="text" id="dtDept"></div>
+          <div class="form-group"><label>وقت الحضور الخاص</label><input type="time" id="dtAtt"></div>
+          <div class="form-group"><label>وقت الانصراف الخاص</label><input type="time" id="dtDep"></div>
+        </div>
+        <button class="btn btn-primary" onclick="saveDeptTime()"><i class="fas fa-save"></i> حفظ/تحديث</button>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-list"></i> الأقسام المخصَّصة</div>
+        <button class="btn btn-red btn-sm" style="margin-bottom:8px" onclick="bulkDeleteSelected('deptTimesTable', id => '/api/dept-times/' + id, loadDeptTimes)"><i class="fas fa-trash"></i> حذف المحدد</button>
+        <div class="table-wrap">
+          <table class="dt-filterable">
+            <thead><tr><th class="no-filter"><input type="checkbox" onchange="toggleSelectAll('deptTimesTable', this.checked)"></th><th>القسم</th><th>وقت الحضور الخاص</th><th>وقت الانصراف الخاص</th><th>حذف</th></tr></thead>
+            <tbody id="deptTimesTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SETTINGS ============ -->
+    <div class="tab-panel" id="tab-settings">
+      <div class="card">
+        <div class="card-title"><i class="fas fa-building"></i> بيانات المؤسسة</div>
+        <div class="form-group"><label>اسم المؤسسة</label><input type="text" id="setOrgName"></div>
+        <div class="form-group">
+          <label>شعار المؤسسة</label>
+          <p style="font-size:.8rem;color:var(--muted);margin:4px 0">
+            يظهر بالشريط الجانبي، صفحة تسجيل الدخول، ترويسة تقارير PDF، ورأس رسائل البريد المُرسَلة. الصيغ المدعومة: PNG/JPG/GIF/WEBP، بحد أقصى 3 ميجابايت.
+          </p>
+          <div id="logoPreviewBox" style="margin-bottom:8px"></div>
+          <div class="filter-bar">
+            <input type="file" id="logoFileInput" accept=".png,.jpg,.jpeg,.gif,.webp">
+            <button class="btn btn-outline btn-sm" onclick="uploadLogo()"><i class="fas fa-upload"></i> رفع الشعار</button>
+            <button class="btn btn-red btn-sm" onclick="removeLogo()"><i class="fas fa-trash"></i> إزالة الشعار</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-clock"></i> الأوقات العامة</div>
+        <div class="form-grid quad">
+          <div class="form-group"><label>وقت الحضور</label><input type="time" id="setAttTime"></div>
+          <div class="form-group"><label>وقت الانصراف</label><input type="time" id="setDepTime"></div>
+          <div class="form-group"><label>حد التأخير (دقيقة)</label><input type="number" id="setLateTh" min="0"></div>
+          <div class="form-group"><label>الأقسام المستثناة (مفصولة بفاصلة)</label><input type="text" id="setExcludedDepts"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-sync-alt"></i> نظام المناوبتين</div>
+        <label style="display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:12px">
+          <input type="checkbox" id="setShiftEnabled"> تفعيل نظام المناوبتين
+        </label>
+        <div class="form-grid quad">
+          <div class="form-group"><label>بداية المناوبة الأولى</label><input type="time" id="setShift1Start"></div>
+          <div class="form-group"><label>نهاية المناوبة الأولى</label><input type="time" id="setShift1End"></div>
+          <div class="form-group"><label>بداية المناوبة الثانية</label><input type="time" id="setShift2Start"></div>
+          <div class="form-group"><label>نهاية المناوبة الثانية</label><input type="time" id="setShift2End"></div>
+        </div>
+        <div class="form-grid">
+          <div class="form-group"><label>أسماء موظفي المناوبة الأولى (مفصولة بفاصلة)</label><textarea id="setShift1Names"></textarea></div>
+          <div class="form-group"><label>أسماء موظفي المناوبة الثانية (مفصولة بفاصلة)</label><textarea id="setShift2Names"></textarea></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-calendar-day"></i> وقت حضور/انصراف إضافي خاص بيوم السبت</div>
+        <label style="display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:12px">
+          <input type="checkbox" id="setSatEnabled"> تفعيل وقت خاص ليوم السبت
+        </label>
+        <div class="form-grid">
+          <div class="form-group"><label>وقت الحضور (السبت)</label><input type="time" id="setSatAtt"></div>
+          <div class="form-group"><label>وقت الانصراف (السبت)</label><input type="time" id="setSatDep"></div>
+        </div>
+        <p style="font-size:.82rem;color:var(--muted)">يُستخدم فقط لحساب تأخير/حضور من بصم فعلياً يوم السبت - الغياب يوم السبت يبقى "عطلة أسبوعية" كالمعتاد.</p>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-cloud"></i> المزامنة مع القاعدة الرئيسية (اختياري)</div>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">
+          فعّل هذا فقط إذا كانت هذه نسخة "فرع" محلية (تسحب من الأجهزة وتعدّل الموظفين محلياً) وتريد رفع تعديلاتها بضغطة زر
+          لنسخة أخرى من هذا النظام تعمل كـ"القاعدة الرئيسية" (مثلاً نسخة مستضافة سحابياً يدخل عليها الموارد البشرية
+          للقراءة/التحليل مباشرة). اترك الحقلين فارغين إذا كانت هذه نسخة مستقلة عادية (السلوك الافتراضي - غير مؤثر إطلاقاً).
+        </p>
+        <div class="form-grid">
+          <div class="form-group"><label>رابط القاعدة الرئيسية</label><input type="text" id="setSyncUrl" dir="ltr" placeholder="https://your-central-app.onrender.com"></div>
+          <div class="form-group"><label>مفتاح المزامنة (يجب أن يطابق نفس القيمة بالقاعدة الرئيسية)</label><input type="text" id="setSyncKey" dir="ltr"></div>
+        </div>
+        <p style="font-size:.82rem;color:var(--muted)">
+          على النسخة "المركزية" نفسها: عبّئ حقل "مفتاح المزامنة" فقط بنفس القيمة، واترك "رابط القاعدة الرئيسية" فارغاً
+          (هي المركز نفسه، وليست فرعاً يرفع لمكان آخر).
+        </p>
+        <div id="syncStatusBox" style="font-size:.82rem;color:var(--muted);margin-top:8px"></div>
+      </div>
+      <button class="btn btn-primary" onclick="saveSettings()"><i class="fas fa-save"></i> حفظ كل الإعدادات</button>
+      <div id="settingsResult" style="margin-top:12px"></div>
+    </div>
+
+    <!-- ============ SCHEDULING ============ -->
+    <div class="tab-panel" id="tab-schedule">
+      <div class="card">
+        <div class="card-title"><i class="fas fa-paper-plane"></i> إعدادات إرسال البريد الإلكتروني</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>طريقة الإرسال</label>
+            <select id="schEmailMethod" class="search-input" onchange="toggleEmailMethodBoxes()">
+              <option value="smtp">SMTP (اسم مستخدم/كلمة مرور تقليدية)</option>
+              <option value="graph">Microsoft Graph API (تطبيق مسجَّل بـ Entra ID)</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="schSmtpBox">
+          <p style="font-size:.85rem;color:var(--muted);margin:12px 0">
+            مثال Microsoft 365 / Exchange Online: smtp.office365.com المنفذ 587. ملاحظة: هذه مصادقة تقليدية (اسم مستخدم/كلمة مرور) وقد تحتاج "كلمة مرور تطبيق" بدل كلمة مرور الحساب العادية حسب سياسة مايكروسوفت - وبعض المستأجرين عطّلوا SMTP AUTH نهائياً، وحينها استخدم Graph API بدلاً منه.
+          </p>
+          <div class="form-grid quad">
+            <div class="form-group"><label>خادم SMTP</label><input type="text" id="schSmtpHost" class="search-input" placeholder="smtp.office365.com"></div>
+            <div class="form-group"><label>المنفذ (Port)</label><input type="number" id="schSmtpPort" class="search-input" value="587"></div>
+            <div class="form-group" style="grid-column:span 2"><label>بريد المرسل</label><input type="email" id="schSmtpSender" class="search-input"></div>
+            <div class="form-group" style="grid-column:span 2"><label>كلمة المرور / كلمة مرور التطبيق</label><input type="password" id="schSmtpPassword" class="search-input"></div>
+          </div>
+        </div>
+
+        <div id="schGraphBox" style="display:none">
+          <p style="font-size:.85rem;color:var(--muted);margin:12px 0">
+            يتطلب تسجيل تطبيق بـ Azure AD/Entra ID بصلاحية Application من نوع <b>Mail.Send</b> مع موافقة المدير (Admin consent) -
+            ويُستحسن تقييده بصندوق بريد واحد فقط عبر "Application Access Policy". راجع توثيق مايكروسوفت لخطوات التسجيل الكاملة.
+          </p>
+          <div class="form-grid quad">
+            <div class="form-group"><label>Tenant ID</label><input type="text" id="schGraphTenant" class="search-input" dir="ltr" placeholder="00000000-0000-0000-0000-000000000000"></div>
+            <div class="form-group"><label>Client ID (Application ID)</label><input type="text" id="schGraphClientId" class="search-input" dir="ltr"></div>
+            <div class="form-group"><label>Client Secret</label><input type="password" id="schGraphClientSecret" class="search-input" dir="ltr"></div>
+            <div class="form-group"><label>بريد المُرسِل (UPN)</label><input type="email" id="schGraphSenderUpn" class="search-input" dir="ltr" placeholder="reports@org.com"></div>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group"><label>المستلمون (افصل بينهم بفاصلة - نفس القائمة تُستخدم بأي طريقة إرسال)</label><input type="text" id="schSmtpRecipients" class="search-input" placeholder="a@example.com, b@example.com"></div>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="saveScheduleSettings()"><i class="fas fa-save"></i> حفظ إعدادات البريد</button>
+        <button class="btn btn-outline btn-sm" onclick="testScheduleEmail()"><i class="fas fa-vial"></i> إرسال رسالة اختبار</button>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-clock"></i> جدولة التقرير التلقائي</div>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">
+          يقوم النظام تلقائياً، بالوقت المحدَّد أدناه، بتحليل البيانات (مع سحب اختياري من الأجهزة أولاً) وإرسال تقرير عبر البريد - دون الحاجة لفتح النظام يدوياً. يجب أن يبقى الخادم قيد التشغيل في وقت الإرسال.
+        </p>
+        <div class="form-grid quad">
+          <div class="form-group">
+            <label><input type="checkbox" id="schEnabled"> تفعيل الجدولة التلقائية</label>
+          </div>
+          <div class="form-group"><label>وقت التشغيل اليومي</label><input type="time" id="schTime" class="search-input" value="07:00"></div>
+          <div class="form-group">
+            <label><input type="checkbox" id="schPullBefore"> اسحب من الأجهزة المفعَّلة أولاً</label>
+          </div>
+          <div class="form-group">
+            <label>نوع التقرير المُرسَل</label>
+            <select id="schStatusFilter" class="search-input"></select>
+          </div>
+          <div class="form-group" style="grid-column:span 4">
+            <label>أيام التكرار (بدون تحديد = كل يوم)</label>
+            <div id="schDaysBox" style="display:flex;gap:10px;flex-wrap:wrap">
+              <label><input type="checkbox" class="schDay" value="6"> السبت</label>
+              <label><input type="checkbox" class="schDay" value="0"> الأحد</label>
+              <label><input type="checkbox" class="schDay" value="1"> الاثنين</label>
+              <label><input type="checkbox" class="schDay" value="2"> الثلاثاء</label>
+              <label><input type="checkbox" class="schDay" value="3"> الأربعاء</label>
+              <label><input type="checkbox" class="schDay" value="4"> الخميس</label>
+              <label><input type="checkbox" class="schDay" value="5"> الجمعة</label>
+            </div>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="saveScheduleSettings()"><i class="fas fa-save"></i> حفظ الجدولة</button>
+        <button class="btn btn-outline btn-sm" onclick="runScheduleNow()"><i class="fas fa-play"></i> تشغيل الآن (اختبار فوري)</button>
+        <div id="scheduleResult" style="margin-top:12px"></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-history"></i> آخر تشغيل</div>
+        <div id="scheduleLastRun" style="font-size:.9rem;color:var(--muted)">لم تُشغَّل بعد</div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-cloud-upload-alt"></i> نسخة احتياطية على OneDrive</div>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">
+          يرفع نسخة من ملف قاعدة البيانات كاملاً (كل الموظفين والبصمات والإعدادات) لمجلد على OneDrive تابع
+          لمؤسستك، عبر نفس تطبيق Microsoft Graph API المسجَّل أعلاه (بريد الإرسال) - فقط أضف صلاحية Application
+          إضافية باسم <b>Files.ReadWrite.All</b> لنفس التطبيق بـ Azure AD/Entra ID مع موافقة المدير، ولا حاجة
+          لتسجيل تطبيق جديد. بديل كامل عن مشاركة الملف يدوياً عبر رابط.
+        </p>
+        <div class="form-grid quad">
+          <div class="form-group"><label>بريد صاحب OneDrive المستهدَف (UPN)</label><input type="email" id="odBackupUpn" class="search-input" dir="ltr" placeholder="reports@org.com"></div>
+          <div class="form-group" style="grid-column:span 2"><label>اسم المجلد على OneDrive</label><input type="text" id="odBackupFolder" class="search-input" dir="ltr" placeholder="AttendanceBackups"></div>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="saveOneDriveBackupSettings()"><i class="fas fa-save"></i> حفظ إعدادات النسخ الاحتياطي</button>
+        <button class="btn btn-primary" onclick="runOneDriveBackup()"><i class="fas fa-cloud-upload-alt"></i> نسخة احتياطية الآن</button>
+        <div id="odBackupResult" style="margin-top:12px"></div>
+        <div id="odBackupLast" style="margin-top:8px;font-size:.85rem;color:var(--muted)"></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fab fa-google-drive"></i> نسخة احتياطية على Google Drive</div>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">
+          بديل عن OneDrive أعلاه - لا يحتاج صلاحية "Global Admin" على أي مستأجر، بس يحتاج حساب Google Cloud
+          (مجاني) لإنشاء "Service Account" وتنزيل ملف JSON صغير منه، ومشاركة مجلد على Drive معه. ضعي مسار
+          ملف الـJSON على جهاز الخادم مباشرة (لا يُرفَع عبر المتصفح لأنه سرّي).
+        </p>
+        <div class="form-grid quad">
+          <div class="form-group" style="grid-column:span 2"><label>مسار ملف JSON على جهاز الخادم</label><input type="text" id="gdBackupJsonPath" class="search-input" dir="ltr" placeholder="/sdcard/Download/attendance-backup-xxxx.json"></div>
+          <div class="form-group" style="grid-column:span 2"><label>معرّف المجلد على Google Drive (Folder ID)</label><input type="text" id="gdBackupFolderId" class="search-input" dir="ltr" placeholder="1AbCdEfGhIjKlMnOpQrStUvWxYz"></div>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="saveGDriveBackupSettings()"><i class="fas fa-save"></i> حفظ إعدادات النسخ الاحتياطي</button>
+        <button class="btn btn-primary" onclick="runGDriveBackup()"><i class="fas fa-cloud-upload-alt"></i> نسخة احتياطية الآن</button>
+        <div id="gdBackupResult" style="margin-top:12px"></div>
+        <div id="gdBackupLast" style="margin-top:8px;font-size:.85rem;color:var(--muted)"></div>
+      </div>
+    </div>
+
+    <!-- ============ AUDIT LOG ============ -->
+    <div class="tab-panel" id="tab-audit">
+      <div class="card">
+        <div class="filter-bar">
+          <select id="auditType" class="search-input" onchange="loadAuditLog()">
+            <option value="الكل">كل الأنواع</option>
+            <option value="manual_entry">إدخال يدوي</option>
+            <option value="date_exception">استثناء تاريخ</option>
+            <option value="official_holiday">عطلة رسمية</option>
+            <option value="late_permission">إذن تأخير</option>
+            <option value="departure_permission">إذن مغادرة</option>
+          </select>
+          <input class="search-input" type="text" id="auditSearch" placeholder="🔍 بحث بالموظف أو المستخدم..." oninput="loadAuditLog()">
+        </div>
+        <div class="table-wrap">
+          <table class="dt-filterable">
+            <thead><tr><th>الوقت</th><th>المستخدم</th><th>العملية</th><th>النوع</th><th>الموظف</th><th>التاريخ المتأثر</th><th>القيمة السابقة</th><th>القيمة الجديدة</th><th>السبب</th></tr></thead>
+            <tbody id="auditTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ USERS ============ -->
+    <div class="tab-panel" id="tab-users">
+      <div class="card">
+        <div class="card-title"><i class="fas fa-user-plus"></i> إضافة مستخدم</div>
+        <div class="form-grid quad">
+          <div class="form-group"><label>اسم المستخدم <span style="color:#c0392b">*</span></label><input type="text" id="usrUsername" dir="ltr"></div>
+          <div class="form-group"><label>الاسم الكامل</label><input type="text" id="usrFullName"></div>
+          <div class="form-group"><label>كلمة المرور <span style="color:#c0392b">*</span></label><input type="password" id="usrPassword"></div>
+          <div class="form-group">
+            <label>الدور</label>
+            <select id="usrRole" class="search-input" onchange="applyRoleDefaults('usr')">
+              <option value="viewer">مشاهد (viewer)</option>
+              <option value="dept_manager">مدير قسم (dept_manager)</option>
+              <option value="admin">مدير النظام (admin)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group" style="margin-top:8px">
+          <label>الصلاحيات (تُعبَّأ تلقائياً حسب الدور، ويمكن تعديلها يدوياً)</label>
+          <div style="display:flex;flex-wrap:wrap;gap:14px">
+            <label style="display:flex;align-items:center;gap:6px;font-weight:normal"><input type="checkbox" id="usrPermEmployees"> إضافة/حذف/تعديل الموظفين</label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:normal"><input type="checkbox" id="usrPermDepartments"> إضافة/حذف/تعديل الأقسام</label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:normal"><input type="checkbox" id="usrPermDevices"> رفع/حذف موظفين على أجهزة البصمة</label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:normal"><input type="checkbox" id="usrPermSettings"> تعديل إعدادات المؤسسة العامة (الاسم/الشعار/الأوقات)</label>
+          </div>
+        </div>
+        <div class="form-group" style="margin-top:8px">
+          <label>تقييد الأقسام (اتركه فارغاً = بدون تقييد، يرى كل الأقسام)</label>
+          <select id="usrDepts" class="search-input" multiple size="4" style="height:auto"></select>
+        </div>
+        <button class="btn btn-primary" onclick="addUser()" style="margin-top:10px"><i class="fas fa-plus"></i> إضافة</button>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-key"></i> تغيير كلمة مروري</div>
+        <div class="form-grid">
+          <div class="form-group"><label>كلمة المرور الحالية</label><input type="password" id="curPassword"></div>
+          <div class="form-group"><label>كلمة المرور الجديدة</label><input type="password" id="newPassword"></div>
+        </div>
+        <button class="btn btn-primary" onclick="changePassword()"><i class="fas fa-save"></i> تحديث كلمة المرور</button>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-list"></i> قائمة المستخدمين</div>
+        <button class="btn btn-red btn-sm" style="margin-bottom:8px" onclick="bulkDeleteSelected('usersTable', id => '/api/users/' + id, loadUsers)"><i class="fas fa-trash"></i> حذف المحدد</button>
+        <div class="table-wrap">
+          <table class="dt-filterable">
+            <thead><tr><th class="no-filter"><input type="checkbox" onchange="toggleSelectAll('usersTable', this.checked)"></th><th>اسم المستخدم</th><th>الاسم الكامل</th><th>الصلاحية</th><th>تاريخ الإنشاء</th><th>حذف</th></tr></thead>
+            <tbody id="usersTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Mobile bottom nav -->
+<div class="mobile-nav">
+  <div class="mobile-nav-items">
+    <button class="mobile-nav-item active" data-tab="dashboard" onclick="showTab('dashboard')"><i class="fas fa-chart-pie"></i>لوحة التحكم</button>
+    <button class="mobile-nav-item" data-tab="upload" onclick="showTab('upload')"><i class="fas fa-file-upload"></i>رفع البيانات</button>
+    <button class="mobile-nav-item" data-tab="reports" onclick="showTab('reports')"><i class="fas fa-table"></i>التقارير</button>
+    <button class="mobile-nav-item" data-tab="manual" onclick="showTab('manual')"><i class="fas fa-edit"></i>يدوي</button>
+    <button class="mobile-nav-item" data-tab="settings" onclick="showTab('settings')"><i class="fas fa-cog"></i>الإعدادات</button>
+  </div>
+</div>
+
+<!-- ===== نافذة تسجيل تأخير/غياب سريعة - تُفتَح مباشرة بالضغط على كلمة
+     "متأخر"/"غائب" بجدول التقارير، بدون الانتقال لتبويب آخر. تدعم اختيار
+     سبب سبق إدخاله من قائمة منسدلة (لو المستخدم مُدخِل أسباب من قبل) أو
+     كتابته يدوياً ===== -->
+<div class="modal-overlay" id="eventModalOverlay">
+  <div class="modal">
+    <div class="modal-title" id="eventModalTitle">تسجيل حدث</div>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:14px">
+      <b id="eventModalEmpName"></b> — <span id="eventModalDate"></span>
+    </p>
+
+    <!-- ===== قسم التأخير ===== -->
+    <div id="eventModalLateFields" style="display:none">
+      <div class="form-group">
+        <label>السبب</label>
+        <select id="evtLateReasonSelect" class="search-input" onchange="_onEvtReasonSelectChange('late')"></select>
+      </div>
+      <div class="form-group" id="evtLateManualWrap" style="display:none">
+        <label>اكتب السبب</label>
+        <input type="text" id="evtLateManualLabel" class="search-input" placeholder="سبب الإذن">
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label>دقائق الإذن</label><input type="number" id="evtLateMinutes" class="search-input" min="0" placeholder="مثال: 15"></div>
+        <div class="form-group"><label>وقت حضور مخصّص (اختياري)</label><input type="time" id="evtLateCustomAtt" class="search-input"></div>
+      </div>
+    </div>
+
+    <!-- ===== قسم الغياب ===== -->
+    <div id="eventModalAbsentFields" style="display:none">
+      <div class="form-group">
+        <label>سبب الغياب</label>
+        <select id="evtAbsentReasonSelect" class="search-input" onchange="_onEvtReasonSelectChange('absent')"></select>
+      </div>
+      <div class="form-group" id="evtAbsentManualWrap" style="display:none">
+        <label>اكتب السبب</label>
+        <input type="text" id="evtAbsentManualLabel" class="search-input" placeholder="سبب الغياب">
+      </div>
+    </div>
+
+    <div id="eventModalResult"></div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="saveEventModal()"><i class="fas fa-save"></i> حفظ</button>
+      <button class="btn btn-outline" onclick="closeEventModal()">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
