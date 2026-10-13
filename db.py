@@ -413,7 +413,7 @@ def init_db():
         FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
     )''')
     user_cols = {r['name'] for r in cur.execute("PRAGMA table_info(users)").fetchall()}
-    for col in ('last_login_at', 'last_login_ip', 'email'):
+    for col in ('last_login_at', 'last_login_ip', 'email', 'fav_tabs'):
         if col not in user_cols:
             cur.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
     # ===== أجهزة المداخل (QR): تابلت عند الباب يقرأ رمز الموظف المتغيّر =====

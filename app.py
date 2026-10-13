@@ -12,6 +12,7 @@ import os
 import io
 import csv
 import json
+import re
 import uuid
 import sqlite3
 import tempfile
@@ -702,8 +703,38 @@ def index():
 def dashboard():
     settings = db.get_all_settings()
     perms = {k: user_can(k) for k in _PERMISSION_KEYS}
+    conn = db.get_db()
+    row = conn.execute("SELECT fav_tabs FROM users WHERE id = ?", (session.get('user_id'),)).fetchone()
+    conn.close()
+    fav = (row['fav_tabs'] if row and row['fav_tabs'] is not None else None)
     return render_template('dashboard.html', settings=settings, full_name=session.get('full_name', ''),
-                            role=session.get('role', 'viewer'), perms=perms)
+                            role=session.get('role', 'viewer'), perms=perms, fav_tabs=fav)
+
+
+_FAV_DEFAULT = ['dashboard', 'mobile-moves', 'reports', 'employees']
+
+
+@app.route('/api/my/favorites', methods=['GET', 'POST'])
+@login_required
+def api_my_favorites():
+    """أزرار المفضلة في الشريط السفلي — لكل مستخدم، وتتبعه على كل أجهزته"""
+    conn = db.get_db()
+    try:
+        if request.method == 'POST':
+            tabs = (request.get_json(force=True) or {}).get('tabs') or []
+            tabs = [t for t in tabs if isinstance(t, str) and re.fullmatch(r'[a-z0-9-]{1,40}', t)]
+            tabs = list(dict.fromkeys(tabs))[:5]
+            conn.execute("UPDATE users SET fav_tabs = ? WHERE id = ?", (json.dumps(tabs), session.get('user_id')))
+            conn.commit()
+            return jsonify({'ok': True, 'tabs': tabs})
+        row = conn.execute("SELECT fav_tabs FROM users WHERE id = ?", (session.get('user_id'),)).fetchone()
+        try:
+            tabs = json.loads(row['fav_tabs']) if row and row['fav_tabs'] else _FAV_DEFAULT
+        except ValueError:
+            tabs = _FAV_DEFAULT
+        return jsonify({'ok': True, 'tabs': tabs})
+    finally:
+        conn.close()
 
 
 # ============================================================
@@ -1901,13 +1932,13 @@ def run_full_analysis(conn):
     تُستخدم أيضاً من مهمة الجدولة التلقائية (scheduler.py) دون تكرار
     الكود أو الحاجة لطلب HTTP داخلي. تُرجع عدد الصفوف الناتجة.
     """
-    # طريقة توثيق الدوام لكل موظف: device = جهاز البصمة فقط، mobile = تطبيق الهاتف فقط، both = الاثنين
     punches_rows = conn.execute(
         "SELECT p.name, p.date, p.dept, p.time_in, p.time_out FROM punches p "
         "LEFT JOIN employees e ON e.name = p.name "
-        "WHERE NOT (COALESCE(e.attendance_mode, 'both') = 'device' AND COALESCE(p.batch_id, '') = 'mobile') "
-        "AND NOT (COALESCE(e.attendance_mode, 'both') = 'mobile' AND COALESCE(p.batch_id, '') NOT IN ('mobile', 'kiosk'))").fetchall()
-    # جهاز المدخل (kiosk) يُحتسب لكل الموظفين مهما كانت طريقة التوثيق — هو جهاز حضور داخل المبنى
+        "WHERE NOT (COALESCE(e.attendance_mode, 'both') IN ('device', 'qr', 'device_qr') AND COALESCE(p.batch_id, '') = 'mobile') "
+        "AND NOT (COALESCE(e.attendance_mode, 'both') IN ('device', 'mobile') AND COALESCE(p.batch_id, '') = 'kiosk') "
+        "AND NOT (COALESCE(e.attendance_mode, 'both') IN ('mobile', 'qr', 'mobile_qr') AND COALESCE(p.batch_id, '') NOT IN ('mobile', 'kiosk'))").fetchall()
+    # كل مصدر يُحتسب فقط إن كانت طريقة توثيق الموظف تشمله (انظر MODE_SOURCES في mobile.py)
     punches_df = pd.DataFrame([dict(r) for r in punches_rows])
 
     settings = db.get_all_settings()

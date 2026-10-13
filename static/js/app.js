@@ -227,7 +227,7 @@ function toggleNavGroup(id, open) {
 function initNavGroups() {
   _navCollapsed().forEach(id => { const g = document.querySelector(`.nav-group[data-group="${id}"]`); if (g) g.classList.add('collapsed'); });
   // مجموعة كل عناصرها مخفية بالصلاحيات تُخفى كاملة
-  document.querySelectorAll('.nav-group').forEach(g => {
+  document.querySelectorAll('.nav-group:not(.nav-fav-group)').forEach(g => {
     const visible = Array.from(g.querySelectorAll('.nav-item')).some(b => b.style.display !== 'none');
     g.style.display = visible ? '' : 'none';
   });
@@ -250,7 +250,7 @@ function _restoreScroll(tab) {
 
 function showTab(tab, opts) {
   opts = opts || {};
-  const btn = document.querySelector(`.nav-item[data-tab="${tab}"]`);
+  const btn = document.querySelector(`.nav-item:not(.nav-fav)[data-tab="${tab}"]`);
   if (!document.getElementById('tab-' + tab) || (btn && btn.style.display === 'none')) tab = 'dashboard';
   currentTab = tab;
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -260,7 +260,7 @@ function showTab(tab, opts) {
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('sidebarOverlay').classList.remove('open');
   document.title = (PAGE_TITLES[tab] || tab) + ' — نظام الحضور والانصراف';
-  const active = document.querySelector(`.nav-item[data-tab="${tab}"]`);
+  const active = document.querySelector(`.nav-item:not(.nav-fav)[data-tab="${tab}"]`);
   if (active) {
     const g = active.closest('.nav-group');
     if (g && g.classList.contains('collapsed')) toggleNavGroup(g.dataset.group, true);
@@ -1954,7 +1954,7 @@ async function copyFace() {
 async function clearDeviceAttendance() {
   const id = parseInt(document.getElementById('clearAttDevice').value);
   if (!id) { toast('يرجى اختيار جهاز', true); return; }
-  if (!confirm('سيتم مسح كل بيانات الحضور المخزَّنة على الجهاز نفسه نهائياً. متابعة؟')) return;
+  if (!confirm('سيتم مسح كل بيانات الحضور المخزَّنة على نفس الجهاز نهائياً. متابعة؟')) return;
   const box = document.getElementById('clearAttResult');
   try {
     const data = await api(`/api/devices/${id}/clear-attendance`, { method: 'POST' });
@@ -2127,6 +2127,9 @@ async function loadSettings() {
     syncStatus.textContent = '';
   }
   document.getElementById('syncPushCard').style.display = s.sync_central_url ? 'block' : 'none';
+  const role = s.sync_central_url ? 'branch' : (s.sync_api_key ? 'central' : 'none');
+  const rr = document.querySelector(`input[name=syncRole][value=${role}]`); if (rr) rr.checked = true;
+  syncRoleUi();
 
   const sn = await api('/api/shift-names');
   if (sn) {
@@ -2151,8 +2154,8 @@ async function saveSettings() {
     sat_time_enabled: document.getElementById('setSatEnabled').checked ? '1' : '0',
     sat_attendance_time: document.getElementById('setSatAtt').value,
     sat_departure_time: document.getElementById('setSatDep').value,
-    sync_central_url: document.getElementById('setSyncUrl').value.trim(),
-    sync_api_key: document.getElementById('setSyncKey').value.trim(),
+    sync_central_url: syncRole() === 'branch' ? document.getElementById('setSyncUrl').value.trim() : '',
+    sync_api_key: syncRole() === 'none' ? '' : document.getElementById('setSyncKey').value.trim(),
   };
   const box = document.getElementById('settingsResult');
   try {
@@ -2643,3 +2646,127 @@ window.addEventListener('pageshow', (event) => {
     window.location.reload();
   }
 });
+
+/* ===== قفل تمرير الخلفية عند فتح أي نافذة منبثقة (يشمل النوافذ التي تُضاف لاحقاً) ===== */
+(function () {
+  const SEL = '.modal-overlay.open, .sidebar-overlay.open';
+  let y = 0;
+  function update() {
+    const lock = !!document.querySelector(SEL), h = document.documentElement;
+    if (lock === h.classList.contains('modal-lock')) return;
+    if (lock) { y = window.scrollY; h.classList.add('modal-lock'); }
+    else { h.classList.remove('modal-lock'); window.scrollTo(0, y); }
+  }
+  new MutationObserver(update).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'], childList: true });
+  update();
+})();
+
+
+/* ===== أزرار المفضلة: الشريط السفلي (الهاتف) وأعلى القائمة الجانبية (الكمبيوتر) ===== */
+const FAV_DEFAULT = ['dashboard', 'mobile-moves', 'reports', 'employees'];
+let FAV = FAV_DEFAULT.slice(), FAV_DRAFT = [];
+(function () {
+  try { const raw = document.getElementById('mobileNav').dataset.fav; if (raw) FAV = JSON.parse(raw); } catch (e) {}
+})();
+function favSource(tab) {   // الزر الأصلي في القائمة — يحترم الصلاحيات (المخفي لا يُعرض)
+  const b = document.querySelector(`.nav-item:not(.nav-fav)[data-tab="${tab}"]`);
+  return b && b.style.display !== 'none' && !b.closest('[style*="display:none"]') ? b : null;
+}
+function favLabel(b) { return (b.textContent || '').trim(); }
+function favIcon(b) { const i = b.querySelector('i'); return i ? i.className : 'fas fa-star'; }
+function favRender() {
+  const bar = document.getElementById('mobileNavItems'), side = document.getElementById('sideFavItems');
+  if (!bar || !side) return;
+  const menuBtn = bar.lastElementChild;
+  bar.querySelectorAll('.mobile-nav-item[data-tab], .mobile-nav-fav-edit').forEach(e => e.remove());
+  side.innerHTML = '';
+  const tabs = FAV.filter(favSource);
+  tabs.forEach(tab => {
+    const src = favSource(tab), label = favLabel(src), icon = favIcon(src);
+    const m = document.createElement('button');
+    m.className = 'mobile-nav-item' + (tab === currentTab ? ' active' : ''); m.dataset.tab = tab; m.type = 'button';
+    m.innerHTML = `<i class="${icon}" aria-hidden="true"></i><span>${escapeHtml(label)}</span>`;
+    m.onclick = () => showTab(tab);
+    bar.insertBefore(m, menuBtn);
+    const sb = document.createElement('button');
+    sb.className = 'nav-item nav-fav' + (tab === currentTab ? ' active' : ''); sb.dataset.tab = tab; sb.type = 'button';
+    sb.innerHTML = `<i class="${icon}" aria-hidden="true"></i> ${escapeHtml(label)}`;
+    sb.onclick = () => showTab(tab);
+    side.appendChild(sb);
+  });
+  if (!tabs.length) side.innerHTML = '<div class="fav-empty">اضغط ✎ لإضافة صفحاتك المفضلة</div>';
+  if (tabs.length) return;   // التخصيص متاح من أعلى القائمة (✎) — زر النجمة يظهر فقط عندما تكون المفضلة فارغة
+  const ed = document.createElement('button');
+  ed.className = 'mobile-nav-item mobile-nav-fav-edit'; ed.type = 'button'; ed.title = 'تخصيص المفضلة';
+  ed.innerHTML = '<i class="fas fa-star" aria-hidden="true"></i><span>المفضلة</span>';
+  ed.onclick = favOpen;
+  bar.insertBefore(ed, menuBtn);
+}
+function favOpen() {
+  FAV_DRAFT = FAV.filter(favSource);
+  document.getElementById('favSearch').value = '';
+  favRenderAll();
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebarOverlay').classList.remove('open');
+  document.getElementById('favModal').classList.add('open');
+}
+function favClose() { document.getElementById('favModal').classList.remove('open'); }
+function favRenderAll() {
+  const q = (document.getElementById('favSearch').value || '').trim().toLowerCase();
+  const all = [...document.querySelectorAll('.nav-item:not(.nav-fav)[data-tab]')].filter(b => favSource(b.dataset.tab));
+  document.getElementById('favCount').textContent = FAV_DRAFT.length;
+  document.getElementById('favSel').innerHTML = FAV_DRAFT.map((tab, i) => {
+    const b = favSource(tab);
+    return `<div class="fav-row"><i class="${favIcon(b)}" aria-hidden="true"></i><span>${escapeHtml(favLabel(b))}</span>
+      <button class="btn btn-outline btn-sm" onclick="favMove(${i},-1)" ${i === 0 ? 'disabled' : ''} aria-label="أعلى">▲</button>
+      <button class="btn btn-outline btn-sm" onclick="favMove(${i},1)" ${i === FAV_DRAFT.length - 1 ? 'disabled' : ''} aria-label="أسفل">▼</button>
+      <button class="btn btn-red btn-sm" onclick="favToggle('${tab}',false)" aria-label="إزالة">✕</button></div>`;
+  }).join('') || '<div class="fav-empty">لا توجد صفحات مفضلة</div>';
+  const shown = all.filter(b => !q || favLabel(b).toLowerCase().includes(q));
+  document.getElementById('favAllCount').textContent = shown.length;
+  document.getElementById('favAll').innerHTML = shown.map(b => {
+    const tab = b.dataset.tab, on = FAV_DRAFT.includes(tab), full = !on && FAV_DRAFT.length >= 5;
+    return `<label class="fav-row${full ? ' fav-off' : ''}"><input type="checkbox" ${on ? 'checked' : ''} ${full ? 'disabled' : ''} onchange="favToggle('${tab}',this.checked)">
+      <i class="${favIcon(b)}" aria-hidden="true"></i><span>${escapeHtml(favLabel(b))}</span></label>`;
+  }).join('');
+}
+function favToggle(tab, on) {
+  FAV_DRAFT = FAV_DRAFT.filter(t => t !== tab);
+  if (on && FAV_DRAFT.length < 5) FAV_DRAFT.push(tab);
+  favRenderAll();
+}
+function favMove(i, d) {
+  const j = i + d; if (j < 0 || j >= FAV_DRAFT.length) return;
+  [FAV_DRAFT[i], FAV_DRAFT[j]] = [FAV_DRAFT[j], FAV_DRAFT[i]];
+  favRenderAll();
+}
+function favReset() { FAV_DRAFT = FAV_DEFAULT.filter(favSource); favRenderAll(); }
+async function favSave() {
+  try {
+    const d = await api('/api/my/favorites', { method: 'POST', body: JSON.stringify({ tabs: FAV_DRAFT }) });
+    FAV = d.tabs || FAV_DRAFT;
+    favRender(); favClose(); toast('تم حفظ المفضلة');
+  } catch (e) { toast('تعذّر حفظ المفضلة', true); }
+}
+document.addEventListener('DOMContentLoaded', favRender);
+if (document.readyState !== 'loading') favRender();
+
+
+/* ===== الربط بين نسختين: دور النسخة يحدد الحقول الظاهرة ===== */
+function syncRole() { const r = document.querySelector('input[name=syncRole]:checked'); return r ? r.value : 'none'; }
+function syncRoleUi() {
+  const role = syncRole();
+  document.getElementById('syncFields').style.display = role === 'none' ? 'none' : '';
+  document.getElementById('syncUrlBox').style.display = role === 'branch' ? '' : 'none';
+  document.getElementById('syncKeyHint').textContent = role === 'central'
+    ? 'أنشئ كلمة سر (زر التوليد) واحفظها، ثم اكتبها بنفس القيمة في إعدادات كل فرع.'
+    : 'اكتب نفس كلمة السر المحفوظة في النسخة الرئيسية.';
+  document.querySelectorAll('.sync-roles label').forEach(l => l.classList.toggle('on', l.querySelector('input').checked));
+}
+function syncKeyShow() { const k = document.getElementById('setSyncKey'); k.type = k.type === 'password' ? 'text' : 'password'; }
+function syncKeyGen() {
+  const a = new Uint8Array(24); crypto.getRandomValues(a);
+  const k = document.getElementById('setSyncKey');
+  k.value = Array.from(a, b => b.toString(16).padStart(2, '0')).join(''); k.type = 'text'; k.select();
+  toast('تم توليد كلمة سر — احفظ الإعدادات ثم انسخها إلى النسخة الأخرى');
+}

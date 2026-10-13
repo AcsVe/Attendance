@@ -57,6 +57,7 @@
   function sync() {
     var t0 = Date.now();
     return fetch('/me/api/qr', { credentials: 'same-origin', headers: { 'X-Device': DEV } }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok && d.error && !d.login) { C = null; try { localStorage.removeItem(KEY); } catch (e) {} warn(d.error); $('qr').innerHTML = ''; return; }
       if (!d.ok) { if (!C) warn('سجّل الدخول إلى التطبيق مرة واحدة وأنت متصل بالإنترنت، ثم افتح هذه الصفحة.'); return; }
       var t1 = Date.now();
       C = { emp: d.emp_id, name: d.name, secret: d.secret, step: d.step, srv: d.server_ms + (t1 - t0) / 2, local: t1, el: el() };

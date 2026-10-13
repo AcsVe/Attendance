@@ -334,3 +334,28 @@ input[type=file] { width: 100%; font-family: inherit; font-size: .85rem; }
 .topbar-logo { display: none; height: 34px; max-width: 110px; object-fit: contain; }
 @media (max-width: 768px) { .topbar-logo { display: block; height: 30px; max-width: 70px; } }
 .sidebar-logo-chip img { max-height: 40px !important; max-width: 100% !important; object-fit: contain; margin: 0 auto; }
+
+/* قفل تمرير الصفحة الخلفية أثناء فتح نافذة منبثقة أو القائمة الجانبية على الهاتف */
+html.modal-lock, html.modal-lock body { overflow: hidden !important; overscroll-behavior: none; touch-action: none; }
+html.modal-lock .modal, html.modal-lock .sidebar { touch-action: pan-y; }
+.modal, .sidebar { overscroll-behavior: contain; }
+
+/* ===== المفضلة ===== */
+.mobile-nav-item span { max-width: 68px; overflow: hidden; text-overflow: ellipsis; display: block; }
+.nav-fav-group .nav-group-title { display: flex; justify-content: space-between; align-items: center; }
+.fav-edit { background: none; border: none; color: rgba(255,255,255,.6); cursor: pointer; padding: 2px 6px; border-radius: 6px; font-size: .75rem; }
+.fav-edit:hover, .fav-edit:focus-visible { color: #fff; background: rgba(255,255,255,.1); }
+.nav-fav-group .fav-empty { color: rgba(255,255,255,.5); font-size: .78rem; padding: 6px 18px; }
+.fav-list { display: flex; flex-direction: column; gap: 6px; }
+.fav-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--border, #e3e8ee); border-radius: 10px; background: #fff; cursor: pointer; }
+.fav-row > span { flex: 1; font-weight: 600; }
+.fav-row > i { color: var(--primary); width: 18px; text-align: center; }
+.fav-row.fav-off { opacity: .5; cursor: not-allowed; }
+.fav-list .fav-empty { color: var(--muted); font-size: .85rem; padding: 6px 2px; }
+
+/* دور النسخة في الربط بين نسختين */
+.sync-roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+.sync-roles label { display: flex; flex-direction: column; gap: 2px; border: 1.5px solid var(--border, #e3e8ee); border-radius: 12px; padding: 10px 12px; cursor: pointer; }
+.sync-roles label input[type=radio] { width: 18px !important; height: 18px; padding: 0 !important; margin: 0 0 4px; align-self: flex-start; accent-color: var(--primary); box-shadow: none !important; border: none !important; }
+.sync-roles label small { color: var(--muted); font-size: .78rem; }
+.sync-roles label.on { border-color: var(--primary); background: #eef6f9; }

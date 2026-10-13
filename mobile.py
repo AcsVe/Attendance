@@ -135,6 +135,26 @@ def active_override(conn, emp_id):
     return dict(r) if r else None
 
 
+# ===== طرق توثيق الدوام: أي المصادر تُحتسب لكل موظف =====
+#   device = جهاز البصمة، phone = تطبيق الهاتف بالموقع الجغرافي، qr = رمز QR على جهاز المدخل
+MODE_SOURCES = {
+    'both': {'device', 'phone', 'qr'},
+    'device': {'device'},
+    'mobile': {'phone'},
+    'qr': {'qr'},
+    'device_qr': {'device', 'qr'},
+    'mobile_qr': {'phone', 'qr'},
+}
+MODE_TEXT = {
+    'both': 'جهاز البصمة + الهاتف + رمز QR', 'device': 'جهاز البصمة فقط', 'mobile': 'الهاتف فقط',
+    'qr': 'رمز QR على جهاز المدخل فقط', 'device_qr': 'جهاز البصمة + رمز QR', 'mobile_qr': 'الهاتف + رمز QR',
+}
+
+
+def mode_allows(emp, source):
+    return source in MODE_SOURCES.get((emp['attendance_mode'] if emp else None) or 'both', MODE_SOURCES['both'])
+
+
 def check_location(conn, emp, acc, lat, lng, accuracy, cfg, override=None):
     """يرجع (ok, reason, site, distance)"""
     if override and override.get('no_location') and (lat is None or lng is None):
@@ -626,7 +646,8 @@ def me_status(conn, acc, emp, cfg):
         (emp['id'],)).fetchall()]
     creds = conn.execute("SELECT COUNT(*) FROM webauthn_credentials WHERE employee_id = ?", (emp['id'],)).fetchone()[0]
     return jsonify({
-        'mode': emp['attendance_mode'] or 'both', 'server_ms': int(time.time() * 1000),
+        'mode': emp['attendance_mode'] or 'both', 'mode_text': MODE_TEXT.get(emp['attendance_mode'] or 'both', ''),
+        'sources': sorted(MODE_SOURCES.get(emp['attendance_mode'] or 'both', MODE_SOURCES['both'])), 'server_ms': int(time.time() * 1000),
         'override': {'until': ov['ends_at'], 'reason': ov['reason'], 'no_location': bool(ov['no_location'])} if ov else None,
         'notifications': notes, 'unread': sum(1 for n in notes if not n['read_at']),
         'biometric': cfg.get('mobile_biometric', 'off'), 'bio_enrolled': creds > 0, 'webauthn': _webauthn_ready(),
@@ -1001,8 +1022,8 @@ def me_punch(conn, acc, emp, cfg):
     recent = conn.execute("SELECT created_at FROM mobile_punches WHERE employee_id = ? AND status = 'accepted' "
                           "AND created_at >= datetime('now', '-30 seconds')", (emp['id'],)).fetchone()
 
-    if (emp['attendance_mode'] or 'both') == 'device':
-        return jsonify({'ok': False, 'error': 'دوامك يُوثَّق عبر جهاز البصمة فقط — راجع الإدارة إن احتجت التسجيل من الهاتف'}), 403
+    if not mode_allows(emp, 'phone'):
+        return jsonify({'ok': False, 'error': 'طريقة توثيق دوامك: ' + MODE_TEXT.get(emp['attendance_mode'] or 'both', '') + ' — التسجيل من الهاتف غير متاح لك'}), 403
     override = active_override(conn, emp['id'])
     ok, reason, site, dist = check_location(conn, emp, acc, lat, lng, accuracy, cfg, override)
     flags, source = [], 'browser'
@@ -1751,7 +1772,7 @@ def api_employee_card(emp_id):
             "SELECT title, body, created_by, created_at, read_at FROM employee_notifications WHERE employee_id = ? ORDER BY id DESC LIMIT 20",
             (emp_id,)).fetchall()]
         sources = {r['src']: r['n'] for r in conn.execute(
-            "SELECT CASE WHEN batch_id = 'mobile' THEN 'mobile' ELSE 'device' END AS src, COUNT(*) AS n FROM punches "
+            "SELECT CASE WHEN batch_id IN ('mobile', 'kiosk') THEN batch_id ELSE 'device' END AS src, COUNT(*) AS n FROM punches "
             "WHERE name = ? AND date LIKE ? GROUP BY src", (emp['name'], month + '%'))}
         audit = [dict(r) for r in conn.execute(
             "SELECT timestamp, username, action_type, old_value, new_value, reason FROM audit_log WHERE employee_name = ? ORDER BY id DESC LIMIT 60",
@@ -1787,7 +1808,7 @@ def api_employee_update(emp_id):
         if name != emp['name'] and conn.execute("SELECT 1 FROM employees WHERE name = ? AND id != ?", (name, emp_id)).fetchone():
             return jsonify({'ok': False, 'error': 'يوجد موظف آخر بنفس الاسم'}), 400
         mode = d.get('attendance_mode', emp['attendance_mode'] or 'both')
-        if mode not in ('device', 'mobile', 'both'):
+        if mode not in MODE_SOURCES:
             mode = 'both'
         fields = {
             'name': name, 'dept': (d.get('dept', emp['dept']) or '').strip(),
@@ -1899,7 +1920,7 @@ def api_employees_bulk():
                 conn.execute("UPDATE employees SET active = 0, synced = 0 WHERE id = ?", (e['id'],))
             elif action == 'activate':
                 conn.execute("UPDATE employees SET active = 1, synced = 0 WHERE id = ?", (e['id'],))
-            elif action == 'mode' and value in ('device', 'mobile', 'both'):
+            elif action == 'mode' and value in MODE_SOURCES:
                 conn.execute("UPDATE employees SET attendance_mode = ? WHERE id = ?", (value, e['id']))
             elif action == 'presence' and value in ('on', 'off'):
                 conn.execute("UPDATE employees SET presence_monitor = ? WHERE id = ?", (1 if value == 'on' else 0, e['id']))
@@ -1942,6 +1963,8 @@ def _qr_secret(conn, acc):
 @_me_json
 def me_qr_info(conn, acc, emp, cfg):
     """سرّ الرمز المتغيّر لهذا الهاتف (يُحفظ في الهاتف ليعمل الرمز دون إنترنت) + وقت الخادم لضبط ساعة التطبيق"""
+    if not mode_allows(emp, 'qr'):
+        return jsonify({'ok': False, 'error': 'طريقة توثيق دوامك: ' + MODE_TEXT.get(emp['attendance_mode'] or 'both', '') + ' — رمز QR غير متاح لك'}), 403
     return jsonify({'ok': True, 'emp_id': emp['id'], 'name': emp['name'], 'secret': _qr_secret(conn, acc),
                     'step': QR_STEP, 'server_ms': int(time.time() * 1000)})
 
@@ -2124,6 +2147,9 @@ def kiosk_scans():
                 res['error'] = 'الموظف غير معروف أو حسابه موقوف'
                 continue
             res['name'] = emp['name']
+            if not mode_allows(emp, 'qr'):
+                res['error'] = 'طريقة توثيق هذا الموظف لا تشمل رمز QR'
+                continue
             import hmac as _hm
             if not _hm.compare_digest(_qr_code(acc['qr_secret'], emp_id, step), str(r.get('code') or '')):
                 res['error'] = 'رمز غير صحيح'
@@ -2202,7 +2228,7 @@ def presence_monitored(cfg, emp, acc=None):
     p = _pcfg(cfg)
     if not p['enabled'] or not emp or not emp['active'] or (acc is not None and not acc['active']):
         return False
-    if (emp['attendance_mode'] or 'both') == 'device':
+    if not mode_allows(emp, 'phone'):   # لا يُراقَب من لا يسجّل من الهاتف
         return False
     # الكل، أو موظف محدد، أو موظف في قسم محدد (يشمل من يُضاف للقسم لاحقاً)
     return p['scope'] == 'all' or bool(emp['presence_monitor']) or (emp['dept'] or '') in p['depts']

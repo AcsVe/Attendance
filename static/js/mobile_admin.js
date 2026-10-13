@@ -20,7 +20,8 @@ const OSM_ATTR = '&copy; OpenStreetMap';
 const mEsc = s => escapeHtml(s == null ? '' : String(s));
 
 /* ================= الحسابات ================= */
-const MODE_LABEL = { both: 'الجهاز + الهاتف', mobile: 'الهاتف (سحابي)', device: 'جهاز البصمة' };
+const MODE_LABEL = { both: 'البصمة + الهاتف + QR', device: 'جهاز البصمة فقط', mobile: 'الهاتف فقط', qr: 'رمز QR فقط', device_qr: 'البصمة + QR', mobile_qr: 'الهاتف + QR' };
+const MODE_PHONE = { both: 1, mobile: 1, mobile_qr: 1 };   // الطرق التي تشمل التسجيل من الهاتف بالموقع
 
 let maRows = [], maDept = null, maState = '';   // maDept: null = كل الأقسام، '' = بدون قسم
 
@@ -479,9 +480,12 @@ async function openEmployeeCard(id) {
       <div class="form-group"><label>الهاتف</label><input type="tel" id="ecPhone" dir="ltr" value="${mEsc(e.phone || '')}" ${can}></div>
       <div class="form-group"><label>البريد</label><input type="email" id="ecEmail" dir="ltr" value="${mEsc(e.email || '')}" ${can}></div>
       <div class="form-group"><label>طريقة توثيق الدوام</label><select id="ecMode" class="search-input" ${can}>
-        <option value="both">جهاز البصمة + تطبيق الهاتف (الأبكر حضوراً والأخير انصرافاً)</option>
-        <option value="mobile">تطبيق الهاتف فقط (سحابي) — تُتجاهل بصمات الجهاز</option>
-        <option value="device">جهاز البصمة فقط — التطبيق لا يسجّل</option></select></div>
+        <option value="both">الكل: جهاز البصمة + الهاتف + رمز QR (الأبكر حضوراً والأخير انصرافاً)</option>
+        <option value="device">جهاز البصمة فقط</option>
+        <option value="mobile">الهاتف فقط (بالموقع الجغرافي)</option>
+        <option value="qr">رمز QR على جهاز المدخل فقط</option>
+        <option value="device_qr">جهاز البصمة + رمز QR</option>
+        <option value="mobile_qr">الهاتف + رمز QR</option></select></div>
       <div class="form-group"><label>الحالة</label><select id="ecActive" class="search-input" ${can}><option value="1">فعّال</option><option value="0">معلّق (لا يدخل التطبيق ولا يظهر في المتابعة)</option></select></div>
       <div class="form-group"><label>ملاحظات</label><input type="text" id="ecNotes" value="${mEsc(e.notes || '')}" ${can}></div>
       <div class="form-group"><label>التحقق من التواجد أثناء الدوام</label>
@@ -508,7 +512,7 @@ async function openEmployeeCard(id) {
       <div class="stat-card red" style="cursor:default"><div class="stat-val">${s.absent}</div><div class="stat-label">غياب</div></div>
       <div class="stat-card" style="cursor:default"><div class="stat-val">${s.hours}</div><div class="stat-label">ساعات العمل</div></div>
     </div>
-    <p style="font-size:.85rem;color:var(--muted)">مصادر البصمات هذا الشهر: جهاز البصمة ${d.sources.device || 0} يوم · الهاتف ${d.sources.mobile || 0} يوم · طريقة التوثيق: <b>${MODE_LABEL[e.attendance_mode || 'both']}</b></p>
+    <p style="font-size:.85rem;color:var(--muted)">مصادر البصمات هذا الشهر: جهاز البصمة ${d.sources.device || 0} يوم · الهاتف ${d.sources.mobile || 0} يوم · رمز QR ${d.sources.kiosk || 0} يوم · طريقة التوثيق: <b>${MODE_LABEL[e.attendance_mode || 'both']}</b></p>
     <div class="table-wrap" style="max-height:260px;overflow:auto"><table><thead><tr><th>التاريخ</th><th>حضور</th><th>انصراف</th><th>الحالة</th><th>تأخير</th><th>ساعات</th></tr></thead><tbody>
       ${d.days.map(x => `<tr><td>${mEsc(x.date)}</td><td dir="ltr">${mEsc(x.time_in || '—')}</td><td dir="ltr">${mEsc(x.time_out || '—')}</td><td>${mEsc(x.status || '')}</td><td>${x.late_minutes || 0}</td><td>${x.working_hours || 0}</td></tr>`).join('') || '<tr><td colspan="6" style="color:var(--muted)">لا توجد بيانات محلّلة لهذا الشهر</td></tr>'}
     </tbody></table></div>
@@ -705,7 +709,7 @@ function prScopeUi() { document.getElementById('prSelBox').style.display = prSco
 
 function prCovered(e) {
   if (!document.getElementById('prOn').checked) return [false, 'التحقق متوقف'];
-  if ((e.attendance_mode || 'both') === 'device') return [false, 'طريقة توثيقه: جهاز البصمة فقط'];
+  if (!MODE_PHONE[e.attendance_mode || 'both']) return [false, 'طريقة توثيقه لا تشمل الهاتف: ' + (MODE_LABEL[e.attendance_mode] || '')];
   if (!e.active || !e.acc_active) return [false, 'الحساب موقوف'];
   if (prScope() === 'all') return [true, 'كل الموظفين'];
   if (e.presence_monitor) return [true, 'محدد بالاسم'];

@@ -36,6 +36,10 @@
     <div class="sidebar-logo-text">{{ org_display or 'الجمعية الثقافية العربية - الرائد العربي' }}</div>
   </div>
   <div class="sidebar-nav" role="navigation" aria-label="القائمة الرئيسية">
+    <div class="nav-group nav-fav-group" data-group="fav">
+      <div class="nav-group-title" style="cursor:default">المفضلة<button type="button" class="fav-edit" onclick="favOpen()" title="تخصيص المفضلة" aria-label="تخصيص المفضلة"><i class="fas fa-pen" aria-hidden="true"></i></button></div>
+      <div class="nav-group-items" id="sideFavItems"></div>
+    </div>
     <div class="nav-group" data-group="home">
       <button class="nav-group-title" type="button" onclick="toggleNavGroup('home')" aria-expanded="true">الرئيسية<i class="fas fa-chevron-down" aria-hidden="true"></i></button>
       <div class="nav-group-items">
@@ -155,9 +159,9 @@
     <!-- ============ UPLOAD ============ -->
     <div class="tab-panel" id="tab-upload">
       <div class="card" id="syncPushCard" style="display:none">
-        <div class="card-title"><i class="fas fa-cloud-upload-alt" aria-hidden="true"></i> نشر ومزامنة مع القاعدة الرئيسية</div>
+        <div class="card-title"><i class="fas fa-cloud-upload-alt" aria-hidden="true"></i> إرسال البيانات إلى النسخة الرئيسية</div>
         <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">
-          يرفع كل الموظفين والبصمات المضافة/المعدَّلة محلياً منذ آخر مزامنة إلى القاعدة الرئيسية المضبوطة بالإعدادات.
+          يرسل الموظفين والبصمات المضافة أو المعدّلة منذ آخر إرسال إلى النسخة الرئيسية المحددة في الإعدادات (الربط بين نسختين).
         </p>
         <button class="btn btn-primary" onclick="syncPush()"><i class="fas fa-cloud-upload-alt" aria-hidden="true"></i> نشر ومزامنة الآن</button>
         <div id="syncPushResult" style="margin-top:12px"></div>
@@ -372,7 +376,7 @@
         <div class="card-title"><i class="fas fa-file-export" aria-hidden="true"></i> تصدير مستقل</div>
         <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">
           حدّد الفلترة أدناه، ثم اختر إما تصدير ملف Excel بعدة أوراق دفعة واحدة (الكل/المتأخرون/الغائبون/في الوقت/عطلة أسبوعية)،
-          أو إرسال هذا التقرير فوراً بالبريد لمستلمي «الجدولة التلقائية» المحفوظين - بغض النظر عن موعد الجدولة نفسه.
+          أو إرسال هذا التقرير فوراً بالبريد لمستلمي «الجدولة التلقائية» المحفوظين - بغض النظر عن نفس موعد الجدولة.
         </p>
         <div class="filter-bar">
           <select id="expDept" class="search-input"><option value="">كل الأقسام</option></select>
@@ -683,9 +687,12 @@
             <option value="">إجراءات أخرى للمحدد…</option>
             <option value="emp:suspend">تعليق (إيقاف مؤقت)</option>
             <option value="emp:activate">إلغاء التعليق</option>
-            <option value="mode:both">التوثيق: جهاز البصمة + الهاتف</option>
-            <option value="mode:mobile">التوثيق: الهاتف فقط (سحابي)</option>
+            <option value="mode:both">التوثيق: الكل (البصمة + الهاتف + QR)</option>
             <option value="mode:device">التوثيق: جهاز البصمة فقط</option>
+            <option value="mode:mobile">التوثيق: الهاتف فقط</option>
+            <option value="mode:qr">التوثيق: رمز QR فقط</option>
+            <option value="mode:device_qr">التوثيق: البصمة + QR</option>
+            <option value="mode:mobile_qr">التوثيق: الهاتف + QR</option>
             <option value="notify">إرسال إشعار</option>
             <option value="presence:on">إضافة للتحقق من التواجد</option>
             <option value="presence:off">إزالة من التحقق من التواجد</option>
@@ -889,7 +896,7 @@
       <div class="device-subtab" id="devsub-dev-maint">
         <div class="card">
           <div class="card-title"><i class="fas fa-exclamation-triangle" style="color:#c0392b" aria-hidden="true"></i> مسح بيانات الحضور من الجهاز</div>
-          <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">يمسح كل سجلات الحضور المخزَّنة على الجهاز نفسه - نفّذها فقط بعد التأكد من نجاح "سحب البيانات". عملية لا يمكن التراجع عنها.</p>
+          <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">يمسح كل سجلات الحضور المخزَّنة على نفس الجهاز - نفّذها فقط بعد التأكد من نجاح "سحب البيانات". عملية لا يمكن التراجع عنها.</p>
           <div class="form-group" style="max-width:320px"><label>الجهاز</label><select id="clearAttDevice"></select></div>
           <button class="btn btn-red" onclick="clearDeviceAttendance()"><i class="fas fa-trash" aria-hidden="true"></i> مسح بيانات الحضور</button>
           <div id="clearAttResult" style="margin-top:12px"></div>
@@ -997,20 +1004,27 @@
         <p style="font-size:.82rem;color:var(--muted)">يُستخدم فقط لحساب تأخير/حضور من بصم فعلياً يوم السبت - الغياب يوم السبت يبقى "عطلة أسبوعية" كالمعتاد.</p>
       </div>
       <div class="card">
-        <div class="card-title"><i class="fas fa-cloud" aria-hidden="true"></i> المزامنة مع القاعدة الرئيسية (اختياري)</div>
-        <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">
-          فعّل هذا فقط إذا كانت هذه نسخة "فرع" محلية (تسحب من الأجهزة وتعدّل الموظفين محلياً) وتريد رفع تعديلاتها بضغطة زر
-          لنسخة أخرى من هذا النظام تعمل كـ"القاعدة الرئيسية" (مثلاً نسخة مستضافة سحابياً يدخل عليها الموارد البشرية
-          للقراءة/التحليل مباشرة). اترك الحقلين فارغين إذا كانت هذه نسخة مستقلة عادية (السلوك الافتراضي - غير مؤثر إطلاقاً).
+        <div class="card-title"><i class="fas fa-cloud" aria-hidden="true"></i> الربط بين نسختين من النظام (اختياري)</div>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">
+          هذا الخيار <b>لا علاقة له</b> بالنسخ الاحتياطي ولا بالهاتف الاحتياطي. يُستخدم فقط عند تشغيل نسختين منفصلتين من النظام
+          وتريد أن ترسل إحداهما (الفرع) موظفيها وبصماتها إلى الأخرى (الرئيسية). إن كان لديك نظام واحد فاختر «نسخة مستقلة».
         </p>
-        <div class="form-grid">
-          <div class="form-group"><label>رابط القاعدة الرئيسية</label><input type="text" id="setSyncUrl" dir="ltr" placeholder="https://your-central-app.onrender.com"></div>
-          <div class="form-group"><label>مفتاح المزامنة (يجب أن يطابق نفس القيمة بالقاعدة الرئيسية)</label><input type="text" id="setSyncKey" dir="ltr"></div>
+        <div class="form-group"><label>دور هذه النسخة</label>
+          <div class="sync-roles" role="radiogroup">
+            <label><input type="radio" name="syncRole" value="none" onchange="syncRoleUi()"> <b>نسخة مستقلة</b><small>الوضع الطبيعي — لا ترسل ولا تستقبل</small></label>
+            <label><input type="radio" name="syncRole" value="branch" onchange="syncRoleUi()"> <b>فرع</b><small>ترسل بياناتها إلى نسخة رئيسية بزر «نشر ومزامنة»</small></label>
+            <label><input type="radio" name="syncRole" value="central" onchange="syncRoleUi()"> <b>نسخة رئيسية</b><small>تستقبل البيانات من الفروع</small></label>
+          </div>
         </div>
-        <p style="font-size:.82rem;color:var(--muted)">
-          على النسخة "المركزية" نفسها: عبّئ حقل "مفتاح المزامنة" فقط بنفس القيمة، واترك "رابط القاعدة الرئيسية" فارغاً
-          (هي المركز نفسه، وليست فرعاً يرفع لمكان آخر).
-        </p>
+        <div class="form-grid" id="syncFields">
+          <div class="form-group" id="syncUrlBox"><label>عنوان النسخة الرئيسية</label><input type="text" id="setSyncUrl" dir="ltr" placeholder="https://main.example.org">
+            <small style="color:var(--muted)">عنوان موقع النسخة التي ستستقبل البيانات.</small></div>
+          <div class="form-group"><label>كلمة سر الربط</label>
+            <div style="display:flex;gap:6px"><input type="password" id="setSyncKey" dir="ltr" autocomplete="new-password" style="flex:1">
+              <button type="button" class="btn btn-outline btn-sm" onclick="syncKeyShow()" title="إظهار/إخفاء" aria-label="إظهار أو إخفاء كلمة سر الربط"><i class="fas fa-eye" aria-hidden="true"></i></button>
+              <button type="button" class="btn btn-outline btn-sm" onclick="syncKeyGen()" title="توليد كلمة سر قوية" aria-label="توليد كلمة سر قوية"><i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i></button></div>
+            <small style="color:var(--muted)" id="syncKeyHint">كلمة سر واحدة تُكتب بنفس القيمة في النسختين، حتى لا تقبل الرئيسية بيانات من أي جهة أخرى.</small></div>
+        </div>
         <div id="syncStatusBox" style="font-size:.82rem;color:var(--muted);margin-top:8px"></div>
       </div>
       <button class="btn btn-primary" onclick="saveSettings()"><i class="fas fa-save" aria-hidden="true"></i> حفظ كل الإعدادات</button>
@@ -1042,7 +1056,7 @@
             <div class="form-group"><label>الأمان</label><select id="schSmtpSecurity" class="search-input"><option value="starttls">STARTTLS (587)</option><option value="ssl">SSL/TLS (465)</option><option value="none">بدون تشفير (خادم داخلي فقط)</option></select></div>
             <div class="form-group"><label>الاسم الظاهر للمرسل</label><input type="text" id="schSmtpSenderName" class="search-input" placeholder="نظام الحضور والانصراف"></div>
             <div class="form-group" style="grid-column:span 2"><label>بريد المرسل</label><input type="email" id="schSmtpSender" class="search-input" dir="ltr"></div>
-            <div class="form-group" style="grid-column:span 2"><label>اسم الدخول (اتركه فارغاً إن كان بريد المرسل نفسه)</label><input type="text" id="schSmtpUsername" class="search-input" dir="ltr"></div>
+            <div class="form-group" style="grid-column:span 2"><label>اسم الدخول (اتركه فارغاً إن كان نفس بريد المرسل)</label><input type="text" id="schSmtpUsername" class="search-input" dir="ltr"></div>
             <div class="form-group" style="grid-column:span 2"><label id="schPwLabel">كلمة المرور / كلمة مرور التطبيق</label><input type="password" id="schSmtpPassword" class="search-input" dir="ltr"></div>
           </div>
         </div>
@@ -1279,13 +1293,29 @@
 </div>
 
 <!-- Mobile bottom nav -->
-<div class="mobile-nav">
-  <div class="mobile-nav-items">
-    <button class="mobile-nav-item active" data-tab="dashboard" onclick="showTab('dashboard')"><i class="fas fa-chart-pie" aria-hidden="true"></i>الرئيسية</button>
-    <button class="mobile-nav-item" data-tab="mobile-moves" onclick="showTab('mobile-moves')"><i class="fas fa-satellite-dish" aria-hidden="true"></i>المتابعة</button>
-    <button class="mobile-nav-item" data-tab="reports" onclick="showTab('reports')"><i class="fas fa-table" aria-hidden="true"></i>التقارير</button>
-    <button class="mobile-nav-item" data-tab="employees" onclick="showTab('employees')"><i class="fas fa-users" aria-hidden="true"></i>الموظفون</button>
+<div class="mobile-nav" id="mobileNav" data-fav="{{ fav_tabs or '' }}">
+  <div class="mobile-nav-items" id="mobileNavItems">
     <button class="mobile-nav-item" onclick="toggleSidebar()"><i class="fas fa-bars" aria-hidden="true"></i>القائمة</button>
+  </div>
+</div>
+
+<!-- ===== تخصيص أزرار المفضلة (الشريط السفلي + أعلى القائمة الجانبية) ===== -->
+<div class="modal-overlay" id="favModal">
+  <div class="modal" style="max-width:560px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <div class="modal-title" style="margin:0"><i class="fas fa-star" aria-hidden="true" style="color:#e0a800"></i> تخصيص المفضلة</div>
+      <button class="btn btn-outline btn-sm" onclick="favClose()" aria-label="إغلاق">✕</button>
+    </div>
+    <p style="font-size:.85rem;color:var(--muted);margin:8px 0">اختر حتى 5 صفحات تظهر في الشريط السفلي على الهاتف وأعلى القائمة الجانبية على الكمبيوتر. رتّبها بالسهمين.</p>
+    <input type="search" id="favSearch" class="search-input" placeholder="بحث في الصفحات…" oninput="favRenderAll()" style="width:100%;margin-bottom:8px">
+    <div style="font-weight:700;margin:6px 0">المفضلة الحالية (<span id="favCount">0</span> من 5)</div>
+    <div id="favSel" class="fav-list"></div>
+    <div style="font-weight:700;margin:12px 0 6px">كل الصفحات (<span id="favAllCount">0</span>)</div>
+    <div id="favAll" class="fav-list" style="max-height:38vh;overflow:auto"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">
+      <button class="btn btn-outline btn-sm" onclick="favReset()">الافتراضي</button>
+      <button class="btn btn-primary btn-sm" onclick="favSave()"><i class="fas fa-check" aria-hidden="true"></i> حفظ</button>
+    </div>
   </div>
 </div>
 
