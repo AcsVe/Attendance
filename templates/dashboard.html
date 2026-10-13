@@ -70,6 +70,7 @@
       <div class="nav-group-items">
       <button class="nav-item" data-tab="employees" onclick="showTab('employees')"><i class="fas fa-users" aria-hidden="true"></i> الموظفون</button>
       <button class="nav-item" data-tab="mobile-accounts" onclick="showTab('mobile-accounts')"><i class="fas fa-mobile-screen" aria-hidden="true"></i> حسابات تطبيق الهاتف</button>
+      <button class="nav-item" data-tab="presence" onclick="showTab('presence')"><i class="fas fa-location-crosshairs" aria-hidden="true"></i> التحقق من التواجد</button>
       <button class="nav-item" data-tab="mobile-sites" onclick="showTab('mobile-sites')"><i class="fas fa-draw-polygon" aria-hidden="true"></i> مواقع العمل (النطاق الجغرافي)</button>
       </div>
     </div>
@@ -680,6 +681,8 @@
             <option value="mode:mobile">التوثيق: الهاتف فقط (سحابي)</option>
             <option value="mode:device">التوثيق: جهاز البصمة فقط</option>
             <option value="notify">إرسال إشعار</option>
+            <option value="presence:on">إضافة للتحقق من التواجد</option>
+            <option value="presence:off">إزالة من التحقق من التواجد</option>
           </select>
           <span id="empDeptCounts" style="font-size:.82rem;color:var(--muted)"></span>
         </div>
@@ -1013,23 +1016,27 @@
         <div class="card-title"><i class="fas fa-paper-plane" aria-hidden="true"></i> إعدادات إرسال البريد الإلكتروني</div>
         <div class="form-grid">
           <div class="form-group">
-            <label>طريقة الإرسال</label>
-            <select id="schEmailMethod" class="search-input" onchange="toggleEmailMethodBoxes()">
-              <option value="smtp">SMTP (اسم مستخدم/كلمة مرور تقليدية)</option>
-              <option value="graph">Microsoft Graph API (تطبيق مسجَّل بـ Entra ID)</option>
+            <label>مزوّد البريد</label>
+            <select id="schProvider" class="search-input" onchange="applyEmailProvider(true)">
+              <option value="microsoft">Microsoft 365 / Outlook — SMTP</option>
+              <option value="google">Google (Gmail / Google Workspace) — SMTP</option>
+              <option value="graph">Microsoft Graph API — تطبيق مسجَّل في Azure (Entra ID)</option>
+              <option value="custom">خادم SMTP آخر</option>
             </select>
+            <input type="hidden" id="schEmailMethod" value="smtp">
           </div>
         </div>
 
         <div id="schSmtpBox">
-          <p style="font-size:.85rem;color:var(--muted);margin:12px 0">
-            مثال Microsoft 365 / Exchange Online: smtp.office365.com المنفذ 587. ملاحظة: هذه مصادقة تقليدية (اسم مستخدم/كلمة مرور) وقد تحتاج "كلمة مرور تطبيق" بدل كلمة مرور الحساب العادية حسب سياسة مايكروسوفت - وبعض المستأجرين عطّلوا SMTP AUTH نهائياً، وحينها استخدم Graph API بدلاً منه.
-          </p>
+          <div id="schProviderHelp" style="font-size:.85rem;color:var(--muted);margin:12px 0;line-height:1.8;background:#f6fafb;border-radius:10px;padding:10px 12px"></div>
           <div class="form-grid quad">
-            <div class="form-group"><label>خادم SMTP</label><input type="text" id="schSmtpHost" class="search-input" placeholder="smtp.office365.com"></div>
+            <div class="form-group"><label>خادم SMTP</label><input type="text" id="schSmtpHost" class="search-input" dir="ltr" placeholder="smtp.office365.com"></div>
             <div class="form-group"><label>المنفذ (Port)</label><input type="number" id="schSmtpPort" class="search-input" value="587"></div>
-            <div class="form-group" style="grid-column:span 2"><label>بريد المرسل</label><input type="email" id="schSmtpSender" class="search-input"></div>
-            <div class="form-group" style="grid-column:span 2"><label>كلمة المرور / كلمة مرور التطبيق</label><input type="password" id="schSmtpPassword" class="search-input"></div>
+            <div class="form-group"><label>الأمان</label><select id="schSmtpSecurity" class="search-input"><option value="starttls">STARTTLS (587)</option><option value="ssl">SSL/TLS (465)</option><option value="none">بدون تشفير (خادم داخلي فقط)</option></select></div>
+            <div class="form-group"><label>الاسم الظاهر للمرسل</label><input type="text" id="schSmtpSenderName" class="search-input" placeholder="نظام الحضور والانصراف"></div>
+            <div class="form-group" style="grid-column:span 2"><label>بريد المرسل</label><input type="email" id="schSmtpSender" class="search-input" dir="ltr"></div>
+            <div class="form-group" style="grid-column:span 2"><label>اسم الدخول (اتركه فارغاً إن كان بريد المرسل نفسه)</label><input type="text" id="schSmtpUsername" class="search-input" dir="ltr"></div>
+            <div class="form-group" style="grid-column:span 2"><label id="schPwLabel">كلمة المرور / كلمة مرور التطبيق</label><input type="password" id="schSmtpPassword" class="search-input" dir="ltr"></div>
           </div>
         </div>
 

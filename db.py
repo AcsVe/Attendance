@@ -312,6 +312,57 @@ def init_db():
     for col in ('phone', 'email', 'job_title', 'notes'):
         if col not in emp_cols:
             cur.execute(f"ALTER TABLE employees ADD COLUMN {col} TEXT")
+    if 'presence_monitor' not in emp_cols:   # مراقبة الحضور أثناء الدوام لهذا الموظف (عند اختيار «موظفون محددون»)
+        cur.execute("ALTER TABLE employees ADD COLUMN presence_monitor INTEGER NOT NULL DEFAULT 0")
+    # ===== مراقبة الحضور أثناء الدوام: قراءات موقع دورية + تنبيهات + فحوص عشوائية =====
+    cur.execute('''CREATE TABLE IF NOT EXISTS presence_pings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id INTEGER NOT NULL,
+        date TEXT NOT NULL,
+        ts TEXT NOT NULL,
+        lat REAL, lng REAL, accuracy REAL,
+        inside INTEGER,              -- 1 داخل النطاق، 0 خارجه، NULL بلا موقع
+        distance_m REAL,
+        status TEXT NOT NULL DEFAULT 'ok'   -- ok / location_off / mock / exempt
+    )''')
+    cur.execute("CREATE INDEX IF NOT EXISTS ix_presence_pings_emp ON presence_pings(employee_id, date, ts)")
+    if 'source' not in {r['name'] for r in cur.execute("PRAGMA table_info(presence_pings)").fetchall()}:
+        cur.execute("ALTER TABLE presence_pings ADD COLUMN source TEXT NOT NULL DEFAULT 'app'")   # app (خلفية أندرويد) / web (الصفحة مفتوحة)
+    cur.execute('''CREATE TABLE IF NOT EXISTS presence_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id INTEGER NOT NULL,
+        name TEXT, dept TEXT,
+        date TEXT NOT NULL,
+        kind TEXT NOT NULL,          -- outside / no_location / no_signal / missed_check / failed_check
+        start_ts TEXT NOT NULL,
+        end_ts TEXT,
+        minutes INTEGER NOT NULL DEFAULT 0,
+        details TEXT,
+        open INTEGER NOT NULL DEFAULT 1
+    )''')
+    cur.execute("CREATE INDEX IF NOT EXISTS ix_presence_events_date ON presence_events(date)")
+    cur.execute('''CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id INTEGER NOT NULL,
+        endpoint TEXT UNIQUE NOT NULL,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now'))
+    )''')
+    if 'notified' not in {r['name'] for r in cur.execute("PRAGMA table_info(presence_checks)").fetchall()} and \
+            cur.execute("SELECT name FROM sqlite_master WHERE name = 'presence_checks'").fetchone():
+        cur.execute("ALTER TABLE presence_checks ADD COLUMN notified INTEGER NOT NULL DEFAULT 0")
+    cur.execute('''CREATE TABLE IF NOT EXISTS presence_checks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id INTEGER NOT NULL,
+        date TEXT NOT NULL,
+        due_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',   -- pending / confirmed / missed / outside
+        responded_at TEXT,
+        lat REAL, lng REAL, distance_m REAL,
+        notified INTEGER NOT NULL DEFAULT 0
+    )''')
     cur.execute('''CREATE TABLE IF NOT EXISTS geofence_overrides (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         employee_id INTEGER NOT NULL,
@@ -453,6 +504,10 @@ def get_all_settings():
         'smtp_sender_email': '',
         'smtp_sender_password': '',
         'smtp_recipients': '',
+        'smtp_provider': 'microsoft',     # google / microsoft / custom (قوالب جاهزة لإعدادات SMTP)
+        'smtp_security': 'starttls',      # starttls (587) / ssl (465) / none
+        'smtp_username': '',              # اسم الدخول إن اختلف عن بريد المرسل
+        'smtp_sender_name': '',           # الاسم الظاهر للمستلم
 
         # ===== إرسال عبر Microsoft Graph API (Client Credentials) - بديل
         # حديث لـ SMTP AUTH التقليدي، خصوصاً بعد تعطيل مايكروسوفت له
@@ -505,6 +560,13 @@ def get_all_settings():
         'mobile_require_geofence': '1',   # منع التسجيل خارج مواقع العمل
         'mobile_leave_deduct': '1',       # الخروج المؤقت يُخصم من ساعات العمل
         'mobile_require_app': '0',        # التسجيل من تطبيق الموظف (APK) فقط — لا من المتصفح
+        'presence_enabled': '0',          # مراقبة الحضور أثناء الدوام (تشغيل/إيقاف عام)
+        'presence_scope': 'selected',     # all = كل موظفي التطبيق، selected = المحددون فقط (أقسام و/أو موظفون)
+        'presence_depts_json': '[]',      # الأقسام المشمولة بالمراقبة عند «المحددون»
+        'presence_interval_min': '10',    # كل كم دقيقة يرسل تطبيق أندرويد الموقع
+        'presence_grace_min': '20',       # مدة البقاء خارج النطاق قبل التنبيه
+        'presence_checks_per_day': '0',   # فحوص حضور عشوائية يومياً (0 = بلا فحوص)
+        'presence_check_window_min': '10',  # مهلة الرد على الفحص
         'mobile_biometric': 'off',        # بصمة الوجه/الإصبع قبل كل حركة: off / optional / required
         'mobile_suspicious': 'flag',      # الحركة المشبوهة (موقع ثابت/قفزة/شبكة أخرى): flag = تُقبل مع علامة، reject = تُرفض
         'sync_central_url': '',

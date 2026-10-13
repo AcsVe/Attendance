@@ -125,7 +125,8 @@ def build_bilingual_email_body(rows, report_label_ar, report_label_en, org_name,
 
 
 def send_email(host, port, sender, password, recipients, subject, plain_body,
-               html_body=None, attachment_bytes=None, attachment_filename=None, use_tls=True):
+               html_body=None, attachment_bytes=None, attachment_filename=None, use_tls=True,
+               security=None, username=None, sender_name=None):
     """
     يرسل بريداً عبر SMTP. يرمي استثناء عند أي فشل (اتصال/مصادقة/إرسال) -
     على المستدعي التقاطه وتسجيله بسجل التشغيل، حتى لا تتوقف بقية مهام
@@ -136,7 +137,11 @@ def send_email(host, port, sender, password, recipients, subject, plain_body,
 
     msg = EmailMessage()
     msg['Subject'] = subject
-    msg['From'] = sender
+    if sender_name:
+        from email.utils import formataddr
+        msg['From'] = formataddr((sender_name, sender))
+    else:
+        msg['From'] = sender
     msg['To'] = ', '.join(recipients)
     msg.set_content(plain_body)
     if html_body:
@@ -145,10 +150,18 @@ def send_email(host, port, sender, password, recipients, subject, plain_body,
     if attachment_bytes is not None and attachment_filename:
         msg.add_attachment(attachment_bytes, maintype='application', subtype='pdf', filename=attachment_filename)
 
-    with smtplib.SMTP(host, int(port), timeout=30) as server:
-        if use_tls:
-            server.starttls()
-        server.login(sender, password)
+    # الأمان: starttls (المنفذ 587 — Microsoft 365 وGmail)، ssl (المنفذ 465)، none (خادم داخلي)
+    security = (security or ('starttls' if use_tls else 'none')).lower()
+    if security == 'ssl':
+        import ssl
+        server = smtplib.SMTP_SSL(host, int(port), timeout=30, context=ssl.create_default_context())
+    else:
+        server = smtplib.SMTP(host, int(port), timeout=30)
+    with server:
+        if security == 'starttls':
+            import ssl
+            server.starttls(context=ssl.create_default_context())
+        server.login(username or sender, password)
         server.send_message(msg)
 
 
@@ -173,4 +186,6 @@ def send_email_auto(settings, recipients, subject, plain_body, html_body=None,
             settings.get('smtp_host'), settings.get('smtp_port'), settings.get('smtp_sender_email'),
             settings.get('smtp_sender_password'), recipients, subject, plain_body, html_body,
             attachment_bytes, attachment_filename,
+            security=settings.get('smtp_security') or None, username=(settings.get('smtp_username') or '').strip() or None,
+            sender_name=(settings.get('smtp_sender_name') or '').strip() or None,
         )

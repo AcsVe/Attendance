@@ -142,6 +142,12 @@ def _record_run(conn, success, message):
 def _tick():
     """يُستدعى كل دقيقة من المجدول الخلفي - يتحقق هل حان وقت التشغيل
     المحدَّد بالإعدادات، وهل لم تُنفَّذ الجدولة اليوم مسبقاً بعد."""
+    # مراقبة الحضور أثناء الدوام: رصد الهواتف المنقطعة والفحوص الفائتة (مستقل عن التقرير المجدول)
+    try:
+        import mobile
+        mobile.presence_sweep()
+    except Exception:   # noqa: BLE001 — لا يعطّل بقية المهام
+        logger.exception('presence sweep failed')
     settings = db.get_all_settings()
     if settings.get('schedule_enabled') != '1':
         return

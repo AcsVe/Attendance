@@ -3,12 +3,14 @@
    يعتمد على: api() و toast() و escapeHtml() و toggleSelectAll() من app.js، و Leaflet للخرائط
    ===================================================================== */
 Object.assign(PAGE_TITLES, {
+  presence: 'التحقق من التواجد أثناء الدوام',
   'mobile-accounts': 'حسابات تطبيق الهاتف', 'mobile-sites': 'مواقع العمل (النطاق الجغرافي)', 'mobile-moves': 'المتابعة المباشرة وحركات الهاتف',
 });
 window.EXTRA_LOADERS = Object.assign(window.EXTRA_LOADERS || {}, {
   'mobile-accounts': () => { loadAccounts(); loadMobileSettings(); },
   'mobile-sites': () => { loadSites(); loadKiosks(); },
   'mobile-moves': () => { loadLive(); loadMoves(); },
+  presence: prLoad,
 });
 
 const OSM = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
@@ -84,11 +86,11 @@ async function maBulk(action) {
   const ids = maChecked();
   if (!ids.length) { toast('حدّد موظفاً واحداً على الأقل', true); return; }
   if (action === 'notify') { ecNotifyDialog(ids); return; }
-  if (action.startsWith('emp:') || action.startsWith('mode:')) {
+  if (action.startsWith('emp:') || action.startsWith('mode:') || action.startsWith('presence:')) {
     const [kind, value] = action.split(':');
     const label = document.querySelector(`#maMore option[value="${action}"]`).textContent;
     if (!confirm(`${label}؟\n(${ids.length} موظف)`)) return;
-    const d = await api('/api/mobile/employees/bulk', { method: 'POST', body: JSON.stringify({ ids, action: kind === 'emp' ? value : 'mode', value }) });
+    const d = await api('/api/mobile/employees/bulk', { method: 'POST', body: JSON.stringify({ ids, action: kind === 'emp' ? value : kind, value }) });
     if (!d) return;
     toast(`تم: ${d.count} موظف`);
     loadAccounts();
@@ -480,6 +482,9 @@ async function openEmployeeCard(id) {
         <option value="device">جهاز البصمة فقط — التطبيق لا يسجّل</option></select></div>
       <div class="form-group"><label>الحالة</label><select id="ecActive" class="search-input" ${can}><option value="1">فعّال</option><option value="0">معلّق (لا يدخل التطبيق ولا يظهر في المتابعة)</option></select></div>
       <div class="form-group"><label>ملاحظات</label><input type="text" id="ecNotes" value="${mEsc(e.notes || '')}" ${can}></div>
+      <div class="form-group"><label>التحقق من التواجد أثناء الدوام</label>
+        <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="ecPresence" ${e.presence_monitor ? 'checked' : ''} ${can}> مشمول بالاسم</label>
+        <small style="color:var(--muted)">${d.presence && d.presence.monitored ? '✓ مشمول حالياً' : (d.presence && !d.presence.enabled ? 'التحقق متوقف عموماً' : 'غير مشمول حالياً')}${d.presence && d.presence.scope === 'all' ? ' (الإعداد: كل الموظفين)' : ''}</small></div>
     </div>
     <button class="btn btn-primary" onclick="ecSave()" ${can}><i class="fas fa-save" aria-hidden="true"></i> حفظ</button>
     <div class="card" style="margin-top:14px;background:#f8fbfc">
@@ -505,6 +510,10 @@ async function openEmployeeCard(id) {
     <div class="table-wrap" style="max-height:260px;overflow:auto"><table><thead><tr><th>التاريخ</th><th>حضور</th><th>انصراف</th><th>الحالة</th><th>تأخير</th><th>ساعات</th></tr></thead><tbody>
       ${d.days.map(x => `<tr><td>${mEsc(x.date)}</td><td dir="ltr">${mEsc(x.time_in || '—')}</td><td dir="ltr">${mEsc(x.time_out || '—')}</td><td>${mEsc(x.status || '')}</td><td>${x.late_minutes || 0}</td><td>${x.working_hours || 0}</td></tr>`).join('') || '<tr><td colspan="6" style="color:var(--muted)">لا توجد بيانات محلّلة لهذا الشهر</td></tr>'}
     </tbody></table></div>
+    ${d.presence && d.presence.events && d.presence.events.length ? `<h4 style="margin:12px 0 6px;color:var(--primary-dark)">تنبيهات التواجد أثناء الدوام</h4>
+    <div class="table-wrap" style="max-height:220px;overflow:auto"><table><thead><tr><th>التاريخ</th><th>التنبيه</th><th>من</th><th>إلى</th><th>المدة</th></tr></thead><tbody>
+      ${d.presence.events.map(v => `<tr><td>${mEsc(v.date)}</td><td>${mEsc(v.kind_label)}</td><td dir="ltr">${mEsc((v.start_ts || '').slice(11, 16))}</td><td dir="ltr">${mEsc((v.end_ts || '').slice(11, 16))}</td><td>${v.minutes ? v.minutes + ' د' : '—'}</td></tr>`).join('')}
+    </tbody></table></div>` : ''}
     <h4 style="margin:12px 0 6px;color:var(--primary-dark)">آخر حركات الهاتف</h4>
     <div class="table-wrap" style="max-height:260px;overflow:auto"><table><thead><tr><th>التاريخ</th><th>الوقت</th><th>الحركة</th><th>الموقع</th><th>الحالة</th><th></th></tr></thead><tbody>
       ${d.moves.map(m => `<tr${m.status === 'rejected' ? ' style="background:#fff5f5"' : (m.flags ? ' style="background:#fffbeb"' : '')}><td>${mEsc(m.date)}</td><td dir="ltr">${mEsc(m.time.slice(0, 5))}</td><td>${mEsc(m.kind_label)}</td>
@@ -549,7 +558,8 @@ async function openEmployeeCard(id) {
 async function ecSave() {
   const e = ecData.employee;
   const body = { name: ec$('ecName').value.trim(), dept: ec$('ecDept').value.trim(), device_uid: ec$('ecUid').value.trim(), job_title: ec$('ecJob').value,
-    phone: ec$('ecPhone').value, email: ec$('ecEmail').value, notes: ec$('ecNotes').value, attendance_mode: ec$('ecMode').value, active: ec$('ecActive').value === '1' };
+    phone: ec$('ecPhone').value, email: ec$('ecEmail').value, notes: ec$('ecNotes').value, attendance_mode: ec$('ecMode').value, active: ec$('ecActive').value === '1',
+    presence_monitor: ec$('ecPresence').checked };
   if (body.name !== e.name && !confirm(`تغيير الاسم إلى «${body.name}»؟ ينتقل الاسم الجديد إلى كل سجلاته السابقة.`)) return;
   const d = await api('/api/mobile/employee/' + e.id, { method: 'PUT', body: JSON.stringify(body) });
   if (!d) return;
@@ -617,7 +627,7 @@ async function empBulkAction(action) {
   if (action === 'notify') { ecNotifyDialog(ids); return; }
   const [kind, value] = action.split(':');
   if (!confirm(`تطبيق الإجراء على ${ids.length} موظف؟`)) return;
-  const d = await api('/api/mobile/employees/bulk', { method: 'POST', body: JSON.stringify({ ids, action: kind === 'emp' ? value : 'mode', value }) });
+  const d = await api('/api/mobile/employees/bulk', { method: 'POST', body: JSON.stringify({ ids, action: kind === 'emp' ? value : kind, value }) });
   if (d) { toast(`تم: ${d.count} موظف`); loadEmployees(); }
 }
 
@@ -664,4 +674,150 @@ async function kioskBulk(action) {
   if (!confirm(`${labels[action]} — ${ids.length} جهاز؟`)) return;
   const d = await api('/api/kiosks/bulk', { method: 'POST', body: JSON.stringify({ ids, action }) });
   if (d) { toast('تم'); loadKiosks(); }
+}
+
+
+/* ================= التحقق من التواجد أثناء الدوام ================= */
+let prCfg = {}, prEmps = [], prDeptSet = new Set(), prEvRows = [], prKind = '';
+const PR_KIND_COLOR = { outside: '#c0392b', no_location: '#b45309', no_signal: '#6b7c7e', missed_check: '#8e44ad', failed_check: '#c0392b' };
+
+async function prLoad() {
+  const [st, acc] = await Promise.all([api('/api/mobile/settings'), api('/api/mobile/accounts')]);
+  if (!st || !acc) return;
+  prCfg = st.settings || {};
+  prEmps = acc.rows.filter(r => r.has_account);
+  try { prDeptSet = new Set(JSON.parse(prCfg.presence_depts_json || '[]')); } catch (e) { prDeptSet = new Set(); }
+  document.getElementById('prOn').checked = prCfg.presence_enabled === '1';
+  document.getElementById('prInterval').value = prCfg.presence_interval_min || 10;
+  document.getElementById('prGrace').value = prCfg.presence_grace_min || 20;
+  document.getElementById('prChecks').value = prCfg.presence_checks_per_day || '0';
+  document.getElementById('prWindow').value = prCfg.presence_check_window_min || 10;
+  document.querySelectorAll('input[name=prScope]').forEach(r => { r.checked = r.value === (prCfg.presence_scope || 'selected'); });
+  const f = document.getElementById('prFrom');
+  if (!f.value) { const t = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10); f.value = t; document.getElementById('prTo').value = t; }
+  prScopeUi(); prDeptsRender(); prRender(); prLive(); prEvents();
+}
+
+function prScope() { const r = document.querySelector('input[name=prScope]:checked'); return r ? r.value : 'selected'; }
+function prScopeUi() { document.getElementById('prSelBox').style.display = prScope() === 'all' ? 'none' : ''; prRender(); prStateText(); }
+
+function prCovered(e) {
+  if (!document.getElementById('prOn').checked) return [false, 'التحقق متوقف'];
+  if ((e.attendance_mode || 'both') === 'device') return [false, 'طريقة توثيقه: جهاز البصمة فقط'];
+  if (!e.active || !e.acc_active) return [false, 'الحساب موقوف'];
+  if (prScope() === 'all') return [true, 'كل الموظفين'];
+  if (e.presence_monitor) return [true, 'محدد بالاسم'];
+  if (prDeptSet.has(e.dept || '')) return [true, 'ضمن قسم محدد'];
+  return [false, ''];
+}
+
+function prStateText() {
+  const n = prEmps.filter(e => prCovered(e)[0]).length;
+  document.getElementById('prState').textContent = document.getElementById('prOn').checked
+    ? `مفعّل — يشمل ${n} من ${prEmps.length} موظفاً لديهم حساب تطبيق` : 'متوقف — لا يُتحقَّق من أي موظف';
+}
+
+function prDeptsRender() {
+  const counts = {};
+  prEmps.forEach(e => { const d = e.dept || ''; counts[d] = (counts[d] || 0) + 1; });
+  document.getElementById('prDepts').innerHTML = Object.keys(counts).sort().map(d => `<label style="display:flex;gap:6px;align-items:center;border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-weight:600;font-size:.85rem">
+    <input type="checkbox" class="pr-dept" value="${mEsc(d)}" ${prDeptSet.has(d) ? 'checked' : ''} onchange="prDeptToggle(this)"> ${mEsc(d || 'بدون قسم')} <b style="color:var(--muted)">${counts[d]}</b></label>`).join('')
+    || '<span style="color:var(--muted)">لا توجد أقسام</span>';
+}
+function prDeptToggle(cb) { cb.checked ? prDeptSet.add(cb.value) : prDeptSet.delete(cb.value); prRender(); prStateText(); }
+function prDeptAll(on) { document.querySelectorAll('.pr-dept').forEach(c => { c.checked = on; on ? prDeptSet.add(c.value) : prDeptSet.delete(c.value); }); prRender(); prStateText(); }
+
+function prRender() {
+  const q = (document.getElementById('prSearch').value || '').trim().toLowerCase(), flt = document.getElementById('prFilter').value;
+  const rows = prEmps.filter(e => {
+    const [on] = prCovered(e);
+    if (flt === 'on' && !on) return false;
+    if (flt === 'off' && on) return false;
+    return !q || (e.name + ' ' + (e.dept || '')).toLowerCase().includes(q);
+  });
+  document.getElementById('prTable').innerHTML = rows.map(e => { const [on, why] = prCovered(e); return `<tr>
+    <td><input type="checkbox" class="row-check" data-id="${e.id}" aria-label="تحديد"></td>
+    <td><a href="#" onclick="openEmployeeCard(${e.id});return false"><b>${mEsc(e.name)}</b></a></td><td>${mEsc(e.dept || '—')}</td>
+    <td>${on ? '<span class="badge badge-ontime">نعم</span>' : '<span class="badge badge-none">لا</span>'}</td><td><small>${mEsc(why)}</small></td></tr>`; }).join('')
+    || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:14px">لا يوجد موظفون مطابقون</td></tr>';
+  document.getElementById('prAll').checked = false;
+  document.getElementById('prSelCount').textContent = `${prEmps.filter(e => e.presence_monitor).length} محدد بالاسم · المعروض ${rows.length} من ${prEmps.length}`;
+}
+
+async function prBulk(v) {
+  const ids = Array.from(document.querySelectorAll('#prTable .row-check:checked')).map(c => +c.dataset.id);
+  if (!ids.length) { toast('حدّد موظفاً واحداً على الأقل', true); return; }
+  const d = await api('/api/mobile/employees/bulk', { method: 'POST', body: JSON.stringify({ ids, action: 'presence', value: v }) });
+  if (d) { toast(`تم: ${d.count} موظف`); prLoad(); }
+}
+
+async function prSave(quiet) {
+  const body = {
+    presence_enabled: document.getElementById('prOn').checked, presence_scope: prScope(),
+    presence_interval_min: document.getElementById('prInterval').value, presence_grace_min: document.getElementById('prGrace').value,
+    presence_checks_per_day: document.getElementById('prChecks').value, presence_check_window_min: document.getElementById('prWindow').value,
+    presence_depts_json: Array.from(prDeptSet),
+  };
+  if (body.presence_enabled && !quiet && !confirm('تفعيل التحقق من التواجد أثناء الدوام للموظفين المشمولين؟\nتأكّد من إعلامهم بالسياسة.')) return;
+  const d = await api('/api/mobile/settings', { method: 'POST', body: JSON.stringify(body) });
+  if (d) { toast(body.presence_enabled ? 'حُفظ — التحقق مفعّل' : 'حُفظ — التحقق متوقف'); prStateText(); prRender(); }
+}
+
+async function prLive() {
+  const d = await api('/api/mobile/presence/live');
+  if (!d) return;
+  const byId = Object.fromEntries(prEmps.map(e => [e.id, e]));
+  const ids = Object.keys(d.rows).map(Number).filter(id => byId[id]);
+  const label = r => {
+    if (r.open && r.open.includes('outside')) return ['#c0392b', 'خارج النطاق الآن'];
+    if (r.open && r.open.includes('no_location')) return ['#b45309', 'الموقع مطفأ/وهمي'];
+    if (r.stale || (r.open && r.open.includes('no_signal'))) return ['#6b7c7e', 'انقطعت الإشارة'];
+    if (r.status === 'exempt') return ['#1B6E8C', 'مستثنى (خروج مؤقت/استثناء)'];
+    if (r.inside === 1) return ['#1e8e5a', 'داخل النطاق'];
+    if (r.inside === 0) return ['#e67e22', 'خارج النطاق (ضمن المهلة)'];
+    return ['#9aa', '—'];
+  };
+  document.getElementById('prLiveTable').innerHTML = ids.map(id => { const r = d.rows[id], e = byId[id], [c, t] = label(r); return `<tr>
+    <td><a href="#" onclick="openEmployeeCard(${id});return false"><b>${mEsc(e.name)}</b></a></td><td>${mEsc(e.dept || '')}</td>
+    <td><span class="pr-dot" style="background:${c}"></span>${t}${r.distance != null && r.inside === 0 ? ` <small>(${Math.round(r.distance)} م)</small>` : ''}</td>
+    <td dir="ltr" style="text-align:right">${mEsc(r.last_ping || '—')}</td><td>${r.events || 0}</td></tr>`; }).join('')
+    || `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:14px">${d.enabled ? 'لا توجد قراءات اليوم بعد' : 'التحقق متوقف'}</td></tr>`;
+}
+
+function prParams() {
+  const p = new URLSearchParams({ from: document.getElementById('prFrom').value, to: document.getElementById('prTo').value });
+  if (prKind) p.set('kind', prKind);
+  return p;
+}
+async function prEvents() {
+  const d = await api('/api/mobile/presence/events?' + prParams());
+  if (!d) return;
+  prEvRows = d.rows;
+  const chip = (k, l, n) => `<button class="${prKind === k ? 'on' : ''}" onclick="prKind='${k}';prEvents()">${l} <b>${n}</b></button>`;
+  document.getElementById('prChips').innerHTML = chip('', 'الكل', d.total) + Object.entries(d.kinds).map(([k, l]) => chip(k, l, d.counts[k] || 0)).join('');
+  prEvRender();
+}
+function prEvRender() {
+  const q = (document.getElementById('prEvSearch').value || '').trim().toLowerCase();
+  const rows = prEvRows.filter(r => !q || [r.name, r.dept, r.kind_label, r.details].some(v => (v || '').toLowerCase().includes(q)));
+  document.getElementById('prEvTable').innerHTML = rows.map(r => `<tr>
+    <td><input type="checkbox" class="row-check" data-id="${r.id}" onchange="prEvCount()" aria-label="تحديد"></td>
+    <td>${mEsc(r.date)}</td><td><b>${mEsc(r.name || '')}</b></td><td>${mEsc(r.dept || '')}</td>
+    <td><span class="pr-dot" style="background:${PR_KIND_COLOR[r.kind] || '#999'}"></span>${mEsc(r.kind_label)}${r.open ? ' <span class="badge badge-late">جارٍ</span>' : ''}</td>
+    <td dir="ltr" style="text-align:right">${mEsc((r.start_ts || '').slice(11, 16))}</td><td dir="ltr" style="text-align:right">${mEsc((r.end_ts || '').slice(11, 16))}</td>
+    <td>${r.minutes ? r.minutes + ' د' : '—'}</td><td><small>${mEsc(r.details || '')}</small></td></tr>`).join('')
+    || '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:14px">لا توجد تنبيهات في هذه الفترة</td></tr>';
+  prEvCount();
+}
+function prEvCount() {
+  const n = document.querySelectorAll('#prEvTable .row-check:checked').length, all = document.querySelectorAll('#prEvTable .row-check').length;
+  document.getElementById('prEvSel').textContent = n ? `(${n} من ${all})` : '';
+}
+function prEvExport() { const p = prParams(); p.set('format', 'csv'); window.location.href = '/api/mobile/presence/events?' + p; }
+async function prEvDelete() {
+  const ids = Array.from(document.querySelectorAll('#prEvTable .row-check:checked')).filter(c => c.closest('tr').style.display !== 'none').map(c => +c.dataset.id);
+  if (!ids.length) { toast('حدّد تنبيهاً واحداً على الأقل', true); return; }
+  if (!confirm(`حذف ${ids.length} تنبيه؟`)) return;
+  const d = await api('/api/mobile/presence/events/delete', { method: 'POST', body: JSON.stringify({ ids }) });
+  if (d) { toast(`حُذف ${d.count}`); prEvents(); }
 }

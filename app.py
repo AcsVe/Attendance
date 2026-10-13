@@ -876,6 +876,7 @@ def api_overtime_export_csv():
 _SCHEDULE_KEYS = [
     'email_method',
     'smtp_host', 'smtp_port', 'smtp_sender_email', 'smtp_sender_password', 'smtp_recipients',
+    'smtp_provider', 'smtp_security', 'smtp_username', 'smtp_sender_name',
     'graph_tenant_id', 'graph_client_id', 'graph_client_secret', 'graph_sender_upn',
     'schedule_enabled', 'schedule_time', 'schedule_days_json', 'schedule_status_filter', 'schedule_pull_before',
 ]

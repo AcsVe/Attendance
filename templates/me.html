@@ -43,6 +43,17 @@
     <span class="muted">بدل كتابة اسم المستخدم وكلمة المرور كل مرة.</span>
     <div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-p" id="quickOn" style="flex:2">تفعيل الآن</button><button class="btn btn-l" id="quickLater" style="flex:1">لاحقاً</button></div>
   </div>
+  <div class="card hide" id="checkCard" role="alert" style="background:#fff4e5;border:2px solid #e8a33d;text-align:center">
+    <b style="font-size:1.1rem;color:#8a4b00"><i class="fas fa-bell" aria-hidden="true"></i> فحص الحضور</b>
+    <p style="margin:6px 0 10px">أكّد وجودك في موقع العمل خلال <b id="checkLeft">--:--</b></p>
+    <button class="btn btn-p" id="checkBtn" style="width:100%;padding:16px;font-size:1.1rem"><i class="fas fa-location-dot" aria-hidden="true"></i> تأكيد وجودي</button>
+  </div>
+  <div class="card hide" id="presenceInfo" style="background:#eef4f7;font-size:.85rem;line-height:1.7"></div>
+  <div class="card hide" id="pushCard" style="font-size:.88rem;line-height:1.7">
+    <b style="color:var(--pd)"><i class="fas fa-bell" aria-hidden="true"></i> تنبيهات فحص الحضور</b><br>
+    <span class="muted" id="pushText">فعّل التنبيهات ليصلك إشعار عند طلب تأكيد وجودك، حتى والتطبيق مغلق.</span>
+    <button class="btn btn-p" id="pushBtn" style="width:100%;margin-top:8px">تفعيل التنبيهات</button>
+  </div>
   <div class="card hide" id="ovBanner" style="background:#e6f1f6;color:var(--pd);font-weight:700;font-size:.9rem"></div>
 
   <div id="t-today">
@@ -184,10 +195,77 @@
       var ob = $('ovBanner'); ob.classList.toggle('hide', !d.override);
       if (d.override) ob.innerHTML = '<i class="fas fa-unlock" aria-hidden="true"></i> استثناء من الإدارة: يمكنك التسجيل من خارج موقع العمل حتى ' + esc(d.override.until) + (d.override.no_location ? ' (حتى بدون تحديد الموقع)' : '') + '<br><span class="muted">' + esc(d.override.reason) + '</span>';
       renderBio();
+      presenceSync();
       $('k-days').textContent = d.summary.days; $('k-late').textContent = d.summary.late_days; $('k-min').textContent = d.summary.late_minutes; $('k-abs').textContent = d.summary.absent; $('k-hours').textContent = d.summary.hours;
       render();
     });
   }
+  // ===== مراقبة الحضور أثناء الدوام =====
+  var webPingAt = 0, checkTimer = null;
+  function presenceSync() {
+    var p = S.presence || {}, info = $('presenceInfo');
+    // شفافية: يرى الموظف دائماً هل التحقق من وجوده مفعّل الآن
+    info.classList.toggle('hide', !p.active);
+    if (p.active) info.innerHTML = '<i class="fas fa-location-crosshairs" aria-hidden="true"></i> التحقق من وجودك في موقع العمل مفعّل من الإدارة أثناء الدوام فقط، ويتوقف عند الانصراف.'
+      + (p.leave ? '<br><span class="muted">خروج مؤقت مسجّل: لا تُحتسب مغادرتك حتى تسجّل العودة.</span>' : '')
+      + (NATIVE ? '' : '<br><span class="muted">على هذا الهاتف يُتحقَّق فقط والصفحة مفتوحة؛ قد تُطلب منك فحوص حضور.</span>');
+    if (NATIVE && NATIVE.presenceStart) {
+      var running = false; try { running = NATIVE.presenceRunning(); } catch (e) {}
+      if (p.active && !running) { try { NATIVE.presenceStart(p.interval_s || 600, Math.max(0, (p.end_ms || 0) - Date.now())); } catch (e) {} }
+      if (!p.active && running) { try { NATIVE.presenceStop(); } catch (e) {} }
+    } else if (p.active && POS && Date.now() - webPingAt > (p.interval_s || 600) * 1000) {
+      webPingAt = Date.now();
+      api('/me/api/presence/web-ping', { method: 'POST', body: JSON.stringify({ lat: POS.coords.latitude, lng: POS.coords.longitude, accuracy: POS.coords.accuracy }) }).catch(function () {});
+    }
+    pushUi(p);
+    var c = S.presence_check, card = $('checkCard');
+    card.classList.toggle('hide', !c);
+    clearInterval(checkTimer);
+    if (c) {
+      var end = Date.now() + c.seconds_left * 1000;
+      var upd = function () { var s = Math.max(0, Math.round((end - Date.now()) / 1000)); $('checkLeft').textContent = Math.floor(s / 60) + ':' + ('0' + s % 60).slice(-2); if (!s) { clearInterval(checkTimer); load(); } };
+      upd(); checkTimer = setInterval(upd, 1000);
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    }
+  }
+  /* إشعارات المتصفح: آيفون يتطلب فتح التطبيق من أيقونة الشاشة الرئيسية (iOS 16.4 أو أحدث) */
+  function pushSupported() { return !NATIVE && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window; }
+  function pushUi(p) {
+    var show = !!(p && p.monitored) && pushSupported() && Notification.permission !== 'granted';
+    var standaloneNeeded = /iPhone|iPad/.test(navigator.userAgent) && !navigator.standalone && !('PushManager' in window);
+    $('pushCard').classList.toggle('hide', !(show || (p && p.monitored && standaloneNeeded)));
+    if (standaloneNeeded) { $('pushText').textContent = 'لتصلك تنبيهات فحص الحضور على آيفون: أضف التطبيق إلى الشاشة الرئيسية وافتحه من الأيقونة.'; $('pushBtn').classList.add('hide'); }
+    if (pushSupported() && Notification.permission === 'granted') pushSubscribe(true);
+  }
+  function b64ToU8(s) { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; var r = atob(s), a = new Uint8Array(r.length); for (var i = 0; i < r.length; i++) a[i] = r.charCodeAt(i); return a; }
+  var pushDone = false;
+  function pushSubscribe(silent) {
+    if (pushDone) return Promise.resolve();
+    return navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(function () { return navigator.serviceWorker.ready; }).then(function (reg) {
+      return fetch('/me/api/push/key').then(function (r) { return r.json(); }).then(function (k) {
+        if (!k.ok) throw 'التنبيهات غير متاحة على الخادم';
+        return reg.pushManager.getSubscription().then(function (sub) { return sub || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToU8(k.key) }); });
+      });
+    }).then(function (sub) {
+      pushDone = true;
+      return api('/me/api/push/subscribe', { method: 'POST', body: JSON.stringify(sub.toJSON()) });
+    }).then(function () { if (!silent) toast('تم تفعيل التنبيهات', true); $('pushCard').classList.add('hide'); })
+      .catch(function (e) { if (!silent) toast(typeof e === 'string' ? e : 'تعذّر تفعيل التنبيهات'); });
+  }
+  $('pushBtn').addEventListener('click', function () {
+    Notification.requestPermission().then(function (perm) { if (perm === 'granted') pushSubscribe(false); else toast('لم يُسمح بالتنبيهات — يمكن تغييره من إعدادات الهاتف'); });
+  });
+
+  $('checkBtn').addEventListener('click', function () {
+    if (!POS) { toast('انتظر تحديد موقعك ثم أعد المحاولة'); return; }
+    var b = $('checkBtn'); b.disabled = true;
+    bioStep().then(function () {
+      return api('/me/api/presence/confirm', { method: 'POST', body: JSON.stringify({ lat: POS.coords.latitude, lng: POS.coords.longitude, accuracy: POS.coords.accuracy }) });
+    }).then(function (d) { toast(d.ok ? (d.message || 'تم') : (d.error || 'خطأ'), d.ok); load(); })
+      .catch(function (e) { toast(typeof e === 'string' ? e : 'تعذّر التأكيد'); })
+      .then(function () { b.disabled = false; });
+  });
+
   // ===== البصمة الحيوية =====
   function b2u(buf) { var s = ''; new Uint8Array(buf).forEach(function (c) { s += String.fromCharCode(c); }); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
   function u2b(s) { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; var b = atob(s), a = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); return a.buffer; }

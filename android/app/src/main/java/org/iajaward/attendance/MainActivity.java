@@ -60,6 +60,7 @@ public class MainActivity extends Activity {
     private static final int REQ_FILE = 12;
     private static final int REQ_STORAGE = 13;
     private static final int REQ_CONFIRM = 14;
+    private static final int REQ_NOTIF = 15;
 
     private WebView web;
     private LocationManager locationManager;
@@ -412,6 +413,29 @@ public class MainActivity extends Activity {
         /** عدّاد ثابت منذ تشغيل الهاتف بالمللي ثانية — لا يتأثر بتغيير الساعة (للساعة الموثوقة) */
         @JavascriptInterface
         public double elapsed() { return (double) SystemClock.elapsedRealtime(); }
+
+        /** تشغيل مراقبة الحضور في الخلفية (يطلبها النظام بعد الحضور إن فعّلتها الإدارة لهذا الموظف) */
+        @JavascriptInterface
+        public void presenceStart(double intervalS, double remainingMs) {
+            runOnUiThread(() -> {
+                if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED) {
+                    requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, REQ_NOTIF);
+                }
+                Intent i = new Intent(MainActivity.this, PresenceService.class);
+                i.putExtra(PresenceService.EXTRA_DEVICE, deviceId());
+                i.putExtra(PresenceService.EXTRA_INTERVAL, (long) intervalS);
+                i.putExtra(PresenceService.EXTRA_REMAINING, (long) remainingMs);
+                try {
+                    if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
+                } catch (Exception ignored) { }
+            });
+        }
+
+        @JavascriptInterface
+        public void presenceStop() { runOnUiThread(() -> stopService(new Intent(MainActivity.this, PresenceService.class))); }
+
+        @JavascriptInterface
+        public boolean presenceRunning() { return PresenceService.running; }
 
         /** الوقت الحالي محسوباً من وقت الأقمار الصناعية (آخر قراءة GPS) — 0 إن لم توجد قراءة منذ تشغيل الهاتف.
          *  لا يتأثر بساعة الهاتف، ويعمل دون إنترنت. */

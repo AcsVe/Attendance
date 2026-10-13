@@ -9,6 +9,12 @@
 .m-chips button.on{background:var(--primary);color:#fff;border-color:var(--primary)}.m-chips button.on b{background:rgba(255,255,255,.25)}
 .m-bulk{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:#fff8ec;border:1px solid #f0d9b5;border-radius:12px;padding:10px;margin-bottom:10px;position:sticky;top:0;z-index:5}
 .m-bulk select,.m-bulk input{width:auto;min-width:150px}
+.sw{position:relative;display:inline-block;width:52px;height:28px;flex:none}.sw input{opacity:0;width:0;height:0}
+.sw span{position:absolute;inset:0;background:#c9d4d8;border-radius:28px;transition:.2s;cursor:pointer}
+.sw span:before{content:"";position:absolute;width:22px;height:22px;inset-inline-start:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}
+.sw input:checked+span{background:var(--primary)}.sw input:checked+span:before{transform:translateX(24px)}
+[dir=rtl] .sw input:checked+span:before{transform:translateX(-24px)}
+.pr-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-inline-end:6px;vertical-align:middle}
 .m-map{height:380px;border-radius:12px;border:1px solid var(--border);margin-bottom:10px;z-index:1}
 .m-state{display:inline-block;border-radius:20px;padding:2px 10px;font-size:.78rem;font-weight:800}
 .m-st-in{background:#d1e7dd;color:#0a6640}.m-st-out{background:#e2e3e5;color:#41464b}.m-st-leave{background:#fff3cd;color:#856404}.m-st-none{background:#f8d7da;color:#842029}
@@ -51,6 +57,10 @@
           <option value="mode:mobile">طريقة التوثيق: الهاتف فقط (سحابي)</option>
           <option value="mode:device">طريقة التوثيق: جهاز البصمة فقط</option>
           <option value="notify">إرسال إشعار للمحددين…</option>
+        </optgroup>
+        <optgroup label="التحقق من التواجد أثناء الدوام">
+          <option value="presence:on">إضافة المحددين للتحقق من التواجد</option>
+          <option value="presence:off">إزالة المحددين من التحقق من التواجد</option>
         </optgroup>
       </select>
       <span style="border-inline-start:1px solid #e5cfa6;height:26px"></span>
@@ -144,6 +154,68 @@
 </div>
 
 <!-- ============ حركات الهاتف والمتابعة ============ -->
+<!-- ============ التحقق من التواجد أثناء الدوام ============ -->
+<div class="tab-panel" id="tab-presence">
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <label class="sw" title="تشغيل/إيقاف"><input type="checkbox" id="prOn" onchange="prSave(true)" aria-label="تفعيل التحقق من التواجد"><span></span></label>
+      <div style="flex:1;min-width:220px"><b style="font-size:1.05rem;color:var(--primary-dark)">التحقق من التواجد في موقع العمل أثناء الدوام</b>
+        <div id="prState" style="font-size:.85rem;color:var(--muted)"></div></div>
+    </div>
+    <p style="font-size:.84rem;color:var(--muted);line-height:1.8;margin:10px 0">
+      يعمل بعد تسجيل الحضور وحتى الانصراف أو نهاية دوام القسم فقط. <b>أندرويد:</b> يرسل التطبيق الموقع في الخلفية مع إشعار ظاهر للموظف.
+      <b>آيفون:</b> يُتحقَّق والصفحة مفتوحة، وتصل فحوص الحضور العشوائية. يُحفظ «داخل/خارج النطاق» والمدة فقط، ويرى الموظف أن التحقق مفعّل.
+      أعلِم الموظفين بالسياسة قبل التفعيل.</p>
+    <div class="form-grid quad">
+      <div class="form-group"><label>يرسل الموقع كل (دقيقة)</label><input type="number" id="prInterval" min="2" max="60"></div>
+      <div class="form-group"><label>تنبيه بعد البقاء خارج النطاق (دقيقة)</label><input type="number" id="prGrace" min="5" max="240"></div>
+      <div class="form-group"><label>فحوص حضور عشوائية يومياً</label><select id="prChecks"><option value="0">بلا فحوص</option><option>1</option><option>2</option><option>3</option></select></div>
+      <div class="form-group"><label>مهلة الرد على الفحص (دقيقة)</label><input type="number" id="prWindow" min="3" max="60"></div>
+    </div>
+    <div class="form-group"><label>من يشمله التحقق</label>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;font-weight:600">
+        <label style="display:flex;gap:6px;align-items:center"><input type="radio" name="prScope" value="all" onchange="prScopeUi()"> كل موظفي التطبيق</label>
+        <label style="display:flex;gap:6px;align-items:center"><input type="radio" name="prScope" value="selected" onchange="prScopeUi()"> أقسام وموظفون محددون</label>
+      </div></div>
+    <div id="prSelBox">
+      <div class="form-group"><label>الأقسام المشمولة (يشمل من يُضاف إليها لاحقاً) <a href="#" onclick="prDeptAll(true);return false">تحديد الكل</a> · <a href="#" onclick="prDeptAll(false);return false">إلغاء</a></label>
+        <div id="prDepts" style="display:flex;flex-wrap:wrap;gap:8px"></div></div>
+      <div class="form-group" style="margin-bottom:0"><label>موظفون محددون: <span id="prSelCount"></span></label></div>
+      <div class="m-bulk" style="position:static">
+        <input type="search" id="prSearch" class="search-input" placeholder="بحث فوري…" oninput="prRender()">
+        <select id="prFilter" class="search-input" onchange="prRender()"><option value="">الكل</option><option value="on">المشمولون</option><option value="off">غير المشمولين</option></select>
+        <button class="btn btn-primary btn-sm" onclick="prBulk('on')">إضافة المحددين</button>
+        <button class="btn btn-outline btn-sm" onclick="prBulk('off')">إزالة المحددين</button>
+      </div>
+      <div class="table-wrap" style="max-height:340px"><table>
+        <thead><tr><th class="no-filter"><input type="checkbox" id="prAll" aria-label="تحديد الكل" onchange="toggleSelectAll('prTable', this.checked)"></th><th>الموظف</th><th>القسم</th><th>مشمول</th><th>السبب</th></tr></thead>
+        <tbody id="prTable"></tbody></table></div>
+    </div>
+    <button class="btn btn-primary" style="margin-top:12px" onclick="prSave()"><i class="fas fa-save" aria-hidden="true"></i> حفظ الإعدادات</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><i class="fas fa-satellite-dish" aria-hidden="true"></i> اليوم الآن <button class="btn btn-outline btn-sm" style="margin-inline-start:auto" onclick="prLive()">تحديث</button></div>
+    <div class="table-wrap" style="max-height:360px"><table>
+      <thead><tr><th>الموظف</th><th>القسم</th><th>الحالة</th><th>آخر قراءة</th><th>تنبيهات اليوم</th></tr></thead>
+      <tbody id="prLiveTable"></tbody></table></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i> سجل التنبيهات</div>
+    <div class="m-bulk" style="position:static">
+      <input type="date" id="prFrom" class="search-input" onchange="prEvents()"><input type="date" id="prTo" class="search-input" onchange="prEvents()">
+      <input type="search" id="prEvSearch" class="search-input" placeholder="بحث فوري…" oninput="prEvRender()">
+      <button class="btn btn-outline btn-sm" onclick="prEvExport()"><i class="fas fa-file-csv" aria-hidden="true"></i> CSV</button>
+      <button class="btn btn-red btn-sm" onclick="prEvDelete()"><i class="fas fa-trash" aria-hidden="true"></i> حذف المحدد <span id="prEvSel"></span></button>
+    </div>
+    <div class="m-chips" id="prChips"></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th class="no-filter"><input type="checkbox" aria-label="تحديد الكل" onchange="toggleSelectAll('prEvTable', this.checked); prEvCount()"></th><th>التاريخ</th><th>الموظف</th><th>القسم</th><th>التنبيه</th><th>من</th><th>إلى</th><th>المدة</th><th>التفاصيل</th></tr></thead>
+      <tbody id="prEvTable"></tbody></table></div>
+  </div>
+</div>
+
 <div class="tab-panel" id="tab-mobile-moves">
   <div class="card">
     <div class="card-title"><i class="fas fa-satellite" aria-hidden="true"></i> المتابعة المباشرة — اليوم <span id="liveDate" style="font-weight:600;color:var(--muted)"></span>

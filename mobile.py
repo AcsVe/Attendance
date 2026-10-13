@@ -21,7 +21,7 @@ import time
 from datetime import datetime, timedelta
 from functools import wraps
 
-from flask import Blueprint, jsonify, redirect, render_template, request, send_file, session, url_for
+from flask import Blueprint, Response, jsonify, redirect, render_template, request, send_file, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import db
@@ -627,6 +627,7 @@ def me_status(conn, acc, emp, cfg):
         'override': {'until': ov['ends_at'], 'reason': ov['reason'], 'no_location': bool(ov['no_location'])} if ov else None,
         'notifications': notes, 'unread': sum(1 for n in notes if not n['read_at']),
         'biometric': cfg.get('mobile_biometric', 'off'), 'bio_enrolled': creds > 0, 'webauthn': _webauthn_ready(),
+        'presence': presence_state(conn, emp, acc, cfg), 'presence_check': presence_check_for(conn, emp, acc, cfg),
         'ok': True, 'now': now.strftime('%Y-%m-%d %H:%M:%S'), 'date': d,
         'name': emp['name'], 'dept': emp['dept'] or '',
         'enabled': cfg.get('mobile_enabled', '1') == '1',
@@ -817,7 +818,7 @@ def api_accounts():
 
         today = now_local().strftime('%Y-%m-%d')
         rows = []
-        q = """SELECT e.id, e.name, e.dept, e.device_uid, e.active, e.attendance_mode, a.username, a.active AS acc_active, a.anywhere,
+        q = """SELECT e.id, e.name, e.dept, e.device_uid, e.active, e.attendance_mode, e.presence_monitor, a.username, a.active AS acc_active, a.anywhere,
                       a.device_label, a.bound_at, a.last_login_at, a.id AS acc_id
                FROM employees e LEFT JOIN employee_accounts a ON a.employee_id = e.id ORDER BY e.dept, e.name"""
         last = {r['employee_id']: dict(r) for r in conn.execute(
@@ -989,7 +990,9 @@ def api_site_edit(site_id):
 @admin_required
 def api_mobile_settings():
     keys = ('mobile_enabled', 'mobile_bind_device', 'mobile_max_accuracy', 'mobile_require_geofence', 'mobile_leave_deduct',
-            'mobile_require_app', 'mobile_suspicious', 'mobile_biometric')
+            'mobile_require_app', 'mobile_suspicious', 'mobile_biometric',
+            'presence_enabled', 'presence_scope', 'presence_interval_min', 'presence_grace_min',
+            'presence_checks_per_day', 'presence_check_window_min', 'presence_depts_json')
     if request.method == 'POST':
         data = request.get_json(silent=True) or {}
         old, changed = settings(), []
@@ -1000,12 +1003,21 @@ def api_mobile_settings():
                     v = 'reject' if v == 'reject' else 'flag'
                 elif k == 'mobile_biometric':
                     v = v if v in ('off', 'optional', 'required') else 'off'
+                elif k == 'presence_scope':
+                    v = 'all' if v == 'all' else 'selected'
+                elif k == 'presence_depts_json':
+                    v = json.dumps([str(x) for x in (v if isinstance(v, list) else [])][:200], ensure_ascii=False)
+                elif k in ('presence_interval_min', 'presence_grace_min', 'presence_checks_per_day', 'presence_check_window_min'):
+                    try:
+                        v = str(max(0, min(240, int(float(v)))))
+                    except (TypeError, ValueError):
+                        continue
                 elif k == 'mobile_max_accuracy':
                     try:
                         v = str(max(10, min(1000, int(float(v)))))
                     except (TypeError, ValueError):
                         continue
-                elif k not in ('mobile_suspicious', 'mobile_biometric'):
+                elif k not in ('mobile_suspicious', 'mobile_biometric', 'presence_scope', 'presence_depts_json'):
                     v = '1' if v in (True, 1, '1', 'true', 'on') else '0'
                 if str(old.get(k, '')) != str(v):
                     changed.append(f"{k}: {old.get(k, '')} → {v}")
@@ -1409,6 +1421,10 @@ def api_employee_card(emp_id):
         return jsonify({'ok': True, 'employee': dict(emp), 'account': dict(acc) if acc else None, 'days': days, 'moves': moves,
                         'overrides': overrides, 'notifications': notes, 'sources': sources, 'audit': audit,
                         'bio': conn.execute("SELECT COUNT(*) FROM webauthn_credentials WHERE employee_id = ?", (emp_id,)).fetchone()[0],
+                        'presence': {'monitored': presence_monitored(settings(), emp), 'enabled': _pcfg(settings())['enabled'],
+                                     'scope': _pcfg(settings())['scope'],
+                                     'events': [dict(r, kind_label=PRESENCE_KINDS.get(r['kind'], r['kind'])) for r in conn.execute(
+                                         "SELECT * FROM presence_events WHERE employee_id = ? ORDER BY start_ts DESC LIMIT 60", (emp_id,))]},
                         'summary': {'days': sum(1 for x in days if x['time_in']),
                                     'late_days': sum(1 for x in days if (x['late_minutes'] or 0) > 0),
                                     'late_minutes': sum(int(x['late_minutes'] or 0) for x in days),
@@ -1443,9 +1459,10 @@ def api_employee_update(emp_id):
             'phone': (d.get('phone', emp['phone']) or '').strip()[:40],
             'email': (d.get('email', emp['email']) or '').strip()[:120],
             'notes': (d.get('notes', emp['notes']) or '').strip()[:2000],
+            'presence_monitor': 1 if d.get('presence_monitor', emp['presence_monitor']) else 0,
         }
         conn.execute("UPDATE employees SET name = ?, dept = ?, device_uid = ?, active = ?, attendance_mode = ?, job_title = ?, "
-                     "phone = ?, email = ?, notes = ?, synced = 0 WHERE id = ?", (*fields.values(), emp_id))
+                     "phone = ?, email = ?, notes = ?, presence_monitor = ?, synced = 0 WHERE id = ?", (*fields.values(), emp_id))
         changed = [k for k in fields if str(fields[k] or '') != str(emp[k] or '')]
         if name != emp['name']:   # تغيير الاسم ينتقل إلى كل السجلات المرتبطة به
             tables = {r['name'] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
@@ -1546,6 +1563,8 @@ def api_employees_bulk():
                 conn.execute("UPDATE employees SET active = 1, synced = 0 WHERE id = ?", (e['id'],))
             elif action == 'mode' and value in ('device', 'mobile', 'both'):
                 conn.execute("UPDATE employees SET attendance_mode = ? WHERE id = ?", (value, e['id']))
+            elif action == 'presence' and value in ('on', 'off'):
+                conn.execute("UPDATE employees SET presence_monitor = ? WHERE id = ?", (1 if value == 'on' else 0, e['id']))
             else:
                 return jsonify({'ok': False, 'error': 'إجراء غير معروف'}), 400
             _audit_emp(conn, f'employees_{action}', 'employee', e['name'], value or '')
@@ -1808,5 +1827,508 @@ def kiosk_scans():
         if touched:
             schedule_analysis(2)
         return jsonify({'ok': True, 'results': results, 'server_ms': int(time.time() * 1000)})
+    finally:
+        conn.close()
+
+
+# =====================================================
+#   مراقبة الحضور أثناء الدوام
+#   - تطبيق أندرويد يرسل الموقع في الخلفية كل N دقيقة بعد الحضور وحتى الانصراف/نهاية الدوام
+#   - فحوص حضور عشوائية (لكل الهواتف): تأكيد الوجود خلال مهلة قصيرة
+#   - التنبيهات: خارج النطاق، الموقع مطفأ، انقطاع الإشارة، فحص فائت/خارج النطاق
+# =====================================================
+PRESENCE_KINDS = {
+    'outside': 'خارج نطاق العمل أثناء الدوام', 'no_location': 'الموقع مطفأ أو وهمي أثناء الدوام',
+    'no_signal': 'انقطاع إشارة الهاتف أثناء الدوام', 'missed_check': 'لم يردّ على فحص الحضور',
+    'failed_check': 'ردّ على فحص الحضور من خارج النطاق',
+}
+
+
+def _pcfg(cfg):
+    def num(k, d, lo, hi):
+        try:
+            return max(lo, min(hi, int(float(cfg.get(k) or d))))
+        except (TypeError, ValueError):
+            return d
+    try:
+        depts = set(json.loads(cfg.get('presence_depts_json') or '[]'))
+    except ValueError:
+        depts = set()
+    return {'enabled': cfg.get('presence_enabled', '0') == '1', 'scope': cfg.get('presence_scope', 'selected'), 'depts': depts,
+            'interval': num('presence_interval_min', 10, 2, 60), 'grace': num('presence_grace_min', 20, 5, 240),
+            'checks': num('presence_checks_per_day', 0, 0, 5), 'window': num('presence_check_window_min', 10, 3, 60)}
+
+
+def presence_monitored(cfg, emp, acc=None):
+    p = _pcfg(cfg)
+    if not p['enabled'] or not emp or not emp['active'] or (acc is not None and not acc['active']):
+        return False
+    if (emp['attendance_mode'] or 'both') == 'device':
+        return False
+    # الكل، أو موظف محدد، أو موظف في قسم محدد (يشمل من يُضاف للقسم لاحقاً)
+    return p['scope'] == 'all' or bool(emp['presence_monitor']) or (emp['dept'] or '') in p['depts']
+
+
+def _work_end(conn, emp, cfg, now):
+    row = conn.execute("SELECT departure_time FROM dept_attendance_settings WHERE dept = ?", (emp['dept'] or '',)).fetchone()
+    t = (row['departure_time'] if row and row['departure_time'] else '') or cfg.get('departure_time') or '15:00'
+    try:
+        h, m = [int(x) for x in t.split(':')[:2]]
+    except ValueError:
+        h, m = 15, 0
+    return now.replace(hour=h, minute=m, second=0, microsecond=0)
+
+
+def _duty(conn, emp, now):
+    """('on' | 'leave' | 'off', وقت الحضور) حسب حركات اليوم (التطبيق وجهاز المدخل)"""
+    moves = today_moves(conn, emp['id'], now.strftime('%Y-%m-%d'))
+    if not moves:
+        return 'off', None
+    first_in = next((m['time'] for m in moves if m['kind'] == 'in'), None)
+    last = moves[-1]['kind']
+    return ('off' if last == 'out' else 'leave' if last == 'leave_out' else 'on'), first_in
+
+
+def presence_state(conn, emp, acc, cfg, now=None):
+    now = now or now_local()
+    p = _pcfg(cfg)
+    st = {'active': False, 'interval_s': p['interval'] * 60, 'end_ms': 0, 'reason': '', 'monitored': presence_monitored(cfg, emp, acc)}
+    if not st['monitored']:
+        st['reason'] = 'disabled'
+        return st
+    duty, _ = _duty(conn, emp, now)
+    end = _work_end(conn, emp, cfg, now) + timedelta(minutes=15)
+    st['end_ms'] = int(time.time() * 1000 + (end - now).total_seconds() * 1000)
+    if duty == 'off' or now > end:
+        st['reason'] = 'off_duty'
+        return st
+    st['active'] = True
+    st['leave'] = duty == 'leave'
+    return st
+
+
+def _exempt(conn, emp, acc, cfg, now):
+    if acc['anywhere'] or cfg.get('mobile_require_geofence', '1') != '1':
+        return 'يسجّل من أي مكان'
+    if active_override(conn, emp['id']):
+        return 'استثناء موقع ساري'
+    if _duty(conn, emp, now)[0] == 'leave':
+        return 'خروج مؤقت مسجّل'
+    return ''
+
+
+def _inside(conn, emp, lat, lng, accuracy):
+    best = None
+    for s in sites_for(conn, emp['dept']):
+        d = haversine_m(lat, lng, s['lat'], s['lng'])
+        slack = min(accuracy or 0, 50)
+        margin = d - slack - s['radius_m']
+        if best is None or margin < best[0]:
+            best = (margin, d, s)
+    if best is None:
+        return None, None, None
+    return (1 if best[0] <= 0 else 0), best[1], best[2]
+
+
+def _event_upsert(conn, emp, date, kind, start_ts, end_ts, details=''):
+    ev = conn.execute("SELECT * FROM presence_events WHERE employee_id = ? AND date = ? AND kind = ? AND open = 1 ORDER BY id DESC LIMIT 1",
+                      (emp['id'], date, kind)).fetchone()
+    mins = int((datetime.strptime(end_ts, '%Y-%m-%d %H:%M:%S') - datetime.strptime(start_ts, '%Y-%m-%d %H:%M:%S')).total_seconds() // 60)
+    if ev:
+        conn.execute("UPDATE presence_events SET end_ts = ?, minutes = ?, details = COALESCE(NULLIF(?, ''), details) WHERE id = ?",
+                     (end_ts, max(mins, 0), details, ev['id']))
+    else:
+        conn.execute("INSERT INTO presence_events (employee_id, name, dept, date, kind, start_ts, end_ts, minutes, details, open) "
+                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)", (emp['id'], emp['name'], emp['dept'] or '', date, kind, start_ts, end_ts, max(mins, 0), details))
+
+
+def _close_events(conn, emp, date, kinds):
+    conn.execute(f"UPDATE presence_events SET open = 0 WHERE employee_id = ? AND date = ? AND open = 1 AND kind IN ({','.join('?' * len(kinds))})",
+                 [emp['id'], date] + list(kinds))
+
+
+def record_ping(conn, emp, acc, cfg, lat, lng, accuracy, status, now=None, source='app'):
+    """يحفظ قراءة موقع ويحدّث التنبيهات. يرجع (داخل؟، المسافة)"""
+    now = now or now_local()
+    p = _pcfg(cfg)
+    date, ts = now.strftime('%Y-%m-%d'), now.strftime('%Y-%m-%d %H:%M:%S')
+    # انقطاع الإشارة يُقاس بين قراءات الخلفية (أندرويد) فقط؛ صفحة المتصفح لا ترسل إلا وهي مفتوحة
+    prev = conn.execute("SELECT ts FROM presence_pings WHERE employee_id = ? AND date = ? AND source = 'app' ORDER BY ts DESC, id DESC LIMIT 1",
+                        (emp['id'], date)).fetchone() if source == 'app' else None
+    exempt = _exempt(conn, emp, acc, cfg, now)
+    inside, dist = None, None
+    if status == 'ok' and lat is not None and lng is not None:
+        inside, dist, _site = _inside(conn, emp, lat, lng, accuracy)
+    if exempt and status == 'ok':
+        status = 'exempt'
+    conn.execute("INSERT INTO presence_pings (employee_id, date, ts, lat, lng, accuracy, inside, distance_m, status, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                 (emp['id'], date, ts, lat, lng, accuracy, inside, round(dist, 1) if dist is not None else None, status, source))
+    # 1) انقطاع الإشارة: فجوة طويلة بين قراءتين
+    open_ns = conn.execute("SELECT id, start_ts FROM presence_events WHERE employee_id = ? AND date = ? AND kind = 'no_signal' AND open = 1",
+                           (emp['id'], date)).fetchone() if source == 'app' else None
+    if open_ns:      # عادت الإشارة بعد انقطاع رصده الفحص الدوري: نغلق التنبيه بمدته الفعلية
+        mins = int((now - datetime.strptime(open_ns['start_ts'], '%Y-%m-%d %H:%M:%S')).total_seconds() // 60)
+        conn.execute("UPDATE presence_events SET end_ts = ?, minutes = ?, open = 0 WHERE id = ?", (ts, mins, open_ns['id']))
+    elif prev:
+        gap = (now - datetime.strptime(prev['ts'], '%Y-%m-%d %H:%M:%S')).total_seconds() / 60
+        if gap >= max(p['grace'], p['interval'] * 3):
+            conn.execute("INSERT INTO presence_events (employee_id, name, dept, date, kind, start_ts, end_ts, minutes, details, open) "
+                         "VALUES (?, ?, ?, ?, 'no_signal', ?, ?, ?, ?, 0)",
+                         (emp['id'], emp['name'], emp['dept'] or '', date, prev['ts'], ts, int(gap), 'لم تصل قراءات من الهاتف (مطفأ، بلا إنترنت، أو أُغلق التطبيق)'))
+    # 2) سلسلة القراءات «السيئة» الحالية: خارج النطاق أو بلا موقع
+    bad = 'outside' if (status == 'ok' and inside == 0) else 'no_location' if status in ('location_off', 'mock') else None
+    if not bad:
+        _close_events(conn, emp, date, ('outside', 'no_location'))
+        return inside, dist
+    rows = conn.execute("SELECT ts, inside, status FROM presence_pings WHERE employee_id = ? AND date = ? ORDER BY ts DESC, id DESC LIMIT 500",
+                        (emp['id'], date)).fetchall()
+    start = ts
+    for r in rows:
+        k = 'outside' if (r['status'] == 'ok' and r['inside'] == 0) else 'no_location' if r['status'] in ('location_off', 'mock') else None
+        if k != bad:
+            break
+        start = r['ts']
+    if (now - datetime.strptime(start, '%Y-%m-%d %H:%M:%S')).total_seconds() / 60 >= p['grace']:
+        det = f'آخر مسافة عن موقع العمل: {int(dist)} م' if (bad == 'outside' and dist is not None) else ('موقع وهمي' if status == 'mock' else 'خدمة الموقع مطفأة')
+        _event_upsert(conn, emp, date, bad, start, ts, det)
+    return inside, dist
+
+
+def _schedule_checks(conn, emp, cfg, now):
+    p = _pcfg(cfg)
+    date = now.strftime('%Y-%m-%d')
+    if p['checks'] <= 0 or conn.execute("SELECT 1 FROM presence_checks WHERE employee_id = ? AND date = ?", (emp['id'], date)).fetchone():
+        return
+    duty, first_in = _duty(conn, emp, now)
+    if duty == 'off' or not first_in:
+        return
+    start = max(now + timedelta(minutes=10), datetime.strptime(f'{date} {first_in[:8]}', '%Y-%m-%d %H:%M:%S') + timedelta(minutes=30))
+    end = _work_end(conn, emp, cfg, now) - timedelta(minutes=p['window'] + 10)
+    span = (end - start).total_seconds()
+    if span < 600:
+        return
+    import random
+    rnd = random.SystemRandom()
+    for off in sorted(rnd.uniform(0, span) for _ in range(p['checks'])):
+        due = start + timedelta(seconds=off)
+        conn.execute("INSERT INTO presence_checks (employee_id, date, due_at, expires_at) VALUES (?, ?, ?, ?)",
+                     (emp['id'], date, due.strftime('%Y-%m-%d %H:%M:%S'), (due + timedelta(minutes=p['window'])).strftime('%Y-%m-%d %H:%M:%S')))
+
+
+def _expire_checks(conn, now, emp_id=None):
+    ts = now.strftime('%Y-%m-%d %H:%M:%S')
+    q = "SELECT c.*, e.name, e.dept FROM presence_checks c JOIN employees e ON e.id = c.employee_id WHERE c.status = 'pending' AND c.expires_at < ?"
+    params = [ts]
+    if emp_id:
+        q += " AND c.employee_id = ?"
+        params.append(emp_id)
+    for c in conn.execute(q, params).fetchall():
+        # فحص فات وقته بعد انصراف الموظف لا يُحتسب
+        out_time = conn.execute("SELECT MIN(time) FROM mobile_punches WHERE employee_id = ? AND date = ? AND kind = 'out' AND status = 'accepted' "
+                                "AND time >= ?", (c['employee_id'], c['date'], c['due_at'][11:19])).fetchone()[0]
+        if out_time and out_time <= c['expires_at'][11:19]:
+            conn.execute("UPDATE presence_checks SET status = 'cancelled' WHERE id = ?", (c['id'],))
+            continue
+        conn.execute("UPDATE presence_checks SET status = 'missed' WHERE id = ?", (c['id'],))
+        conn.execute("INSERT INTO presence_events (employee_id, name, dept, date, kind, start_ts, end_ts, minutes, details, open) "
+                     "VALUES (?, ?, ?, ?, 'missed_check', ?, ?, 0, ?, 0)",
+                     (c['employee_id'], c['name'], c['dept'] or '', c['date'], c['due_at'], c['expires_at'], 'لم يؤكد وجوده خلال المهلة'))
+
+
+def presence_check_for(conn, emp, acc, cfg, now=None):
+    """الفحص المطلوب الآن من هذا الموظف (أو None)"""
+    now = now or now_local()
+    if not presence_monitored(cfg, emp, acc):
+        return None
+    _schedule_checks(conn, emp, cfg, now)
+    _expire_checks(conn, now, emp['id'])
+    ts = now.strftime('%Y-%m-%d %H:%M:%S')
+    c = conn.execute("SELECT * FROM presence_checks WHERE employee_id = ? AND status = 'pending' AND due_at <= ? AND expires_at >= ? ORDER BY due_at LIMIT 1",
+                     (emp['id'], ts, ts)).fetchone()
+    conn.commit()
+    if not c:
+        return None
+    left = int((datetime.strptime(c['expires_at'], '%Y-%m-%d %H:%M:%S') - now).total_seconds())
+    return {'id': c['id'], 'expires_at': c['expires_at'], 'seconds_left': max(left, 0)}
+
+
+@bp.route('/me/api/presence/ping', methods=['POST'])
+def me_presence_ping():
+    """قراءة موقع من خدمة الخلفية في تطبيق أندرويد (بدون جلسة: رمز الهاتف + توقيع التطبيق)"""
+    import hashlib as _h
+    import hmac as _hm
+    raw = request.get_data() or b''
+    ts = request.headers.get('X-App-Ts', '')
+    good = _hm.new(APP_KEY.encode(), raw + b'|' + ts.encode(), _h.sha256).hexdigest()
+    try:
+        fresh = abs(time.time() * 1000 - float(ts)) < 600000
+    except ValueError:
+        fresh = False
+    if not (fresh and _hm.compare_digest(good, request.headers.get('X-App-Sig', ''))):
+        return jsonify({'ok': False, 'continue': False, 'error': 'توقيع غير صحيح'}), 403
+    d = json.loads(raw.decode('utf-8') or '{}')
+    conn = db.get_db()
+    try:
+        acc, emp, _t = _quick_account(conn, (d.get('device') or request.headers.get('X-Device') or '').strip())
+        if not acc:
+            return jsonify({'ok': False, 'continue': False, 'error': 'الهاتف غير مرتبط بحساب'}), 401
+        cfg = settings()
+        now = now_local()
+        st = presence_state(conn, emp, acc, cfg, now)
+        if not st['active']:
+            return jsonify({'ok': True, 'continue': False, 'reason': st['reason']})
+        lat, lng, accu = d.get('lat'), d.get('lng'), d.get('accuracy')
+        status = 'mock' if d.get('mock') else 'location_off' if (d.get('location_off') or lat is None) else 'ok'
+        record_ping(conn, emp, acc, cfg, lat, lng, accu, status, now)
+        chk = presence_check_for(conn, emp, acc, cfg, now)
+        conn.commit()
+        return jsonify({'ok': True, 'continue': True, 'interval_s': st['interval_s'], 'end_ms': st['end_ms'],
+                        'remaining_ms': max(0, st['end_ms'] - int(time.time() * 1000)), 'check': chk})
+    finally:
+        conn.close()
+
+
+@bp.route('/me/api/presence/web-ping', methods=['POST'])
+@_me_json
+def me_presence_web_ping(conn, acc, emp, cfg):
+    """قراءة موقع من صفحة التطبيق وهي مفتوحة (آيفون/المتصفح)"""
+    st = presence_state(conn, emp, acc, cfg)
+    if not st['active']:
+        return jsonify({'ok': True, 'active': False})
+    d = request.get_json(silent=True) or {}
+    lat, lng = d.get('lat'), d.get('lng')
+    record_ping(conn, emp, acc, cfg, lat, lng, d.get('accuracy'), 'ok' if lat is not None else 'location_off', source='web')
+    conn.commit()
+    return jsonify({'ok': True, 'active': True})
+
+
+@bp.route('/me/api/presence/confirm', methods=['POST'])
+@_me_json
+def me_presence_confirm(conn, acc, emp, cfg):
+    d = request.get_json(silent=True) or {}
+    now = now_local()
+    chk = presence_check_for(conn, emp, acc, cfg, now)
+    if not chk:
+        return jsonify({'ok': False, 'error': 'لا يوجد فحص حضور مطلوب الآن'}), 400
+    lat, lng, accu = d.get('lat'), d.get('lng'), d.get('accuracy')
+    ok, reason, site, dist = check_location(conn, emp, acc, lat, lng, accu, cfg, active_override(conn, emp['id']))
+    status = 'confirmed' if ok else 'outside'
+    conn.execute("UPDATE presence_checks SET status = ?, responded_at = ?, lat = ?, lng = ?, distance_m = ? WHERE id = ?",
+                 (status, now.strftime('%Y-%m-%d %H:%M:%S'), lat, lng, round(dist, 1) if dist is not None else None, chk['id']))
+    if not ok:
+        conn.execute("INSERT INTO presence_events (employee_id, name, dept, date, kind, start_ts, end_ts, minutes, details, open) "
+                     "VALUES (?, ?, ?, ?, 'failed_check', ?, ?, 0, ?, 0)",
+                     (emp['id'], emp['name'], emp['dept'] or '', now.strftime('%Y-%m-%d'), now.strftime('%Y-%m-%d %H:%M:%S'),
+                      now.strftime('%Y-%m-%d %H:%M:%S'), reason))
+    if lat is not None:
+        record_ping(conn, emp, acc, cfg, lat, lng, accu, 'ok', now, source='web')
+    conn.commit()
+    return jsonify({'ok': ok, 'message': 'شكراً — تم تأكيد وجودك' if ok else '', 'error': '' if ok else reason})
+
+
+def presence_sweep(conn=None):
+    """فحص دوري (كل دقيقة من المجدول، وعند فتح لوحة المتابعة):
+    - هاتف أرسل قراءات اليوم ثم انقطع (أُطفئ، أُغلق التطبيق، بلا إنترنت) أثناء الدوام ← تنبيه «انقطاع الإشارة» مفتوح
+    - الفحوص العشوائية التي انتهت مهلتها ← «لم يردّ»
+    - إنهاء التنبيهات المفتوحة لمن انصرف أو انتهى دوامه"""
+    own = conn is None
+    conn = conn or db.get_db()
+    try:
+        cfg = settings()
+        p = _pcfg(cfg)
+        now = now_local()
+        _expire_checks(conn, now)
+        if not p['enabled']:
+            conn.commit()
+            return
+        date, ts = now.strftime('%Y-%m-%d'), now.strftime('%Y-%m-%d %H:%M:%S')
+        if p['checks'] > 0:
+            # جدولة الفحوص العشوائية لكل من سجّل حضوره اليوم (حتى لو كان التطبيق مغلقاً) ثم إرسال إشعار عند حلول موعدها
+            for r in conn.execute("SELECT DISTINCT employee_id FROM mobile_punches WHERE date = ? AND status = 'accepted' AND kind = 'in'", (date,)).fetchall():
+                emp = conn.execute("SELECT * FROM employees WHERE id = ?", (r['employee_id'],)).fetchone()
+                acc = conn.execute("SELECT * FROM employee_accounts WHERE employee_id = ?", (r['employee_id'],)).fetchone()
+                if emp and acc and presence_state(conn, emp, acc, cfg, now)['active']:
+                    _schedule_checks(conn, emp, cfg, now)
+            _notify_due_checks(conn, now)
+        last = {r['employee_id']: r['ts'] for r in conn.execute(
+            "SELECT employee_id, MAX(ts) AS ts FROM presence_pings WHERE date = ? AND source = 'app' GROUP BY employee_id", (date,))}
+        for emp_id, last_ts in last.items():
+            emp = conn.execute("SELECT * FROM employees WHERE id = ?", (emp_id,)).fetchone()
+            acc = conn.execute("SELECT * FROM employee_accounts WHERE employee_id = ?", (emp_id,)).fetchone()
+            if not emp or not acc:
+                continue
+            st = presence_state(conn, emp, acc, cfg, now)
+            if not st['active']:
+                # انصرف أو انتهى الدوام: نغلق ما بقي مفتوحاً
+                conn.execute("UPDATE presence_events SET open = 0 WHERE employee_id = ? AND date = ? AND open = 1", (emp_id, date))
+                continue
+            gap = (now - datetime.strptime(last_ts, '%Y-%m-%d %H:%M:%S')).total_seconds() / 60
+            if gap >= max(p['grace'], p['interval'] * 3) and not _exempt(conn, emp, acc, cfg, now):
+                _event_upsert(conn, emp, date, 'no_signal', last_ts, ts, 'لم تصل قراءات من الهاتف (مطفأ، بلا إنترنت، أو أُغلق التطبيق)')
+        conn.commit()
+    finally:
+        if own:
+            conn.close()
+
+
+# ----- إشعارات المتصفح (Web Push) لفحوص الحضور — آيفون (من الشاشة الرئيسية، iOS 16.4+) وأندرويد -----
+def _vapid():
+    """مفاتيح VAPID تُنشأ مرة واحدة وتُحفظ في الإعدادات"""
+    cfg = settings()
+    if cfg.get('vapid_private') and cfg.get('vapid_public'):
+        return cfg['vapid_private'], cfg['vapid_public']
+    try:
+        from py_vapid import Vapid01
+        from cryptography.hazmat.primitives import serialization
+    except ImportError:
+        return None, None
+    v = Vapid01()
+    v.generate_keys()
+    priv = v.private_pem().decode()
+    pub = _b64u(v.public_key.public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint))
+    db.set_setting('vapid_private', priv)
+    db.set_setting('vapid_public', pub)
+    return priv, pub
+
+
+def push_to_employee(conn, emp_id, title, body, url='/me'):
+    try:
+        from pywebpush import WebPushException, webpush
+    except ImportError:
+        return 0
+    priv, _pub = _vapid()
+    if not priv:
+        return 0
+    sent = 0
+    for sub in conn.execute("SELECT * FROM push_subscriptions WHERE employee_id = ?", (emp_id,)).fetchall():
+        try:
+            webpush({'endpoint': sub['endpoint'], 'keys': {'p256dh': sub['p256dh'], 'auth': sub['auth']}},
+                    json.dumps({'title': title, 'body': body, 'url': url}, ensure_ascii=False),
+                    vapid_private_key=priv, vapid_claims={'sub': 'mailto:noreply@iajaward.org'}, timeout=10)
+            sent += 1
+        except WebPushException as e:      # اشتراك منتهٍ: نحذفه
+            if getattr(e, 'response', None) is not None and e.response.status_code in (404, 410):
+                conn.execute("DELETE FROM push_subscriptions WHERE id = ?", (sub['id'],))
+        except Exception:   # noqa: BLE001
+            pass
+    return sent
+
+
+def _notify_due_checks(conn, now):
+    ts = now.strftime('%Y-%m-%d %H:%M:%S')
+    for c in conn.execute("SELECT * FROM presence_checks WHERE status = 'pending' AND notified = 0 AND due_at <= ? AND expires_at >= ?", (ts, ts)).fetchall():
+        conn.execute("UPDATE presence_checks SET notified = 1 WHERE id = ?", (c['id'],))
+        conn.commit()
+        mins = max(1, int((datetime.strptime(c['expires_at'], '%Y-%m-%d %H:%M:%S') - now).total_seconds() // 60))
+        push_to_employee(conn, c['employee_id'], 'فحص الحضور', f'افتح التطبيق وأكّد وجودك في موقع العمل خلال {mins} دقيقة')
+    conn.commit()
+
+
+@bp.route('/me/api/push/key')
+def me_push_key():
+    _priv, pub = _vapid()
+    return jsonify({'ok': bool(pub), 'key': pub or ''})
+
+
+@bp.route('/me/api/push/subscribe', methods=['POST'])
+@_me_json
+def me_push_subscribe(conn, acc, emp, cfg):
+    d = request.get_json(silent=True) or {}
+    keys = d.get('keys') or {}
+    if not d.get('endpoint') or not keys.get('p256dh') or not keys.get('auth'):
+        return jsonify({'ok': False, 'error': 'اشتراك غير صالح'}), 400
+    conn.execute("INSERT OR REPLACE INTO push_subscriptions (employee_id, endpoint, p256dh, auth) VALUES (?, ?, ?, ?)",
+                 (emp['id'], d['endpoint'][:1000], keys['p256dh'][:200], keys['auth'][:100]))
+    conn.commit()
+    return jsonify({'ok': True})
+
+
+# ----- الإدارة -----
+def _presence_live(conn, cfg, now):
+    """حالة المراقبة لكل موظف اليوم: آخر قراءة، داخل/خارج، انقطاع"""
+    p = _pcfg(cfg)
+    date = now.strftime('%Y-%m-%d')
+    last = {r['employee_id']: dict(r) for r in conn.execute(
+        "SELECT * FROM presence_pings WHERE id IN (SELECT MAX(id) FROM presence_pings WHERE date = ? GROUP BY employee_id)", (date,))}
+    open_ev = {}
+    for r in conn.execute("SELECT employee_id, kind FROM presence_events WHERE date = ? AND open = 1", (date,)):
+        open_ev.setdefault(r['employee_id'], []).append(r['kind'])
+    counts = {r['employee_id']: r['n'] for r in conn.execute("SELECT employee_id, COUNT(*) AS n FROM presence_events WHERE date = ? GROUP BY employee_id", (date,))}
+    out = {}
+    for emp_id, pg in last.items():
+        mins = (now - datetime.strptime(pg['ts'], '%Y-%m-%d %H:%M:%S')).total_seconds() / 60
+        out[emp_id] = {'last_ping': pg['ts'][11:16], 'inside': pg['inside'], 'status': pg['status'], 'distance': pg['distance_m'],
+                       'stale': mins >= max(p['grace'], p['interval'] * 3), 'open': open_ev.get(emp_id, []), 'events': counts.get(emp_id, 0)}
+    for emp_id, n in counts.items():
+        out.setdefault(emp_id, {'events': n, 'open': open_ev.get(emp_id, [])})
+    return out
+
+
+@bp.route('/api/mobile/presence/live')
+@admin_required
+def api_presence_live():
+    conn = db.get_db()
+    try:
+        cfg = settings()
+        now = now_local()
+        presence_sweep(conn)
+        return jsonify({'ok': True, 'enabled': _pcfg(cfg)['enabled'], 'rows': _presence_live(conn, cfg, now)})
+    finally:
+        conn.close()
+
+
+def _presence_query(args):
+    today = now_local().strftime('%Y-%m-%d')
+    d_from, d_to = (args.get('from') or today)[:10], (args.get('to') or today)[:10]
+    where, params = ["date >= ?", "date <= ?"], [d_from, d_to]
+    if args.get('kind'):
+        where.append("kind = ?"); params.append(args['kind'])
+    if args.get('emp'):
+        where.append("employee_id = ?"); params.append(int(args['emp']))
+    return ' AND '.join(where), params, d_from, d_to
+
+
+@bp.route('/api/mobile/presence/events')
+@admin_required
+def api_presence_events():
+    where, params, d_from, d_to = _presence_query(request.args)
+    conn = db.get_db()
+    try:
+        _expire_checks(conn, now_local())
+        conn.commit()
+        rows = [dict(r) for r in conn.execute(f"SELECT * FROM presence_events WHERE {where} ORDER BY start_ts DESC, id DESC LIMIT 3000", params)]
+        rows = [r for r in rows if _employee_scope_ok(r['dept'])]
+        base_w, base_p, _f, _t = _presence_query({k: v for k, v in request.args.items() if k != 'kind'})
+        counts = {r['kind']: r['n'] for r in conn.execute(f"SELECT kind, COUNT(*) AS n FROM presence_events WHERE {base_w} GROUP BY kind", base_p)}
+        for r in rows:
+            r['kind_label'] = PRESENCE_KINDS.get(r['kind'], r['kind'])
+        if request.args.get('format') == 'csv':
+            import csv
+            import io
+            L = _admin().L
+            buf = io.StringIO()
+            w = csv.writer(buf)
+            w.writerow([L(x) for x in ['التاريخ', 'الموظف', 'القسم', 'التنبيه', 'من', 'إلى', 'المدة (دقيقة)', 'التفاصيل']])
+            for r in rows:
+                w.writerow([r['date'], r['name'], r['dept'], L(r['kind_label']), r['start_ts'][11:16], (r['end_ts'] or '')[11:16], r['minutes'], L(r['details'] or '')])
+            return Response('﻿' + buf.getvalue(), content_type='text/csv; charset=utf-8',
+                            headers={'Content-Disposition': f'attachment; filename=presence-{d_from}_{d_to}.csv'})
+        return jsonify({'ok': True, 'rows': rows, 'counts': counts, 'total': sum(counts.values()), 'kinds': PRESENCE_KINDS})
+    finally:
+        conn.close()
+
+
+@bp.route('/api/mobile/presence/events/delete', methods=['POST'])
+@admin_required
+def api_presence_events_delete():
+    ids = [int(i) for i in ((request.get_json(silent=True) or {}).get('ids') or []) if str(i).isdigit()]
+    if not ids:
+        return jsonify({'ok': False, 'error': 'حدّد تنبيهاً واحداً على الأقل'}), 400
+    conn = db.get_db()
+    try:
+        n = conn.execute(f"DELETE FROM presence_events WHERE id IN ({','.join('?' * len(ids))})", ids).rowcount
+        _audit(conn, 'presence_events_delete', 'presence', f'{n}')
+        conn.commit()
+        return jsonify({'ok': True, 'count': n})
     finally:
         conn.close()

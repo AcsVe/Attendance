@@ -2220,18 +2220,50 @@ async function removeLogo() {
 }
 
 /* ============ SCHEDULING ============ */
+/* مزوّدو البريد: قوالب جاهزة لإعدادات الإرسال مع إرشادات مختصرة */
+const EMAIL_PROVIDERS = {
+  microsoft: { host: 'smtp.office365.com', port: 587, security: 'starttls', pw: 'كلمة مرور الحساب (أو كلمة مرور تطبيق إن كانت المصادقة الثنائية مفعّلة)',
+    help: '<b>Microsoft 365 / Outlook:</b> الخادم smtp.office365.com والمنفذ 587 مع STARTTLS. يجب أن يكون «Authenticated SMTP» مفعّلاً لصندوق المرسل من مركز إدارة Microsoft 365 (المستخدمون ← البريد ← إدارة تطبيقات البريد). إن عطّلت مؤسستك SMTP AUTH فاختر «Microsoft Graph API».' },
+  google: { host: 'smtp.gmail.com', port: 587, security: 'starttls', pw: 'كلمة مرور التطبيق (16 حرفاً) — لا كلمة مرور Gmail العادية',
+    help: '<b>Google (Gmail / Workspace):</b> الخادم smtp.gmail.com والمنفذ 587 مع STARTTLS (أو 465 مع SSL). يشترط Google تفعيل التحقق بخطوتين ثم إنشاء «كلمة مرور تطبيق» من حساب Google ← الأمان ← كلمات مرور التطبيقات، واستخدامها هنا.' },
+  custom: { host: '', port: 587, security: 'starttls', pw: 'كلمة المرور',
+    help: '<b>خادم SMTP آخر:</b> أدخل بيانات الخادم كما يزوّدك بها مزوّد البريد. المنفذ 587 يعني غالباً STARTTLS، و465 يعني SSL.' },
+};
 function toggleEmailMethodBoxes() {
-  const method = document.getElementById('schEmailMethod').value;
-  document.getElementById('schSmtpBox').style.display = method === 'graph' ? 'none' : '';
-  document.getElementById('schGraphBox').style.display = method === 'graph' ? '' : 'none';
+  const graph = document.getElementById('schProvider').value === 'graph';
+  document.getElementById('schEmailMethod').value = graph ? 'graph' : 'smtp';
+  document.getElementById('schSmtpBox').style.display = graph ? 'none' : '';
+  document.getElementById('schGraphBox').style.display = graph ? '' : 'none';
 }
+function applyEmailProvider(fill) {
+  const prov = document.getElementById('schProvider').value, p = EMAIL_PROVIDERS[prov];
+  toggleEmailMethodBoxes();
+  if (!p) return;
+  document.getElementById('schProviderHelp').innerHTML = p.help;
+  document.getElementById('schPwLabel').textContent = p.pw;
+  if (fill && p.host) {
+    document.getElementById('schSmtpHost').value = p.host;
+    document.getElementById('schSmtpPort').value = p.port;
+    document.getElementById('schSmtpSecurity').value = p.security;
+  }
+}
+document.addEventListener('change', e => {
+  if (e.target && e.target.id === 'schSmtpPort') {
+    const v = e.target.value;
+    if (v === '465') document.getElementById('schSmtpSecurity').value = 'ssl';
+    else if (v === '587') document.getElementById('schSmtpSecurity').value = 'starttls';
+  }
+});
 
 async function loadScheduleSettings() {
   const data = await api('/api/schedule');
   if (!data) return;
   const s = data.settings;
-  document.getElementById('schEmailMethod').value = s.email_method || 'smtp';
-  toggleEmailMethodBoxes();
+  document.getElementById('schProvider').value = (s.email_method === 'graph') ? 'graph' : (s.smtp_provider || 'microsoft');
+  applyEmailProvider(false);
+  document.getElementById('schSmtpSecurity').value = s.smtp_security || 'starttls';
+  document.getElementById('schSmtpUsername').value = s.smtp_username || '';
+  document.getElementById('schSmtpSenderName').value = s.smtp_sender_name || '';
   document.getElementById('schSmtpHost').value = s.smtp_host || '';
   document.getElementById('schSmtpPort').value = s.smtp_port || '587';
   document.getElementById('schSmtpSender').value = s.smtp_sender_email || '';
@@ -2348,7 +2380,11 @@ function renderScheduleLastRun(s) {
 async function saveScheduleSettings() {
   const days = Array.from(document.querySelectorAll('.schDay:checked')).map(cb => parseInt(cb.value, 10));
   const payload = {
-    email_method: document.getElementById('schEmailMethod').value,
+    email_method: document.getElementById('schProvider').value === 'graph' ? 'graph' : 'smtp',
+    smtp_provider: document.getElementById('schProvider').value === 'graph' ? 'microsoft' : document.getElementById('schProvider').value,
+    smtp_security: document.getElementById('schSmtpSecurity').value,
+    smtp_username: document.getElementById('schSmtpUsername').value.trim(),
+    smtp_sender_name: document.getElementById('schSmtpSenderName').value.trim(),
     smtp_host: document.getElementById('schSmtpHost').value.trim(),
     smtp_port: document.getElementById('schSmtpPort').value.trim() || '587',
     smtp_sender_email: document.getElementById('schSmtpSender').value.trim(),

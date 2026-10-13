@@ -13,7 +13,7 @@
  * بمتصفحات كروم/إيدج، وتسريع تحميل الملفات الثابتة قليلاً - وليس تشغيل
  * النظام بدون إنترنت بالكامل (يحتاج اتصال فعلي بالخادم دائماً لأي بيانات).
  */
-const CACHE_NAME = 'attendance-static-v4';   // يُخدم من /sw.js (نطاق الموقع كله) لتثبيت النظام كتطبيق
+const CACHE_NAME = 'attendance-static-v5';   // يُخدم من /sw.js (نطاق الموقع كله) لتثبيت النظام كتطبيق
 const STATIC_PREFIX = '/static/';
 
 /* ===== استثناء مقصود: صفحتان تعملان دون إنترنت ولا تحويان بيانات شخصية في HTML:
@@ -77,4 +77,22 @@ self.addEventListener('fetch', (event) => {
       })
     )
   );
+});
+
+/* ===== إشعارات فحص الحضور (Web Push) ===== */
+self.addEventListener('push', (event) => {
+  let d = {};
+  try { d = event.data ? event.data.json() : {}; } catch (e) { d = { title: 'RAS Check-in', body: event.data ? event.data.text() : '' }; }
+  event.waitUntil(self.registration.showNotification(d.title || 'RAS Check-in', {
+    body: d.body || '', icon: '/static/icons/icon-192.png', badge: '/static/icons/favicon-32.png',
+    data: { url: d.url || '/me' }, requireInteraction: true, tag: 'presence-check',
+  }));
+});
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/me';
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+    for (const c of list) { if (c.url.includes('/me')) { c.navigate(url); return c.focus(); } }
+    return self.clients.openWindow(url);
+  }));
 });
