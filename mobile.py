@@ -351,10 +351,17 @@ def _account(conn):
     return acc, emp
 
 
+DEV_COOKIE = 'att_dev_s'   # نسخة من رمز الهاتف يضعها الخادم (HttpOnly) — سفاري آيفون لا يمسحها بعد 7 أيام كما يمسح ما تكتبه الصفحة
+
+
+def _token_matches(acc, token):
+    return bool(acc['device_hash']) and bool(token) and len(token) >= 32 and secrets.compare_digest(acc['device_hash'], _hash(token))
+
+
 def _device_ok(acc, token, cfg):
     if cfg.get('mobile_bind_device', '1') != '1':
         return True
-    return bool(acc['device_hash']) and token and secrets.compare_digest(acc['device_hash'], _hash(token))
+    return _token_matches(acc, token) or _token_matches(acc, request.cookies.get(DEV_COOKIE, ''))
 
 
 @bp.route('/me/login', methods=['GET', 'POST'])
@@ -377,12 +384,18 @@ def me_login():
             return render_template('me_login.html', error='اسم المستخدم أو كلمة المرور غير صحيحة', settings=cfg)
         if not acc['active'] or not emp or not emp['active']:
             return render_template('me_login.html', error='الحساب موقوف — راجع الإدارة', settings=cfg)
+        saved = request.cookies.get(DEV_COOKIE, '')
         if cfg.get('mobile_bind_device', '1') == '1':
-            if len(token) < 32:
+            if len(token) < 32 and len(saved) < 32:
                 return render_template('me_login.html', error='تعذّر التعرف على الهاتف — فعّل الجافاسكربت وأعد المحاولة', settings=cfg)
-            if acc['device_hash'] and not secrets.compare_digest(acc['device_hash'], _hash(token)):
-                return render_template('me_login.html', settings=cfg,
-                                       error='هذا الحساب مرتبط بهاتف آخر. لا يمكن الدخول إلا من الهاتف المرتبط — اطلب من الإدارة فكّ الربط إن تغيّر هاتفك.')
+            if acc['device_hash']:
+                if _token_matches(acc, saved) and not _token_matches(acc, token):
+                    token = saved          # سفاري مسح التخزين لكن نسخة الخادم باقية
+                elif not _token_matches(acc, token):
+                    return render_template('me_login.html', settings=cfg,
+                                           error='هذا الحساب مرتبط بهاتف آخر. لا يمكن الدخول إلا من الهاتف المرتبط — اطلب من الإدارة فكّ الربط إن تغيّر هاتفك.')
+            if len(token) < 32:
+                token = saved
             if not acc['device_hash']:
                 conn.execute("UPDATE employee_accounts SET device_hash = ?, device_label = ?, bound_at = ? WHERE id = ?",
                              (_hash(token), _device_label(), now_local().strftime('%Y-%m-%d %H:%M'), acc['id']))
@@ -396,7 +409,12 @@ def me_login():
     session.permanent = True
     session['emp_id'] = emp['id']
     session['emp_name'] = emp['name']
-    return redirect(url_for('mobile.me_home'))
+    resp = redirect(url_for('mobile.me_home'))
+    if len(token) >= 32:
+        resp.set_cookie(DEV_COOKIE, token, max_age=3650 * 86400, path='/me', httponly=True,
+                        secure=request.is_secure or request.headers.get('X-Forwarded-Proto') == 'https'
+                        or request.headers.get('CF-Visitor', '').find('https') >= 0, samesite='Lax')
+    return resp
 
 
 @bp.route('/me/logout')

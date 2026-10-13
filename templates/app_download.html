@@ -26,7 +26,7 @@
         <p class="muted">حضور، انصراف، خروج مؤقت من داخل موقع العمل. يكشف تطبيقات الموقع الوهمي.</p>
         {% if files.employee %}<a class="btn btn-p" style="margin-top:10px;width:100%" href="{{ files.employee.url }}" download><i class="fab fa-android"></i> تنزيل للأندرويد ({{ files.employee.size }} MB)</a>
         {% else %}<div class="na" style="margin-top:10px">ملف التطبيق غير متوفر بعد على الخادم</div>{% endif %}
-        <a class="btn btn-l" style="margin-top:8px;width:100%" href="/me"><i class="fas fa-globe"></i> أو افتحه من المتصفح (آيفون)</a>
+        <a class="btn btn-l" style="margin-top:8px;width:100%" href="#iphone"><i class="fab fa-apple"></i> آيفون: طريقة التثبيت</a>
       </div>
     </div>
   </div>
@@ -52,6 +52,15 @@
       <li>اضغط «تثبيت». عند أول فتح اسمح باستخدام الموقع «أثناء استخدام التطبيق» (تطبيق الموظف).</li>
       <li>سجّل الدخول باسم المستخدم وكلمة المرور من الإدارة — يرتبط حسابك بهذا الهاتف.</li>
     </ol>
+    <h2 id="iphone" style="margin-top:12px"><i class="fab fa-apple"></i> على آيفون (تطبيق الموظف)</h2>
+    <ol>
+      <li>افتح هذا الرابط في <b>Safari</b> (وليس Chrome): <a href="/me" dir="ltr">{{ request.host }}/me</a></li>
+      <li>اضغط زر المشاركة <i class="fas fa-arrow-up-from-bracket"></i> ثم «<b>إضافة إلى الشاشة الرئيسية</b>» ثم «إضافة».</li>
+      <li>افتح التطبيق من <b>الأيقونة الجديدة</b> وسجّل الدخول منها أول مرة — يرتبط حسابك بهذا الآيفون.</li>
+      <li>عند السؤال اسمح بالموقع «أثناء استخدام التطبيق». (إن رفضته: الإعدادات ← الخصوصية ← خدمات الموقع ← مواقع Safari ← «أثناء الاستخدام».)</li>
+      <li>إن طلبت الإدارة البصمة: «حسابي» ← «تفعيل البصمة على هذا الهاتف» (Face ID / Touch ID).</li>
+    </ol>
+    <p class="muted" style="font-size:.85rem">استخدم دائماً الأيقونة نفسها. مسح بيانات Safari بالكامل أو تغيير الهاتف يتطلب «فكّ ربط الهاتف» من الإدارة.</p>
     <h2 style="margin-top:12px"><i class="fab fa-windows"></i> على Windows (للإدارة)</h2>
     <ol>
       <li>افتح النظام في Edge أو Chrome وسجّل الدخول.</li>
