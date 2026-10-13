@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="{{ ui_lang }}" dir="{{ ui_dir }}">
 <head>
   {% include '_me_head.html' %}
   <title>رمز المدخل — تسجيل الدوام</title>
@@ -39,10 +39,18 @@
 
   /* الساعة الموثوقة: وقت الخادم عند آخر اتصال + المدة المنقضية.
      في تطبيق أندرويد تُحسب المدة من عدّاد منذ تشغيل الهاتف، فلا يؤثر فيها تغيير ساعة الهاتف. */
+  function gps() { try { var g = N && N.gpsNow ? Number(N.gpsNow()) : 0; return g > 0 ? g : 0; } catch (e) { return 0; } }
+  var SRC = '';
   function trusted() {
     if (!C) return null;
     var e = el();
-    if (e !== null && C.el !== null && C.el !== undefined && e >= C.el) return C.srv + (e - C.el);
+    // 1) وقت الخادم عند آخر اتصال + عدّاد التشغيل (لا يتأثر بتغيير ساعة الهاتف)
+    if (e !== null && C.el !== null && C.el !== undefined && e >= C.el) { SRC = 'server'; return C.srv + (e - C.el); }
+    // 2) أُعيد تشغيل الهاتف دون إنترنت: وقت الأقمار الصناعية من آخر قراءة GPS
+    var g = gps();
+    if (g) { SRC = 'gps'; return g; }
+    // 3) لا مصدر موثوق: ساعة الهاتف مصحّحة بآخر فرق معروف (قد لا يقبله جهاز المدخل إن غُيّرت الساعة)
+    SRC = 'phone';
     return Date.now() + (C.srv - C.local);
   }
   function sync() {
@@ -75,9 +83,12 @@
     $('who').textContent = C.name;
     var now = trusted(), step = Math.floor(now / 1000 / C.step), left = C.step - Math.floor((now / 1000) % C.step);
     $('bar').style.width = (left / C.step * 100) + '%';
-    $('clock').textContent = new Date(now).toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    $('clock').textContent = new Date(now).toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      + (SRC === 'gps' ? ' · GPS' : SRC === 'phone' ? ' ⚠' : '');
+    if (SRC === 'phone' && N) warn('الساعة غير موثوقة: اتصل بالإنترنت لحظة، أو افتح الموقع (GPS) قرب نافذة لضبطها من الأقمار الصناعية.');
     if (step !== lastStep) { lastStep = step; code(step).then(function (c) { draw('ATT1.' + C.emp + '.' + step + '.' + c); }); }
   }
+  if (N && N.startLocation) { try { N.startLocation(); } catch (e) {} }   // قراءة GPS لضبط الساعة دون إنترنت
   sync().then(tick);
   setInterval(tick, 1000);
   setInterval(function () { if (navigator.onLine) sync(); }, 5 * 60000);

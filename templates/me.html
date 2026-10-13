@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="{{ ui_lang }}" dir="{{ ui_dir }}">
 <head>
   {% include '_me_head.html' %}
   <title>تسجيل الدوام — {{ emp.name }}</title>
@@ -33,7 +33,7 @@
 <body>
 <div class="wrap">
   <div class="top">
-    <div><h1><i class="fas fa-user-circle" aria-hidden="true"></i> {{ emp.name }}</h1><div class="muted">{{ emp.dept or '' }}</div></div>
+    <div><h1 data-notr><i class="fas fa-user-circle" aria-hidden="true"></i> {{ emp.name }}</h1><div class="muted" data-notr>{{ emp.dept or '' }}</div></div>
     <a class="btn btn-l" style="padding:9px 12px" href="{{ url_for('mobile.me_logout') }}" onclick="return confirm('تسجيل الخروج من التطبيق؟')"><i class="fas fa-sign-out-alt" aria-hidden="true"></i></a>
   </div>
 
@@ -79,6 +79,10 @@
   </div>
 
   <div id="t-acc" class="hide">
+    <div class="card" data-notr style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <b style="color:var(--pd)"><i class="fas fa-language" aria-hidden="true"></i> {{ 'Language' if ui_lang == 'en' else 'اللغة' }}</b>
+      <div style="display:flex;gap:6px"><button class="btn {{ 'btn-p' if ui_lang != 'en' else 'btn-l' }}" style="padding:8px 14px" onclick="setUiLang('ar')">العربية</button><button class="btn {{ 'btn-p' if ui_lang == 'en' else 'btn-l' }}" style="padding:8px 14px" onclick="setUiLang('en')">English</button></div>
+    </div>
     <div class="card" id="bioCard">
       <b style="color:var(--pd)"><i class="fas fa-fingerprint" aria-hidden="true"></i> بصمة الوجه / الإصبع</b>
       <p class="muted" id="bioText" style="margin:6px 0 10px;line-height:1.7"></p>

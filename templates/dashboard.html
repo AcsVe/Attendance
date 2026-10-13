@@ -1,6 +1,7 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="{{ ui_lang }}" dir="{{ ui_dir }}">
 <head>
+  {% include '_i18n.html' %}
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>لوحة التحكم — نظام تحليل الحضور والانصراف</title>
@@ -33,7 +34,7 @@
     {% else %}
       <div class="sidebar-logo-chip"><i class="fas fa-fingerprint" aria-hidden="true"></i>&nbsp;<span class="sidebar-logo-title">نظام الحضور</span></div>
     {% endif %}
-    <div class="sidebar-logo-text">{{ settings.org_name or 'الجمعية الثقافية العربية - الرائد العربي' }}</div>
+    <div class="sidebar-logo-text">{{ org_display or 'الجمعية الثقافية العربية - الرائد العربي' }}</div>
   </div>
   <div class="sidebar-nav" role="navigation" aria-label="القائمة الرئيسية">
     <div class="nav-group" data-group="home">
@@ -103,6 +104,7 @@
       <h1 id="pageTitle">لوحة التحكم</h1>
     </div>
     <div class="topbar-right">
+      <button type="button" class="btn btn-outline btn-sm" data-notr onclick="toggleUiLang()" title="{{ 'Switch to Arabic — التبديل إلى العربية' if ui_lang == 'en' else 'Switch to English' }}"><i class="fas fa-language" aria-hidden="true"></i> {{ 'العربية' if ui_lang == 'en' else 'English' }}</button>
       <button class="btn btn-primary btn-sm" id="pwaInstallBtn" style="display:none" onclick="pwaInstall()" title="يُضاف النظام كتطبيق في قائمة ابدأ وشريط المهام"><i class="fas fa-download" aria-hidden="true"></i> تثبيت على هذا الجهاز</button>
       <a class="btn btn-outline btn-sm" href="/app" target="_blank" title="تطبيقات أندرويد للموظفين والإدارة"><i class="fab fa-android" aria-hidden="true"></i> التطبيقات</a>
             <button class="btn btn-outline btn-sm" onclick="refreshCurrentTab()"><i class="fas fa-sync" aria-hidden="true"></i> تحديث</button>
@@ -934,6 +936,7 @@
       <div class="card">
         <div class="card-title"><i class="fas fa-building" aria-hidden="true"></i> بيانات المؤسسة</div>
         <div class="form-group"><label>اسم المؤسسة</label><input type="text" id="setOrgName"></div>
+        <div class="form-group"><label>اسم المؤسسة بالإنجليزية (يظهر في الواجهة الإنجليزية)</label><input type="text" id="setOrgNameEn" dir="ltr"></div>
         <div class="form-group">
           <label>شعار المؤسسة</label>
           <p style="font-size:.8rem;color:var(--muted);margin:4px 0">
@@ -1143,7 +1146,7 @@
           </table>
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:14px">
-          <input type="text" id="mtConfirm" placeholder="اكتب: حذف" style="max-width:180px">
+          <input type="text" id="mtConfirm" placeholder="{{ 'Type: DELETE' if ui_lang == 'en' else 'اكتب: حذف' }}" style="max-width:180px">
           <button class="btn btn-red" onclick="runPurge()"><i class="fas fa-trash" aria-hidden="true"></i> حذف المحدَّد</button>
         </div>
         <div id="mtResult" style="margin-top:12px;font-size:.88rem"></div>

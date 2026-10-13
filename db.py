@@ -428,6 +428,7 @@ def set_setting(key, value):
 def get_all_settings():
     defaults = {
         'org_name': 'الجمعية الثقافية العربية - مدرسة الرائد العربي',
+        'org_name_en': '',   # اسم المؤسسة في الواجهة الإنجليزية (اختياري)
         'org_logo_filename': '',
         'attendance_time': '09:00',
         'departure_time': '15:00',

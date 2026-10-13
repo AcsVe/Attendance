@@ -269,7 +269,14 @@ public class MainActivity extends Activity {
         return loc.isFromMockProvider();
     }
 
+    // آخر قراءة GPS حقيقية: وقت الأقمار الصناعية + لحظتها على عدّاد التشغيل (لا يغيّرهما المستخدم)
+    private long gpsFixTime = 0, gpsFixElapsed = 0;
+
     private void sendLocation(Location loc) {
+        if (LocationManager.GPS_PROVIDER.equals(loc.getProvider()) && !isMock(loc) && Build.VERSION.SDK_INT >= 17) {
+            gpsFixTime = loc.getTime();
+            gpsFixElapsed = loc.getElapsedRealtimeNanos() / 1000000L;
+        }
         String js = String.format(Locale.US,
                 "window.attNativeLocation && window.attNativeLocation({lat:%.7f,lng:%.7f,accuracy:%.1f,mock:%s,provider:'%s',time:%d})",
                 loc.getLatitude(), loc.getLongitude(), loc.getAccuracy(), isMock(loc) ? "true" : "false",
@@ -405,6 +412,14 @@ public class MainActivity extends Activity {
         /** عدّاد ثابت منذ تشغيل الهاتف بالمللي ثانية — لا يتأثر بتغيير الساعة (للساعة الموثوقة) */
         @JavascriptInterface
         public double elapsed() { return (double) SystemClock.elapsedRealtime(); }
+
+        /** الوقت الحالي محسوباً من وقت الأقمار الصناعية (آخر قراءة GPS) — 0 إن لم توجد قراءة منذ تشغيل الهاتف.
+         *  لا يتأثر بساعة الهاتف، ويعمل دون إنترنت. */
+        @JavascriptInterface
+        public double gpsNow() {
+            if (gpsFixTime <= 0) return 0;
+            return (double) (gpsFixTime + (SystemClock.elapsedRealtime() - gpsFixElapsed));
+        }
 
         @JavascriptInterface
         public boolean isRooted() {

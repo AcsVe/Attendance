@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="{{ ui_lang }}" dir="{{ ui_dir }}">
 <head>
   {% include '_me_head.html' %}
   <title>كلمة مرور جديدة — تسجيل الدوام</title>
@@ -8,7 +8,7 @@
 <div class="wrap" style="padding-top:8vh">
   <div style="text-align:center;margin-bottom:18px">
     <h1 style="font-size:1.35rem;color:var(--pd)"><i class="fas fa-key" aria-hidden="true"></i> كلمة مرور جديدة</h1>
-    <div class="muted">{{ settings.org_name or '' }}</div>
+    <div class="muted">{{ org_display }}</div>
   </div>
   <div class="card">
     {% if ok %}
@@ -28,6 +28,7 @@
       </form>
     {% endif %}
   </div>
+<p style="margin-top:10px;font-size:.85rem;text-align:center" data-notr><a href="#" onclick="toggleUiLang();return false">{{ 'العربية' if ui_lang == 'en' else 'English' }}</a></p>
 </div>
 </body>
 </html>

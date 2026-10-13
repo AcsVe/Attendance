@@ -1,6 +1,7 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="{{ ui_lang }}" dir="{{ ui_dir }}">
 <head>
+  {% include '_i18n.html' %}
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0f2b38">
@@ -49,7 +50,7 @@
 <video id="cam" playsinline muted autoplay aria-label="كاميرا قراءة الرمز"></video>
 <div class="frame" aria-hidden="true"></div>
 <div class="top">
-  <div><div id="kname">جهاز المدخل</div><div class="tools"><button id="flip" type="button">تبديل الكاميرا</button><button id="fs" type="button">ملء الشاشة</button></div></div>
+  <div><div id="kname">جهاز المدخل</div><div class="tools"><button id="flip" type="button">تبديل الكاميرا</button><button id="fs" type="button">ملء الشاشة</button><button type="button" data-notr onclick="toggleUiLang()">{{ 'العربية' if ui_lang == 'en' else 'English' }}</button></div></div>
   <div style="text-align:center"><div class="clock" id="clock">--:--:--</div><div id="date" style="font-size:.85rem;opacity:.85"></div></div>
   <div style="text-align:left"><span class="pill" id="net">متصل</span><div style="font-size:.8rem;margin-top:4px;opacity:.85" id="queue"></div></div>
 </div>

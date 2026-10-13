@@ -32,6 +32,11 @@ def _ensure_font():
         _FONT_REGISTERED = True
 
 
+import contextvars
+# دالة ترجمة اختيارية (الواجهة الإنجليزية): تُضبط لكل طلب من app.py قبل بناء التقرير
+TRANSLATE = contextvars.ContextVar('pdf_translate', default=None)
+
+
 def ar(text):
     """يُعيد تشكيل النص العربي وترتيبه للعرض الصحيح (RTL) داخل PDF."""
     if text is None:
@@ -39,6 +44,9 @@ def ar(text):
     text = str(text)
     if not text:
         return ''
+    fn = TRANSLATE.get()
+    if fn:
+        text = fn(text)
     try:
         reshaped = arabic_reshaper.reshape(text)
         return get_display(reshaped)

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="{{ ui_lang }}" dir="{{ ui_dir }}">
 <head>
+  {% include '_i18n.html' %}
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>تسجيل الدخول — نظام تحليل الحضور والانصراف</title>
@@ -30,7 +31,7 @@
         <i class="fas fa-fingerprint logo-icon" aria-hidden="true"></i>
       {% endif %}
       <h1>نظام تحليل سجلات الحضور والانصراف</h1>
-      <p class="subtitle">{{ (settings and settings.org_name) or 'الجمعية الثقافية العربية - مدرسة الرائد العربي' }}</p>
+      <p class="subtitle">{{ org_display or 'الجمعية الثقافية العربية - مدرسة الرائد العربي' }}</p>
       {% if error %}
         <div class="alert alert-error">{{ error }}</div>
       {% endif %}
@@ -46,6 +47,7 @@
         <button type="submit" class="btn btn-primary"><i class="fas fa-sign-in-alt" aria-hidden="true"></i> تسجيل الدخول</button>
       </form>
       <p style="margin-top:14px;font-size:.88rem"><a href="{{ url_for('forgot_password') }}">نسيت كلمة المرور؟</a></p>
+      <p style="margin-top:10px;font-size:.85rem;text-align:center" data-notr><a href="#" onclick="toggleUiLang();return false">{{ 'العربية' if ui_lang == 'en' else 'English' }}</a></p>
     </div>
   </div>
   <script>

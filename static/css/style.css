@@ -305,3 +305,12 @@ input[type=file] { width: 100%; font-family: inherit; font-size: .85rem; }
 .filter-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .filter-bar > select, .filter-bar > input:not([type=checkbox]) { width: auto; flex: 1 1 170px; min-width: 0; }
 .filter-bar > input[type=search], .filter-bar > input[type=text] { flex: 2 1 220px; }
+
+/* ===== الواجهة الإنجليزية (من اليسار لليمين) ===== */
+[dir=ltr] .nav-item.active { box-shadow: inset 3px 0 0 var(--accent); }
+[dir=ltr] .nav-group.collapsed .nav-group-title i { transform: rotate(-90deg); }
+@media (max-width: 768px) {
+  [dir=ltr] .sidebar { transform: translateX(-105%) !important; }
+  [dir=ltr] .sidebar.open { transform: translateX(0) !important; }
+}
+[dir=ltr] td[style*="text-align:right"], [dir=ltr] [dir="ltr"][style*="text-align:right"] { text-align: left !important; }

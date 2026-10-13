@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="{{ ui_lang }}" dir="{{ ui_dir }}">
 <head>
   {% include '_me_head.html' %}
   <title>دخول الموظف — تسجيل الدوام</title>
@@ -11,7 +11,7 @@
     {% if settings.org_logo_filename %}<img src="{{ url_for('static', filename='uploads/' + settings.org_logo_filename) }}" alt="شعار {{ settings.org_name or 'المؤسسة' }}" style="max-height:70px;max-width:220px">
     {% else %}<div style="width:74px;height:74px;border-radius:22px;background:linear-gradient(135deg,var(--p),var(--s));color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:2rem"><i class="fas fa-fingerprint" aria-hidden="true"></i></div>{% endif %}
     <h1 style="font-size:1.45rem;margin-top:12px;color:var(--pd)">تسجيل الدوام</h1>
-    <div class="muted">{{ settings.org_name or '' }}</div>
+    <div class="muted">{{ org_display }}</div>
   </div>
   <div class="card">
     {% if error %}<div class="err"><i class="fas fa-circle-exclamation" aria-hidden="true"></i> {{ error }}</div>{% endif %}
@@ -95,5 +95,6 @@
   $('qPw').addEventListener('click', function (e) { e.preventDefault(); showForm(); });
 })();
 </script>
+<p style="margin-top:10px;font-size:.85rem;text-align:center" data-notr><a href="#" onclick="toggleUiLang();return false">{{ 'العربية' if ui_lang == 'en' else 'English' }}</a></p>
 </body>
 </html>

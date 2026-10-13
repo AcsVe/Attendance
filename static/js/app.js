@@ -2101,6 +2101,7 @@ async function loadSettings() {
   if (!data) return;
   const s = data.settings;
   document.getElementById('setOrgName').value = s.org_name;
+  document.getElementById('setOrgNameEn').value = s.org_name_en || '';
   document.getElementById('setAttTime').value = s.attendance_time;
   document.getElementById('setDepTime').value = s.departure_time;
   document.getElementById('setLateTh').value = s.late_threshold;
@@ -2134,6 +2135,7 @@ async function loadSettings() {
 async function saveSettings() {
   const payload = {
     org_name: document.getElementById('setOrgName').value.trim(),
+    org_name_en: document.getElementById('setOrgNameEn').value.trim(),
     attendance_time: document.getElementById('setAttTime').value,
     departure_time: document.getElementById('setDepTime').value,
     late_threshold: document.getElementById('setLateTh').value || '5',

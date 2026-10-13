@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="{{ ui_lang }}" dir="{{ ui_dir }}">
 <head>
   {% include '_me_head.html' %}
   <title>تطبيقات نظام الحضور</title>
@@ -15,7 +15,7 @@
 <div class="wrap" style="padding-top:5vh">
   <div style="text-align:center;margin-bottom:16px">
     <h1 style="font-size:1.4rem;color:var(--pd)"><i class="fas fa-mobile-screen" aria-hidden="true"></i> تطبيقات نظام الحضور</h1>
-    <div class="muted">{{ settings.org_name or '' }}{% if version %} · الإصدار {{ version }}{% endif %}</div>
+    <div class="muted">{{ org_display }}{% if version %} · الإصدار {{ version }}{% endif %}</div>
   </div>
 
   <div class="card">
@@ -68,6 +68,7 @@
       <li>يظهر «إدارة الحضور والانصراف» في قائمة ابدأ ويمكن تثبيته على شريط المهام.</li>
     </ol>
   </div>
+<p style="margin-top:10px;font-size:.85rem;text-align:center" data-notr><a href="#" onclick="toggleUiLang();return false">{{ 'العربية' if ui_lang == 'en' else 'English' }}</a></p>
 </div>
 </body>
 </html>

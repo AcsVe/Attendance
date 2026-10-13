@@ -1142,18 +1142,20 @@ def api_punches_export():
         conn.close()
     header = ['التاريخ', 'الوقت', 'الموظف', 'القسم', 'الحركة', 'الحالة', 'السبب', 'الموقع', 'المسافة (م)', 'دقة GPS (م)',
               'خط العرض', 'خط الطول', 'الهاتف', 'IP', 'المصدر', 'علامات الاشتباه']
-    data = [[r['date'], r['time'], r['name'], r['dept'], KINDS.get(r['kind'], r['kind']),
-             'مقبولة' if r['status'] == 'accepted' else 'مرفوضة', r['reason'] or '', r['site_name'] or '',
+    L = _admin().L
+    header = [L(h) for h in header]
+    data = [[r['date'], r['time'], r['name'], r['dept'], L(KINDS.get(r['kind'], r['kind'])),
+             L('مقبولة' if r['status'] == 'accepted' else 'مرفوضة'), L(r['reason'] or ''), r['site_name'] or '',
              r['distance_m'], r['accuracy'], r['lat'], r['lng'], r['device_label'] or '', r['ip'] or '',
-             'التطبيق' if r['source'] == 'app' else 'المتصفح', r['flags'] or ''] for r in rows]
+             L('جهاز المدخل' if r['source'] == 'kiosk' else 'التطبيق' if r['source'] == 'app' else 'المتصفح'), L(r['flags'] or '')] for r in rows]
     fname = f'mobile-punches-{d_from}_{d_to}'
     if request.args.get('format') == 'xlsx':
         from openpyxl import Workbook
         from openpyxl.styles import Font, PatternFill
         wb = Workbook()
         ws = wb.active
-        ws.title = 'حركات الهاتف'
-        ws.sheet_view.rightToLeft = True
+        ws.title = L('حركات الهاتف')
+        ws.sheet_view.rightToLeft = _admin()._ui_lang(request) != 'en'
         ws.append(header)
         for c in ws[1]:
             c.font = Font(bold=True, color='FFFFFF')

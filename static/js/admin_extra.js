@@ -79,7 +79,7 @@ function urExport() {
     urRows.map(r => [r.username, r.full_name || '', UR_ROLE[r.role] || r.role,
       ...['can_manage_employees', 'can_push_devices', 'can_edit_org_settings', 'can_manage_departments'].map(k => r.effective[k] ? 'نعم' : 'لا'),
       r.allowed_departments.join('، ') || 'كل الأقسام', r.last_login_at || 'لم يدخل', r.last_login_ip || '', r.created_at || '']));
-  const csv = '﻿' + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  const csv = '﻿' + rows.map(r => r.map(v => `"${String(window.T ? T(String(v)) : v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
   a.download = 'users-permissions.csv';
@@ -116,7 +116,7 @@ async function runPurge() {
   const groups = Array.from(document.querySelectorAll('.mt-check:checked')).map(c => c.value);
   if (!groups.length) { toast('اختر نوعاً واحداً على الأقل', true); return; }
   const confirmWord = document.getElementById('mtConfirm').value.trim();
-  if (confirmWord !== 'حذف') { toast('اكتب كلمة «حذف» في خانة التأكيد', true); return; }
+  if (confirmWord !== 'حذف' && confirmWord.toUpperCase() !== 'DELETE') { toast('اكتب كلمة «حذف» في خانة التأكيد', true); return; }
   const from = document.getElementById('mtFrom').value, to = document.getElementById('mtTo').value;
   if (!confirm(`سيُحذف ${groups.length} نوع من السجلات ${from || to ? `للفترة ${from || 'البداية'} — ${to || 'اليوم'}` : 'لكل الفترات'}.\nتُحفظ نسخة احتياطية قبل الحذف. متابعة؟`)) return;
   const d = await api('/api/maintenance/purge', { method: 'POST', body: JSON.stringify({ groups, from, to, confirm: confirmWord }) });

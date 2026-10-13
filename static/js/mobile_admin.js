@@ -113,7 +113,7 @@ function maShowCreds(list) {
   document.getElementById('maModalSave').style.display = 'none';
   document.getElementById('maModalCsv').onclick = () => {
     const rows = [['الموظف', 'القسم', 'اسم المستخدم', 'كلمة المرور', 'الرابط']].concat(maCredsCache.map(c => [c.name, c.dept, c.username, c.password, location.origin + '/me']));
-    const csv = '﻿' + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+    const csv = '﻿' + rows.map((r, i) => r.map(v => `"${String(i === 0 && window.T ? T(String(v)) : v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
     a.download = 'employee-app-logins.csv';

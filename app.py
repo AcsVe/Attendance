@@ -113,6 +113,9 @@ def get_logo_path(settings=None):
 # ============================================================
 # ===== سجل التدقيق =====
 # ============================================================
+from utils.i18n import tr as _tr, ui_lang as _ui_lang, translate_json as _translate_json  # noqa: E402
+
+
 def _audit_now():
     """وقت محلي (المنطقة الزمنية ATT_TZ) بدل UTC الافتراضي في SQLite"""
     try:
@@ -316,6 +319,41 @@ def enforce_role_permissions():
     # المعطَّلة بس (العرض نفسه ما كان مقيَّداً هناك)
     if required_perm and request.method != 'GET' and not user_can(required_perm):
         return jsonify({'ok': False, 'error': 'ليس لديك صلاحية لهذا الإجراء'}), 403
+
+
+
+
+def L(v):
+    """نص ثابت (عنوان عمود، حالة…) بلغة المستخدم في ملفات التصدير"""
+    return _tr(v) if _ui_lang(request) == 'en' else v
+
+
+def LL(values):
+    return [L(v) if isinstance(v, str) else v for v in values]
+
+
+@app.context_processor
+def _inject_lang():
+    lang = _ui_lang(request)
+    try:
+        st = db.get_all_settings()
+    except Exception:
+        st = {}
+    org = (st.get('org_name_en') if lang == 'en' else '') or st.get('org_name') or ''
+    return {'ui_lang': lang, 'ui_dir': 'ltr' if lang == 'en' else 'rtl', 'org_display': org}
+
+
+@app.after_request
+def _translate_messages(resp):
+    """رسائل الخادم (الأخطاء والتأكيدات) بالإنجليزية لمن اختارها"""
+    if _ui_lang(request) == 'en' and resp.mimetype == 'application/json' and not resp.direct_passthrough:
+        try:
+            data = json.loads(resp.get_data(as_text=True))
+            if isinstance(data, dict):
+                resp.set_data(json.dumps(_translate_json(data), ensure_ascii=False))
+        except (ValueError, TypeError):
+            pass
+    return resp
 
 
 @app.after_request
@@ -693,10 +731,10 @@ def api_reports_export_csv():
     buf = io.StringIO()
     buf.write('﻿')  # BOM حتى يفتح إكسل الملف بترميز عربي صحيح
     writer = csv.writer(buf)
-    writer.writerow(['الاسم', 'القسم', 'التاريخ', 'وقت الحضور', 'وقت الانصراف', 'الحالة', 'دقائق التأخير', 'ساعات العمل', 'المناوبة'])
+    writer.writerow(LL(['الاسم', 'القسم', 'التاريخ', 'وقت الحضور', 'وقت الانصراف', 'الحالة', 'دقائق التأخير', 'ساعات العمل', 'المناوبة']))
     for r in filtered:
         writer.writerow([r['name'], r['dept'] or '', r['date'], r['time_in'] or '', r['time_out'] or '',
-                          r['status'], r['late_minutes'], r['working_hours'], r['shift'] or ''])
+                          L(r['status'] or ''), r['late_minutes'], r['working_hours'], r['shift'] or ''])
     mem = io.BytesIO(buf.getvalue().encode('utf-8'))
     return send_file(mem, mimetype='text/csv', as_attachment=True,
                       download_name=f"attendance_report_{datetime.now().strftime('%Y%m%d_%H%M')}.csv")
@@ -822,7 +860,7 @@ def api_overtime_export_csv():
     buf = io.StringIO()
     buf.write('﻿')
     writer = csv.writer(buf)
-    writer.writerow(['الاسم', 'القسم', 'التاريخ', 'وقت الانصراف الفعلي', 'وقت الانصراف المقرر', 'دقائق العمل الإضافي', 'مدة العمل الإضافي', 'عطلة أسبوعية'])
+    writer.writerow(LL(['الاسم', 'القسم', 'التاريخ', 'وقت الانصراف الفعلي', 'وقت الانصراف المقرر', 'دقائق العمل الإضافي', 'مدة العمل الإضافي', 'عطلة أسبوعية']))
     for r in records:
         writer.writerow([r['name'], r['dept'], r['date'], r['time_out'], r['scheduled_end'],
                           r['ot_minutes'], overtime_engine.format_duration(r['ot_minutes']),
@@ -2015,7 +2053,7 @@ def api_settings():
     if request.method == 'POST':
         data = request.get_json(force=True)
         allowed_keys = {
-            'org_name', 'attendance_time', 'departure_time', 'late_threshold',
+            'org_name', 'org_name_en', 'attendance_time', 'departure_time', 'late_threshold',
             'shift_enabled', 'shift1_start', 'shift1_end', 'shift2_start', 'shift2_end',
             'sat_time_enabled', 'sat_attendance_time', 'sat_departure_time', 'excluded_depts',
             'sync_central_url', 'sync_api_key',
@@ -2693,7 +2731,7 @@ def api_maintenance_purge():
     groups = [g for g in (d.get('groups') or []) if g in PURGE_GROUPS]
     if not groups:
         return jsonify({'ok': False, 'error': 'اختر نوعاً واحداً على الأقل'}), 400
-    if (d.get('confirm') or '').strip() != 'حذف':
+    if (d.get('confirm') or '').strip() not in ('حذف', 'DELETE', 'delete', 'Delete'):
         return jsonify({'ok': False, 'error': 'اكتب كلمة «حذف» للتأكيد'}), 400
     d_from, d_to = (d.get('from') or '')[:10], (d.get('to') or '')[:10]
     # نسخة احتياطية تلقائية قبل الحذف (يمكن استرجاعها من مجلد البيانات)
@@ -2786,7 +2824,7 @@ def api_audit_log():
         import csv, io
         buf = io.StringIO()
         w = csv.writer(buf)
-        w.writerow(['الوقت', 'المستخدم', 'العملية', 'النوع', 'الموظف', 'التاريخ المتأثر', 'القيمة السابقة', 'القيمة الجديدة', 'السبب'])
+        w.writerow(LL(['الوقت', 'المستخدم', 'العملية', 'النوع', 'الموظف', 'التاريخ المتأثر', 'القيمة السابقة', 'القيمة الجديدة', 'السبب']))
         for r in rows:
             w.writerow([r['timestamp'], r['username'], r['action_type'], r['target_type'], r['employee_name'] or '',
                         r['date_affected'] or '', r['old_value'] or '', r['new_value'] or '', r['reason'] or ''])
@@ -2853,6 +2891,8 @@ def api_reports_export_pdf():
     if settings.get('sat_time_enabled') == '1' and settings.get('sat_attendance_time') and settings.get('sat_departure_time'):
         times_desc += f"  |  وقت السبت الخاص: {settings.get('sat_attendance_time')} - {settings.get('sat_departure_time')}"
 
+    import pdf_export as _pdfx
+    _pdfx.TRANSLATE.set(_tr if _ui_lang(request) == 'en' else None)
     pdf_bytes = build_report_pdf(filtered, settings.get('org_name'), filters_desc, stats,
                                    session.get('full_name') or session.get('username'), times_desc,
                                    get_logo_path(settings))
@@ -2878,7 +2918,7 @@ _EXCEL_HEADERS = ['الاسم', 'القسم', 'التاريخ', 'وقت الحض
 
 def _excel_row(r):
     return [r['name'], r['dept'] or '', r['date'], r['time_in'] or '', r['time_out'] or '',
-            r['status'], r['late_minutes'], r['working_hours'], r['shift'] or '']
+            L(r['status'] or ''), r['late_minutes'], r['working_hours'], r['shift'] or '']
 
 
 @app.route('/api/export/excel')
@@ -2906,9 +2946,9 @@ def api_export_excel():
 
     for sheet_name, statuses in _EXCEL_SHEETS:
         sheet_rows = base_filtered if statuses is None else [r for r in base_filtered if r['status'] in statuses]
-        ws = wb.create_sheet(title=sheet_name[:31])
-        ws.sheet_view.rightToLeft = True
-        ws.append(_EXCEL_HEADERS)
+        ws = wb.create_sheet(title=L(sheet_name)[:31])
+        ws.sheet_view.rightToLeft = _ui_lang(request) != 'en'
+        ws.append(LL(_EXCEL_HEADERS))
         for cell in ws[1]:
             cell.font = header_font
             cell.fill = header_fill
@@ -2919,7 +2959,7 @@ def api_export_excel():
         for i, w in enumerate(widths, start=1):
             ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
         if not sheet_rows:
-            ws.append(['لا توجد سجلات مطابقة بهذه الفلترة'])
+            ws.append([L('لا توجد سجلات مطابقة بهذه الفلترة')])
 
     mem = io.BytesIO()
     wb.save(mem)

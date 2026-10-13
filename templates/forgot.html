@@ -1,6 +1,7 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="{{ ui_lang }}" dir="{{ ui_dir }}">
 <head>
+  {% include '_i18n.html' %}
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>نسيت كلمة المرور — نظام الحضور والانصراف</title>
@@ -30,6 +31,7 @@
         </form>
         <p style="margin-top:14px;font-size:.85rem"><a href="{{ url_for('login') }}">العودة لتسجيل الدخول</a></p>
       {% endif %}
+      <p style="margin-top:10px;font-size:.85rem;text-align:center" data-notr><a href="#" onclick="toggleUiLang();return false">{{ 'العربية' if ui_lang == 'en' else 'English' }}</a></p>
     </div>
   </div>
 </body>
