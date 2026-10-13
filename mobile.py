@@ -404,17 +404,102 @@ def me_login():
     finally:
         conn.close()
     _FAILS.pop(key, None)
-    for k in ('emp_id', 'emp_name'):
+    return _start_session(emp, token, redirect(url_for('mobile.me_home')))
+
+
+def _start_session(emp, token, resp):
+    for k in ('emp_id', 'emp_name', 'quick_acc', 'quick_nonce'):
         session.pop(k, None)
     session.permanent = True
     session['emp_id'] = emp['id']
     session['emp_name'] = emp['name']
-    resp = redirect(url_for('mobile.me_home'))
-    if len(token) >= 32:
+    if token and len(token) >= 32:
         resp.set_cookie(DEV_COOKIE, token, max_age=3650 * 86400, path='/me', httponly=True,
                         secure=request.is_secure or request.headers.get('X-Forwarded-Proto') == 'https'
                         or request.headers.get('CF-Visitor', '').find('https') >= 0, samesite='Lax')
     return resp
+
+
+# =====================================================
+#   الدخول السريع: الهاتف المرتبط + Face ID / البصمة (بدل اسم المستخدم وكلمة المرور)
+# =====================================================
+def _quick_account(conn, token):
+    """الحساب المرتبط بهذا الهاتف (من رمز الهاتف أو نسخة الخادم)"""
+    for t in (token, request.cookies.get(DEV_COOKIE, '')):
+        if t and len(t) >= 32:
+            acc = conn.execute("SELECT * FROM employee_accounts WHERE device_hash = ?", (_hash(t),)).fetchone()
+            if acc:
+                emp = conn.execute("SELECT * FROM employees WHERE id = ?", (acc['employee_id'],)).fetchone()
+                if acc['active'] and emp and emp['active']:
+                    return acc, emp, t
+    return None, None, None
+
+
+@bp.route('/me/quick/options', methods=['POST'])
+def me_quick_options():
+    """هل يمكن الدخول السريع من هذا الهاتف؟ يرجع اسم الموظف وطريقة التحقق المتاحة"""
+    d = request.get_json(silent=True) or {}
+    key = f'{_ip()}|quick'
+    if _blocked(key):
+        return jsonify({'ok': False, 'error': 'محاولات كثيرة — انتظر 15 دقيقة أو ادخل بكلمة المرور'}), 429
+    conn = db.get_db()
+    try:
+        acc, emp, _t = _quick_account(conn, (d.get('device') or '').strip())
+        if not acc:
+            return jsonify({'ok': False})
+        session['quick_acc'] = acc['id']
+        nonce = _b64u(secrets.token_bytes(24))
+        session['quick_nonce'] = nonce
+        out = {'ok': True, 'name': emp['name'], 'nonce': nonce, 'webauthn': None}
+        creds = [r['cred_id'] for r in conn.execute("SELECT cred_id FROM webauthn_credentials WHERE employee_id = ?", (emp['id'],))]
+        if creds and _webauthn_ready():
+            chal = _b64u(secrets.token_bytes(32))
+            session['wa_chal'] = chal
+            out['webauthn'] = {'challenge': chal, 'rpId': _rp()[0], 'timeout': 60000, 'userVerification': 'required',
+                               'allowCredentials': [{'type': 'public-key', 'id': c} for c in creds]}
+        return jsonify(out)
+    finally:
+        conn.close()
+
+
+@bp.route('/me/quick/login', methods=['POST'])
+def me_quick_login():
+    import hashlib as _h
+    import hmac
+    d = request.get_json(silent=True) or {}
+    key = f'{_ip()}|quick'
+    if _blocked(key):
+        return jsonify({'ok': False, 'error': 'محاولات كثيرة — انتظر 15 دقيقة أو ادخل بكلمة المرور'}), 429
+    conn = db.get_db()
+    try:
+        acc, emp, token = _quick_account(conn, (d.get('device') or '').strip())
+        nonce = session.pop('quick_nonce', None)
+        if not acc or session.pop('quick_acc', None) != acc['id'] or not nonce:
+            return jsonify({'ok': False, 'error': 'انتهت صلاحية الطلب — أعد المحاولة'}), 400
+        err = ''
+        if request.headers.get('X-App'):
+            # تطبيق أندرويد: البصمة تمت داخل التطبيق، والطلب موقّع من التطبيق
+            ts = request.headers.get('X-App-Ts', '')
+            good = hmac.new(APP_KEY.encode(), f"login|{nonce}|{ts}|1".encode(), _h.sha256).hexdigest()
+            try:
+                fresh = abs(time.time() * 1000 - float(ts)) < 120000
+            except ValueError:
+                fresh = False
+            if not (fresh and hmac.compare_digest(good, request.headers.get('X-App-Sig', ''))):
+                err = 'تعذّر التحقق من التطبيق — ادخل بكلمة المرور'
+        elif d.get('webauthn'):
+            err = verify_assertion(conn, emp['id'], d['webauthn'])
+        else:
+            err = 'أكّد هويتك بالبصمة أو الوجه'
+        if err:
+            _FAILS.setdefault(key, []).append(time.time())
+            return jsonify({'ok': False, 'error': err}), 403
+        conn.execute("UPDATE employee_accounts SET last_login_at = ? WHERE id = ?", (now_local().strftime('%Y-%m-%d %H:%M'), acc['id']))
+        conn.commit()
+    finally:
+        conn.close()
+    _FAILS.pop(key, None)
+    return _start_session(emp, token, jsonify({'ok': True, 'next': url_for('mobile.me_home')}))
 
 
 @bp.route('/me/logout')

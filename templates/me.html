@@ -38,6 +38,11 @@
   </div>
 
   <div class="tabs"><button class="on" data-t="today">اليوم</button><button data-t="month">الشهر</button><button data-t="notes">الإشعارات <span id="unread" class="tag t-out hide" style="padding:0 7px">0</span></button><button data-t="acc">حسابي</button></div>
+  <div class="card hide" id="quickBanner" style="background:#eef7f1;font-size:.9rem;line-height:1.7">
+    <b style="color:var(--pd)"><i class="fas fa-fingerprint"></i> ادخل بعد اليوم بـ Face ID / البصمة</b><br>
+    <span class="muted">بدل كتابة اسم المستخدم وكلمة المرور كل مرة.</span>
+    <div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-p" id="quickOn" style="flex:2">تفعيل الآن</button><button class="btn btn-l" id="quickLater" style="flex:1">لاحقاً</button></div>
+  </div>
   <div class="card hide" id="ovBanner" style="background:#e6f1f6;color:var(--pd);font-weight:700;font-size:.9rem"></div>
 
   <div id="t-today">
@@ -139,7 +144,10 @@
   function render() {
     if (!S) return;
     var w = where();
-    document.querySelectorAll('.act').forEach(function (b) { b.disabled = busy || !S.enabled || S.allowed.indexOf(b.dataset.k) < 0 || !w.ok; });
+    $('quickOn').addEventListener('click', function () { $('bioBtn').click(); });
+  $('quickLater').addEventListener('click', function () { try { localStorage.setItem('att_quick_later', '1'); } catch (e) {} $('quickBanner').classList.add('hide'); });
+
+  document.querySelectorAll('.act').forEach(function (b) { b.disabled = busy || !S.enabled || S.allowed.indexOf(b.dataset.k) < 0 || !w.ok; });
     $('state').textContent = S.enabled ? STATE[S.last || ''] : 'التسجيل من الهاتف متوقف حالياً من الإدارة';
   }
   window.attNativeLocation = function (d) {   // يستدعيها تطبيق أندرويد مع كل قراءة
@@ -203,10 +211,21 @@
       }).catch(function (e) { reject(typeof e === 'string' ? e : 'لم يتم التحقق بالبصمة'); });
     });
   }
+  function webBioOk() { return !NATIVE && window.PublicKeyCredential && S.webauthn; }
   function renderBio() {
     var mode = S.biometric, t = $('bioText'), btn = $('bioBtn');
-    $('bioCard').classList.toggle('hide', mode === 'off');
-    if (mode === 'off') return;
+    var later = false; try { later = localStorage.getItem('att_quick_later') === '1'; } catch (e) {}
+    $('quickBanner').classList.toggle('hide', !(webBioOk() && !S.bio_enrolled && !later));
+    if (mode === 'off') {
+      // البصمة غير مطلوبة للحركات، لكنها متاحة للدخول السريع بدل كلمة المرور
+      $('bioCard').classList.toggle('hide', !webBioOk() && !NATIVE);
+      if (NATIVE) { t.textContent = nativeBioAvailable() ? 'الدخول للتطبيق يتم ببصمة الهاتف أو الوجه تلقائياً.' : 'فعّل قفل الشاشة أو البصمة في إعدادات الهاتف لتدخل بها بدل كلمة المرور.'; btn.classList.add('hide'); return; }
+      if (!webBioOk()) return;
+      t.textContent = S.bio_enrolled ? '✓ الدخول بـ Face ID / البصمة مفعّل على هذا الهاتف.' : 'فعّلها لتدخل بـ Face ID / البصمة بدل اسم المستخدم وكلمة المرور.';
+      btn.classList.toggle('hide', !!S.bio_enrolled);
+      return;
+    }
+    $('bioCard').classList.remove('hide');
     var need = mode === 'required' ? 'مطلوبة من الإدارة قبل كل حركة.' : 'اختيارية — إن فعّلتها تُطلب قبل كل حركة.';
     if (NATIVE) { t.textContent = 'البصمة ' + need + (nativeBioAvailable() ? ' هاتفك جاهز.' : ' فعّل قفل الشاشة أو البصمة في إعدادات الهاتف.'); btn.classList.add('hide'); return; }
     if (!window.PublicKeyCredential || !S.webauthn) { t.textContent = 'هذا المتصفح لا يدعم البصمة — استخدم تطبيق الموظف (أندرويد) أو Safari على آيفون.'; btn.classList.add('hide'); return; }
@@ -223,7 +242,7 @@
       var r = c.response;
       if (!r.getPublicKey) throw 'المتصفح قديم — حدّثه أو استخدم تطبيق الموظف';
       return api('/me/api/webauthn/register', { method: 'POST', body: JSON.stringify({ id: c.id, publicKey: b2u(r.getPublicKey()), alg: r.getPublicKeyAlgorithm ? r.getPublicKeyAlgorithm() : -7, clientDataJSON: b2u(r.clientDataJSON) }) });
-    }).then(function (d) { toast(d.ok ? 'تم تفعيل البصمة على هذا الهاتف' : d.error, d.ok); load(); })
+    }).then(function (d) { toast(d.ok ? 'تم التفعيل — في المرة القادمة ادخل بـ Face ID / البصمة' : d.error, d.ok); load(); })
       .catch(function (e) { toast(typeof e === 'string' ? e : 'لم يتم التفعيل'); });
   });
 

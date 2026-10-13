@@ -3,6 +3,7 @@
 <head>
   {% include '_me_head.html' %}
   <title>دخول الموظف — تسجيل الدوام</title>
+  <style>.hide{display:none}</style>
 </head>
 <body>
 <div class="wrap" style="padding-top:8vh">
@@ -14,6 +15,12 @@
   </div>
   <div class="card">
     {% if error %}<div class="err"><i class="fas fa-circle-exclamation"></i> {{ error }}</div>{% endif %}
+    <div id="quick" class="hide" style="text-align:center">
+      <div style="font-size:1.1rem;font-weight:800;color:var(--pd)">أهلاً <span id="qName"></span></div>
+      <button type="button" class="btn btn-p" id="qBtn" style="width:100%;margin-top:14px;padding:18px;font-size:1.1rem"><i class="fas fa-fingerprint"></i> الدخول بالبصمة / Face ID</button>
+      <div id="qMsg" class="muted" style="margin-top:8px;min-height:1.2em"></div>
+      <a href="#" id="qPw" class="muted" style="display:inline-block;margin-top:6px">الدخول باسم المستخدم وكلمة المرور</a>
+    </div>
     <form method="post" id="f" autocomplete="on">
       <label>اسم المستخدم</label>
       <input name="username" dir="ltr" autocomplete="username" autocapitalize="none" required autofocus>
@@ -36,6 +43,55 @@
   try { localStorage.setItem('att_dev', t); } catch (e) {}
   document.cookie = 'att_dev=' + t + '; max-age=' + (3650 * 86400) + '; path=/me; samesite=strict' + (location.protocol === 'https:' ? '; secure' : '');
   document.getElementById('dev').value = t;
+
+  /* ===== الدخول السريع: هذا الهاتف مرتبط بحساب ← بصمة/وجه بدل كلمة المرور ===== */
+  var N = window.AttNative, $ = function (i) { return document.getElementById(i); };
+  function b2u(buf) { var s = ''; new Uint8Array(buf).forEach(function (c) { s += String.fromCharCode(c); }); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+  function u2b(s) { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; var b = atob(s), a = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); return a.buffer; }
+  function post(url, body, hdr) {
+    return fetch(url, { method: 'POST', credentials: 'same-origin', headers: Object.assign({ 'Content-Type': 'application/json' }, hdr || {}), body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); });
+  }
+  function showForm() { $('quick').classList.add('hide'); $('f').classList.remove('hide'); }
+  var nativeOk = false;
+  try { nativeOk = !!(N && N.canAuthenticate && N.canAuthenticate()); } catch (e) {}
+  if ({{ 'true' if error else 'false' }}) return;          // بعد خطأ دخول: نعرض النموذج كما هو
+  post('/me/quick/options', { device: t }).then(function (o) {
+    if (!o.ok || !(nativeOk || (o.webauthn && window.PublicKeyCredential))) return;
+    $('qName').textContent = o.name;
+    $('f').classList.add('hide'); $('quick').classList.remove('hide');
+    var opts = o;
+    function go() {
+      $('qMsg').textContent = '';
+      var p;
+      if (nativeOk) {
+        p = new Promise(function (res, rej) {
+          window.attBioResult = function (ok, msg) { ok ? res() : rej(msg || 'لم يتم التحقق'); };
+          N.authenticate('الدخول إلى تسجيل الدوام');
+        }).then(function () {
+          var ts = String(Date.now());
+          return post('/me/quick/login', { device: t }, { 'X-App': 'android', 'X-App-Ts': ts, 'X-App-Sig': N.sign('login|' + opts.nonce + '|' + ts + '|1') });
+        });
+      } else {
+        var pk = opts.webauthn; pk.challenge = u2b(pk.challenge);
+        pk.allowCredentials = pk.allowCredentials.map(function (c) { return { type: 'public-key', id: u2b(c.id) }; });
+        p = navigator.credentials.get({ publicKey: pk }).then(function (c) {
+          return post('/me/quick/login', { device: t, webauthn: { id: c.id, clientDataJSON: b2u(c.response.clientDataJSON), authenticatorData: b2u(c.response.authenticatorData), signature: b2u(c.response.signature) } });
+        });
+      }
+      p.then(function (r) {
+        if (r && r.ok) { location.href = r.next; return; }
+        throw (r && r.error) || 'تعذّر الدخول';
+      }).catch(function (e) {
+        $('qMsg').textContent = typeof e === 'string' ? e : 'أُلغي التحقق — اضغط للمحاولة مجدداً';
+        // التحدي استُهلك: نجهّز طلباً جديداً للمحاولة التالية
+        post('/me/quick/options', { device: t }).then(function (n) { if (n.ok) opts = n; });
+      });
+    }
+    $('qBtn').addEventListener('click', go);
+    if (nativeOk) go();          // داخل تطبيق أندرويد: تظهر نافذة البصمة مباشرة
+  }).catch(function () {});
+  $('qPw').addEventListener('click', function (e) { e.preventDefault(); showForm(); });
 })();
 </script>
 </body>
