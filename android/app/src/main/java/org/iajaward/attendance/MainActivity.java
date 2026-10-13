@@ -20,6 +20,7 @@ import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.provider.Settings;
@@ -389,6 +390,22 @@ public class MainActivity extends Activity {
         }
 
         /** هل الهاتف معدّل (root)؟ — يُرسل للخادم كعلامة للمراجعة */
+        /** هل «ضبط الوقت تلقائياً من الشبكة» مفعّل؟ (إطفاؤه يعني أن المستخدم قد يغيّر الساعة يدوياً) */
+        @JavascriptInterface
+        public boolean autoTime() {
+            try { return Settings.Global.getInt(getContentResolver(), Settings.Global.AUTO_TIME, 1) == 1; } catch (Exception e) { return true; }
+        }
+
+        /** خيارات المطوّر مفعّلة؟ (شرط لتشغيل تطبيقات الموقع الوهمي) */
+        @JavascriptInterface
+        public boolean devOptions() {
+            try { return Settings.Global.getInt(getContentResolver(), Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) == 1; } catch (Exception e) { return false; }
+        }
+
+        /** عدّاد ثابت منذ تشغيل الهاتف بالمللي ثانية — لا يتأثر بتغيير الساعة (للساعة الموثوقة) */
+        @JavascriptInterface
+        public double elapsed() { return (double) SystemClock.elapsedRealtime(); }
+
         @JavascriptInterface
         public boolean isRooted() {
             String tags = Build.TAGS;

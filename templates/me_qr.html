@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  {% include '_me_head.html' %}
+  <title>رمز المدخل — تسجيل الدوام</title>
+  <style>
+    body{background:#0f2b38;color:#fff}
+    .qrbox{background:#fff;border-radius:22px;padding:16px;margin:10px auto;width:min(86vw,380px);aspect-ratio:1/1;display:flex;align-items:center;justify-content:center}
+    .qrbox svg{width:100%;height:100%}
+    .bar{height:6px;border-radius:6px;background:rgba(255,255,255,.18);overflow:hidden;width:min(86vw,380px);margin:10px auto}
+    .bar i{display:block;height:100%;background:#2fb37a;transition:width 1s linear}
+    .who{text-align:center;font-weight:800;font-size:1.3rem;margin-top:8px}
+    .sub{text-align:center;color:#b8cfd8;font-size:.9rem;line-height:1.8}
+    .warn{background:#fff4e5;color:#7a4b00;border-radius:12px;padding:10px 12px;margin:12px auto;max-width:420px;font-weight:700;font-size:.9rem;text-align:center}
+    .hide{display:none}
+    a.back{color:#b8cfd8}
+  </style>
+</head>
+<body>
+<div class="wrap" style="padding-top:4vh">
+  <div class="who" id="who">رمز المدخل</div>
+  <div class="sub">قرّب هذا الرمز من جهاز المدخل لتسجيل الحضور أو الانصراف.<br>يتغيّر كل 30 ثانية ويعمل دون إنترنت.</div>
+  <div class="qrbox" id="qr" role="img" aria-label="رمز QR الشخصي للحضور"></div>
+  <div class="bar" aria-hidden="true"><i id="bar"></i></div>
+  <div class="sub" id="clock"></div>
+  <div class="warn hide" id="warn"></div>
+  <p class="sub" style="margin-top:14px"><a class="back" href="/me">العودة إلى التطبيق</a></p>
+</div>
+<script src="{{ url_for('static', filename='vendor/qrcode.js') }}"></script>
+<script>
+(function () {
+  var N = window.AttNative || null, $ = function (i) { return document.getElementById(i); };
+  var DEV = '';
+  if (N) { try { DEV = N.deviceId(); } catch (e) {} }
+  if (!DEV) { try { DEV = localStorage.getItem('att_dev') || ''; } catch (e) {} }
+  var KEY = 'att_qr_v1', C = null;
+  try { C = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
+  function el() { try { return N && N.elapsed ? Number(N.elapsed()) : null; } catch (e) { return null; } }
+
+  /* الساعة الموثوقة: وقت الخادم عند آخر اتصال + المدة المنقضية.
+     في تطبيق أندرويد تُحسب المدة من عدّاد منذ تشغيل الهاتف، فلا يؤثر فيها تغيير ساعة الهاتف. */
+  function trusted() {
+    if (!C) return null;
+    var e = el();
+    if (e !== null && C.el !== null && C.el !== undefined && e >= C.el) return C.srv + (e - C.el);
+    return Date.now() + (C.srv - C.local);
+  }
+  function sync() {
+    var t0 = Date.now();
+    return fetch('/me/api/qr', { credentials: 'same-origin', headers: { 'X-Device': DEV } }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok) { if (!C) warn('سجّل الدخول إلى التطبيق مرة واحدة وأنت متصل بالإنترنت، ثم افتح هذه الصفحة.'); return; }
+      var t1 = Date.now();
+      C = { emp: d.emp_id, name: d.name, secret: d.secret, step: d.step, srv: d.server_ms + (t1 - t0) / 2, local: t1, el: el() };
+      try { localStorage.setItem(KEY, JSON.stringify(C)); } catch (e) {}
+      warn('');
+    }).catch(function () {
+      if (!C) warn('لا يوجد اتصال، ولم يُفتح الرمز من قبل على هذا الهاتف. اتصل بالإنترنت مرة واحدة.');
+    });
+  }
+  function warn(t) { $('warn').textContent = t; $('warn').classList.toggle('hide', !t); }
+  function hex(buf) { return Array.prototype.map.call(new Uint8Array(buf), function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); }
+  var keyCache = null, lastStep = -1;
+  function code(step) {
+    var enc = new TextEncoder();
+    var kp = keyCache || crypto.subtle.importKey('raw', enc.encode(C.secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    keyCache = Promise.resolve(kp);
+    return keyCache.then(function (k) { return crypto.subtle.sign('HMAC', k, enc.encode(C.emp + ':' + step)); }).then(function (s) { return hex(s).slice(0, 10); });
+  }
+  function draw(payload) {
+    var q = qrcode(0, 'M'); q.addData(payload); q.make();
+    $('qr').innerHTML = q.createSvgTag({ cellSize: 8, margin: 2, scalable: true });
+  }
+  function tick() {
+    if (!C) return;
+    $('who').textContent = C.name;
+    var now = trusted(), step = Math.floor(now / 1000 / C.step), left = C.step - Math.floor((now / 1000) % C.step);
+    $('bar').style.width = (left / C.step * 100) + '%';
+    $('clock').textContent = new Date(now).toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    if (step !== lastStep) { lastStep = step; code(step).then(function (c) { draw('ATT1.' + C.emp + '.' + step + '.' + c); }); }
+  }
+  sync().then(tick);
+  setInterval(tick, 1000);
+  setInterval(function () { if (navigator.onLine) sync(); }, 5 * 60000);
+  window.addEventListener('online', sync);
+  if ('wakeLock' in navigator) { try { navigator.wakeLock.request('screen').catch(function () {}); } catch (e) {} }
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function () {});
+})();
+</script>
+</body>
+</html>

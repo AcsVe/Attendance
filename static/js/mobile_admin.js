@@ -7,7 +7,7 @@ Object.assign(PAGE_TITLES, {
 });
 window.EXTRA_LOADERS = Object.assign(window.EXTRA_LOADERS || {}, {
   'mobile-accounts': () => { loadAccounts(); loadMobileSettings(); },
-  'mobile-sites': loadSites,
+  'mobile-sites': () => { loadSites(); loadKiosks(); },
   'mobile-moves': () => { loadLive(); loadMoves(); },
 });
 
@@ -396,7 +396,7 @@ function mvFilter() {
   document.getElementById('mvTable').innerHTML = rows.map(r => `<tr${r.status === 'rejected' ? ' style="background:#fff5f5"' : (r.flags ? ' style="background:#fffbeb"' : '')}>
     <td><input type="checkbox" class="row-check" data-id="${r.id}" onchange="mvSelCount()" aria-label="تحديد"></td><td>${mEsc(r.date)}</td><td dir="ltr" style="text-align:right">${mEsc(r.time.slice(0, 5))}</td><td><b>${mEsc(r.name)}</b></td><td>${mEsc(r.dept || '')}</td>
     <td>${mEsc(r.kind_label)}</td><td>${mEsc(r.site_name || '—')}${r.distance_m != null ? ` <small style="color:var(--muted)">(${Math.round(r.distance_m)} م)</small>` : ''}</td>
-    <td>${r.accuracy != null ? Math.round(r.accuracy) + ' م' : '—'}<br><small style="color:var(--muted)">${r.source === 'app' ? '<i class="fas fa-mobile-screen" aria-hidden="true"></i> التطبيق' : '<i class="fas fa-globe" aria-hidden="true"></i> المتصفح'}</small></td>
+    <td>${r.accuracy != null ? Math.round(r.accuracy) + ' م' : '—'}<br><small style="color:var(--muted)">${r.source === 'kiosk' ? '<i class="fas fa-qrcode" aria-hidden="true"></i> جهاز المدخل' : r.source === 'app' ? '<i class="fas fa-mobile-screen" aria-hidden="true"></i> التطبيق' : '<i class="fas fa-globe" aria-hidden="true"></i> المتصفح'}</small></td>
     <td>${r.status === 'accepted' ? '<span class="badge badge-ontime">مقبولة</span>' : `<span class="badge badge-absent" title="${mEsc(r.reason || '')}">مرفوضة</span><br><small style="color:#842029">${mEsc(r.reason || '')}</small>`}${r.flags ? `<br><small style="color:#b45309">⚠ ${mEsc(r.flags)}</small>` : ''}</td>
     <td>${r.lat != null ? `<a target="_blank" href="https://www.google.com/maps?q=${r.lat},${r.lng}"><i class="fas fa-map-location-dot" aria-hidden="true"></i></a>` : ''}</td></tr>`).join('')
     || '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:16px">لا توجد حركات في هذه الفترة</td></tr>';
@@ -619,4 +619,49 @@ async function empBulkAction(action) {
   if (!confirm(`تطبيق الإجراء على ${ids.length} موظف؟`)) return;
   const d = await api('/api/mobile/employees/bulk', { method: 'POST', body: JSON.stringify({ ids, action: kind === 'emp' ? value : 'mode', value }) });
   if (d) { toast(`تم: ${d.count} موظف`); loadEmployees(); }
+}
+
+
+/* ================= أجهزة المداخل (QR) ================= */
+let kioskRows = [];
+async function loadKiosks() {
+  const d = await api('/api/kiosks');
+  if (!d) return;
+  kioskRows = d.rows;
+  document.getElementById('kioskUrl').textContent = location.origin + '/kiosk';
+  document.getElementById('kioskCount').textContent = d.rows.length;
+  const sel = document.getElementById('kioskSite'), keep = sel.value;
+  sel.innerHTML = '<option value="">— بدون —</option>' + (siteRowsCache || []).map(x => `<option value="${x.id}">${mEsc(x.name)}</option>`).join('');
+  sel.value = keep;
+  const ago = t => { if (!t) return 'لم يتصل بعد'; const m = Math.round((Date.now() - new Date(t.replace(' ', 'T')).getTime()) / 60000); return m < 2 ? '<span style="color:#1e8e5a">متصل الآن</span>' : (m < 60 ? `قبل ${m} دقيقة` : t); };
+  document.getElementById('kioskTable').innerHTML = d.rows.map(k => `<tr>
+    <td><input type="checkbox" class="row-check" data-id="${k.id}" onchange="kioskCount()" aria-label="تحديد"></td>
+    <td><b>${mEsc(k.name)}</b></td><td>${mEsc(k.site_name || '—')}</td>
+    <td>${k.paired ? '<span class="badge badge-ontime">مقترن</span>' : ''}${k.pair_code ? `<div style="margin-top:4px">رمز الإقران: <b dir="ltr" style="font-size:1.1rem;letter-spacing:3px">${k.pair_code}</b><br><small style="color:var(--muted)">صالح 30 دقيقة — أو افتح: <span dir="ltr">${mEsc(location.origin)}/kiosk?pair=${k.pair_code}</span></small></div>` : (k.paired ? '' : '<small style="color:var(--muted)">غير مقترن — اطلب «رمز إقران جديد»</small>')}</td>
+    <td>${ago(k.last_seen)}</td><td>${k.today}</td>
+    <td>${k.active ? '<span class="badge badge-ontime">مفعّل</span>' : '<span class="badge badge-absent">معطّل</span>'}</td></tr>`).join('')
+    || '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:14px">لا توجد أجهزة مداخل بعد</td></tr>';
+  document.getElementById('kioskAll').checked = false;
+  kioskCount();
+}
+function kioskCount() {
+  const all = document.querySelectorAll('#kioskTable .row-check').length, n = document.querySelectorAll('#kioskTable .row-check:checked').length;
+  document.getElementById('kioskSel').textContent = `المحدَّد: ${n} من ${all}`;
+}
+async function kioskAdd() {
+  const name = document.getElementById('kioskName').value.trim();
+  if (!name) { toast('اكتب اسماً للجهاز', true); return; }
+  const d = await api('/api/kiosks', { method: 'POST', body: JSON.stringify({ name, site_id: document.getElementById('kioskSite').value || null }) });
+  if (!d) return;
+  document.getElementById('kioskName').value = '';
+  toast(`أُضيف الجهاز — رمز الإقران: ${d.pair_code}`);
+  loadKiosks();
+}
+async function kioskBulk(action) {
+  const ids = Array.from(document.querySelectorAll('#kioskTable .row-check:checked')).map(c => +c.dataset.id);
+  if (!ids.length) { toast('حدّد جهازاً واحداً على الأقل', true); return; }
+  const labels = { pair: 'إنشاء رمز إقران جديد', disable: 'تعطيل', enable: 'تفعيل', unpair: 'إلغاء الإقران (يجب إقران الجهاز من جديد)', delete: 'حذف' };
+  if (!confirm(`${labels[action]} — ${ids.length} جهاز؟`)) return;
+  const d = await api('/api/kiosks/bulk', { method: 'POST', body: JSON.stringify({ ids, action }) });
+  if (d) { toast('تم'); loadKiosks(); }
 }

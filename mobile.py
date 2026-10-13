@@ -250,17 +250,23 @@ def check_integrity(conn, emp, kind, data, lat, lng, accuracy, site, cfg):
 # =====================================================
 #   حالة اليوم ودمج الحركات في البصمات
 # =====================================================
-def today_moves(conn, emp_id, date_str):
+def today_moves(conn, emp_id, date_str, source=None):
+    """حركات اليوم المقبولة. source: None = الكل، 'kiosk' = جهاز المدخل فقط، '!kiosk' = الهاتف فقط"""
+    extra = ''
+    if source == 'kiosk':
+        extra = " AND source = 'kiosk'"
+    elif source == '!kiosk':
+        extra = " AND COALESCE(source, '') != 'kiosk'"
     return [dict(r) for r in conn.execute(
-        "SELECT kind, time, site_name FROM mobile_punches WHERE employee_id = ? AND date = ? AND status = 'accepted' "
-        "ORDER BY time, id", (emp_id, date_str)).fetchall()]
+        "SELECT kind, time, site_name, source FROM mobile_punches WHERE employee_id = ? AND date = ? AND status = 'accepted'" + extra +
+        " ORDER BY time, id", (emp_id, date_str)).fetchall()]
 
 
-def _merge_punch(conn, emp, date_str, time_str, kind):
+def _merge_punch(conn, emp, date_str, time_str, kind, batch='mobile'):
     """الحضور/الانصراف في جدول البصمات (سجل واحد لليوم: أبكر حضور وآخر انصراف)"""
-    # سجل الهاتف منفصل عن سجلات الجهاز (التحليل يدمج الاثنين حسب طريقة توثيق الموظف)
-    row = conn.execute("SELECT id, time_in, time_out FROM punches WHERE name = ? AND date = ? AND batch_id = 'mobile' "
-                       "ORDER BY id LIMIT 1", (emp['name'], date_str)).fetchone()
+    # سجل الهاتف (mobile) وسجل جهاز المدخل (kiosk) منفصلان عن سجلات أجهزة البصمة — التحليل يدمجها حسب طريقة توثيق الموظف
+    row = conn.execute("SELECT id, time_in, time_out FROM punches WHERE name = ? AND date = ? AND batch_id = ? "
+                       "ORDER BY id LIMIT 1", (emp['name'], date_str, batch)).fetchone()
     if row:
         tin, tout = row['time_in'] or '', row['time_out'] or ''
         if kind == 'in':
@@ -271,8 +277,8 @@ def _merge_punch(conn, emp, date_str, time_str, kind):
             tin = tin or time_str
         conn.execute("UPDATE punches SET time_in = ?, time_out = ?, synced = 0 WHERE id = ?", (tin, tout, row['id']))
     else:
-        conn.execute("INSERT INTO punches (name, date, dept, time_in, time_out, batch_id) VALUES (?, ?, ?, ?, ?, 'mobile')",
-                     (emp['name'], date_str, emp['dept'] or '', time_str, time_str))
+        conn.execute("INSERT INTO punches (name, date, dept, time_in, time_out, batch_id) VALUES (?, ?, ?, ?, ?, ?)",
+                     (emp['name'], date_str, emp['dept'] or '', time_str, time_str, batch))
 
 
 def _apply_leave(conn, emp, date_str):
@@ -617,7 +623,7 @@ def me_status(conn, acc, emp, cfg):
         (emp['id'],)).fetchall()]
     creds = conn.execute("SELECT COUNT(*) FROM webauthn_credentials WHERE employee_id = ?", (emp['id'],)).fetchone()[0]
     return jsonify({
-        'mode': emp['attendance_mode'] or 'both',
+        'mode': emp['attendance_mode'] or 'both', 'server_ms': int(time.time() * 1000),
         'override': {'until': ov['ends_at'], 'reason': ov['reason'], 'no_location': bool(ov['no_location'])} if ov else None,
         'notifications': notes, 'unread': sum(1 for n in notes if not n['read_at']),
         'biometric': cfg.get('mobile_biometric', 'off'), 'bio_enrolled': creds > 0, 'webauthn': _webauthn_ready(),
@@ -687,6 +693,19 @@ def me_punch(conn, acc, emp, cfg):
         flags += more
         if data.get('mock') and source == 'app':
             reason = bad or reason
+    # ===== ردع التلاعب بالوقت: الحركة تُسجَّل دائماً بوقت الخادم، وساعة الهاتف المختلفة تُعلَّم للمراجعة =====
+    clock_note = ''
+    try:
+        skew_min = abs(time.time() * 1000 - float(data.get('client_ts'))) / 60000
+        if skew_min >= 2:
+            flags.append(f'ساعة الهاتف مختلفة عن الوقت الصحيح ({int(skew_min)} دقيقة)')
+            clock_note = ' — تنبيه: ساعة هاتفك غير مضبوطة؛ سُجّلت الحركة بوقت النظام وأُبلغت الإدارة'
+    except (TypeError, ValueError):
+        pass
+    if data.get('auto_time') is False:
+        flags.append('الضبط التلقائي للوقت معطّل في الهاتف')
+    if data.get('dev_opts') is True:
+        flags.append('خيارات المطوّر مفعّلة في الهاتف')
     if ok and kind not in NEXT.get(last, ['in']):
         ok, reason = False, f'لا يمكن تسجيل «{KINDS[kind]}» الآن — آخر حركة: {KINDS.get(last, "لا شيء")}'
     if ok and recent:
@@ -713,7 +732,7 @@ def me_punch(conn, acc, emp, cfg):
         where = ' — باستثناء موقع' + (f' ({dist / 1000:.1f} كم عن «{site["name"]}»)' if site and dist is not None else '')
     else:
         where = f' — {site["name"]}' if site else ''
-    return jsonify({'ok': True, 'message': f'تم تسجيل {KINDS[kind]} الساعة {t[:5]}' + where,
+    return jsonify({'ok': True, 'message': f'تم تسجيل {KINDS[kind]} الساعة {t[:5]}' + where + clock_note,
                     'time': t[:5]})
 
 
@@ -848,7 +867,7 @@ def api_accounts_bulk():
                 conn.execute("UPDATE employee_accounts SET password_hash = ? WHERE id = ?", (generate_password_hash(pw), acc['id']))
                 out.append({'name': e['name'], 'dept': e['dept'] or '', 'username': acc['username'], 'password': pw})
             elif action == 'unbind':
-                conn.execute("UPDATE employee_accounts SET device_hash = NULL, device_label = NULL, bound_at = NULL WHERE id = ?", (acc['id'],))
+                conn.execute("UPDATE employee_accounts SET device_hash = NULL, device_label = NULL, bound_at = NULL, qr_secret = NULL WHERE id = ?", (acc['id'],))
             elif action in ('enable', 'disable'):
                 conn.execute("UPDATE employee_accounts SET active = ? WHERE id = ?", (1 if action == 'enable' else 0, acc['id']))
             elif action in ('anywhere_on', 'anywhere_off'):
@@ -1066,11 +1085,11 @@ def api_mobile_punches_delete():
         # إعادة بناء صف الهاتف لكل (موظف، يوم) متأثر من الحركات المتبقية
         for emp_id, name, d in {(r['employee_id'], r['name'], r['date']) for r in rows}:
             emp = conn.execute("SELECT * FROM employees WHERE id = ?", (emp_id,)).fetchone()
-            conn.execute("DELETE FROM punches WHERE name = ? AND date = ? AND batch_id = 'mobile'", (name, d))
+            conn.execute("DELETE FROM punches WHERE name = ? AND date = ? AND batch_id IN ('mobile', 'kiosk')", (name, d))
             if emp:
                 for m in today_moves(conn, emp_id, d):
                     if m['kind'] in ('in', 'out'):
-                        _merge_punch(conn, emp, d, m['time'], m['kind'])
+                        _merge_punch(conn, emp, d, m['time'], m['kind'], 'kiosk' if m.get('source') == 'kiosk' else 'mobile')
                 try:
                     _apply_leave(conn, emp, d)
                 except Exception:
@@ -1531,5 +1550,261 @@ def api_employees_bulk():
         conn.commit()
         schedule_analysis(1)
         return jsonify({'ok': True, 'count': len(emps)})
+    finally:
+        conn.close()
+
+
+# =====================================================
+#   أجهزة المداخل (QR): تابلت/هاتف ثابت عند الباب يقرأ رمز الموظف المتغيّر
+#   - رمز الموظف يُولَّد داخل هاتفه دون إنترنت: HMAC(سرّ الحساب، رقم الموظف:رقم الفترة) ويتغيّر كل 30 ثانية
+#   - وقت الحركة = وقت جهاز المدخل المتزامن مع الخادم (لا وقت هاتف الموظف)
+#   - جهاز المدخل يحفظ الحركات عند انقطاع الإنترنت ويرسلها لاحقاً
+# =====================================================
+QR_STEP = 30          # ثانية لكل رمز
+QR_WINDOW = 2         # يُقبل الرمز ±فترتين (دقيقة) حول وقت جهاز المدخل
+KIOSK_DEDUP_SEC = 60  # مسح متكرر للموظف نفسه خلال دقيقة يُتجاهل
+
+
+def _qr_code(secret, emp_id, step):
+    import hmac
+    return hmac.new(secret.encode(), f'{emp_id}:{step}'.encode(), hashlib.sha256).hexdigest()[:10]
+
+
+def _qr_secret(conn, acc):
+    if acc['qr_secret']:
+        return acc['qr_secret']
+    sec = secrets.token_hex(20)
+    conn.execute("UPDATE employee_accounts SET qr_secret = ? WHERE id = ?", (sec, acc['id']))
+    conn.commit()
+    return sec
+
+
+@bp.route('/me/api/qr')
+@_me_json
+def me_qr_info(conn, acc, emp, cfg):
+    """سرّ الرمز المتغيّر لهذا الهاتف (يُحفظ في الهاتف ليعمل الرمز دون إنترنت) + وقت الخادم لضبط ساعة التطبيق"""
+    return jsonify({'ok': True, 'emp_id': emp['id'], 'name': emp['name'], 'secret': _qr_secret(conn, acc),
+                    'step': QR_STEP, 'server_ms': int(time.time() * 1000)})
+
+
+@bp.route('/me/qr')
+def me_qr_page():
+    """صفحة رمز الموظف — تعمل دون إنترنت بعد أول فتح (تُخزَّن في الهاتف)"""
+    return render_template('me_qr.html', settings=settings())
+
+
+@bp.route('/me/api/time')
+def me_time():
+    return jsonify({'ok': True, 'server_ms': int(time.time() * 1000)})
+
+
+# ---------- إدارة أجهزة المداخل ----------
+@bp.route('/api/kiosks', methods=['GET', 'POST'])
+@admin_required
+def api_kiosks():
+    conn = db.get_db()
+    try:
+        if request.method == 'POST':
+            d = request.get_json(silent=True) or {}
+            name = (d.get('name') or '').strip()[:80]
+            if not name:
+                return jsonify({'ok': False, 'error': 'اكتب اسماً للجهاز (مثلاً: المدخل الرئيسي)'}), 400
+            site = d.get('site_id') or None
+            cur = conn.execute("INSERT INTO qr_kiosks (name, site_id) VALUES (?, ?)", (name, site))
+            code = _kiosk_new_pair(conn, cur.lastrowid)
+            _audit(conn, 'kiosk_add', 'kiosk', name)
+            conn.commit()
+            return jsonify({'ok': True, 'id': cur.lastrowid, 'pair_code': code})
+        now = now_local().strftime('%Y-%m-%d %H:%M:%S')
+        rows = []
+        for r in conn.execute("SELECT k.*, s.name AS site_name FROM qr_kiosks k LEFT JOIN work_sites s ON s.id = k.site_id ORDER BY k.id"):
+            x = dict(r)
+            x.pop('token_hash', None)
+            x['paired'] = bool(r['token_hash'])
+            x['pair_valid'] = bool(r['pair_code'] and (r['pair_expires'] or '') > now)
+            if not x['pair_valid']:
+                x['pair_code'] = None
+            x['today'] = conn.execute("SELECT COUNT(*) FROM mobile_punches WHERE source = 'kiosk' AND device_label = ? AND date = ?",
+                                      (r['name'], now[:10])).fetchone()[0]
+            rows.append(x)
+        return jsonify({'ok': True, 'rows': rows})
+    finally:
+        conn.close()
+
+
+def _kiosk_new_pair(conn, kid):
+    code = ''.join(secrets.choice('0123456789') for _ in range(6))
+    exp = (now_local() + timedelta(minutes=30)).strftime('%Y-%m-%d %H:%M:%S')
+    conn.execute("UPDATE qr_kiosks SET pair_code = ?, pair_expires = ? WHERE id = ?", (code, exp, kid))
+    return code
+
+
+@bp.route('/api/kiosks/bulk', methods=['POST'])
+@admin_required
+def api_kiosks_bulk():
+    d = request.get_json(silent=True) or {}
+    ids = [int(i) for i in (d.get('ids') or []) if str(i).isdigit()]
+    action = d.get('action')
+    if not ids:
+        return jsonify({'ok': False, 'error': 'حدّد جهازاً واحداً على الأقل'}), 400
+    conn = db.get_db()
+    try:
+        out = {}
+        for kid in ids:
+            k = conn.execute("SELECT * FROM qr_kiosks WHERE id = ?", (kid,)).fetchone()
+            if not k:
+                continue
+            if action == 'pair':
+                out[kid] = _kiosk_new_pair(conn, kid)
+            elif action == 'unpair':
+                conn.execute("UPDATE qr_kiosks SET token_hash = NULL WHERE id = ?", (kid,))
+            elif action in ('enable', 'disable'):
+                conn.execute("UPDATE qr_kiosks SET active = ? WHERE id = ?", (1 if action == 'enable' else 0, kid))
+            elif action == 'delete':
+                conn.execute("DELETE FROM qr_kiosks WHERE id = ?", (kid,))
+            elif action == 'edit':
+                conn.execute("UPDATE qr_kiosks SET name = ?, site_id = ? WHERE id = ?",
+                             ((d.get('name') or k['name']).strip()[:80], d.get('site_id') or None, kid))
+            else:
+                return jsonify({'ok': False, 'error': 'إجراء غير معروف'}), 400
+            _audit(conn, f'kiosk_{action}', 'kiosk', k['name'])
+        conn.commit()
+        return jsonify({'ok': True, 'codes': out})
+    finally:
+        conn.close()
+
+
+# ---------- جهاز المدخل نفسه ----------
+def _kiosk_auth(conn):
+    tok = request.headers.get('X-Kiosk', '')
+    if len(tok) < 32:
+        return None
+    k = conn.execute("SELECT * FROM qr_kiosks WHERE token_hash = ?", (hashlib.sha256(tok.encode()).hexdigest(),)).fetchone()
+    if not k or not k['active']:
+        return None
+    conn.execute("UPDATE qr_kiosks SET last_seen = ?, last_ip = ? WHERE id = ?", (now_local().strftime('%Y-%m-%d %H:%M:%S'), _ip(), k['id']))
+    return k
+
+
+@bp.route('/kiosk')
+def kiosk_page():
+    return render_template('kiosk.html', settings=settings())
+
+
+@bp.route('/kiosk/api/pair', methods=['POST'])
+def kiosk_pair():
+    code = ((request.get_json(silent=True) or {}).get('code') or '').strip()
+    key = f'{_ip()}|kiosk'
+    if _blocked(key):
+        return jsonify({'ok': False, 'error': 'محاولات كثيرة — انتظر 15 دقيقة'}), 429
+    conn = db.get_db()
+    try:
+        now = now_local().strftime('%Y-%m-%d %H:%M:%S')
+        k = conn.execute("SELECT * FROM qr_kiosks WHERE pair_code = ? AND pair_expires > ?", (code, now)).fetchone() if len(code) == 6 else None
+        if not k:
+            _FAILS.setdefault(key, []).append(time.time())
+            return jsonify({'ok': False, 'error': 'رمز الإقران غير صحيح أو انتهت صلاحيته — أنشئ رمزاً جديداً من لوحة الإدارة'}), 400
+        tok = secrets.token_urlsafe(40)
+        conn.execute("UPDATE qr_kiosks SET token_hash = ?, pair_code = NULL, pair_expires = NULL WHERE id = ?",
+                     (hashlib.sha256(tok.encode()).hexdigest(), k['id']))
+        _audit(conn, 'kiosk_paired', 'kiosk', k['name'])
+        conn.commit()
+        return jsonify({'ok': True, 'token': tok, 'name': k['name']})
+    finally:
+        conn.close()
+
+
+@bp.route('/kiosk/api/sync')
+def kiosk_sync():
+    """وقت الخادم + قائمة الموظفين وأسرار رموزهم (للتحقق دون إنترنت)"""
+    conn = db.get_db()
+    try:
+        k = _kiosk_auth(conn)
+        if not k:
+            return jsonify({'ok': False, 'error': 'الجهاز غير مقترن أو معطّل', 'unpaired': True}), 401
+        roster = []
+        for r in conn.execute("SELECT a.*, e.name, e.dept FROM employee_accounts a JOIN employees e ON e.id = a.employee_id "
+                              "WHERE a.active = 1 AND e.active = 1"):
+            roster.append({'id': r['employee_id'], 'name': r['name'], 'dept': r['dept'] or '', 'secret': _qr_secret(conn, r)})
+        conn.commit()
+        return jsonify({'ok': True, 'server_ms': int(time.time() * 1000), 'name': k['name'], 'step': QR_STEP,
+                        'window': QR_WINDOW, 'dedup': KIOSK_DEDUP_SEC, 'roster': roster, 'org': settings().get('org_name') or ''})
+    finally:
+        conn.close()
+
+
+@bp.route('/kiosk/api/scans', methods=['POST'])
+def kiosk_scans():
+    """يستقبل مسحاً واحداً (مباشر) أو دفعة محفوظة أثناء انقطاع الإنترنت"""
+    recs = (request.get_json(silent=True) or {}).get('records') or []
+    conn = db.get_db()
+    try:
+        k = _kiosk_auth(conn)
+        if not k:
+            return jsonify({'ok': False, 'error': 'الجهاز غير مقترن أو معطّل', 'unpaired': True}), 401
+        site = conn.execute("SELECT * FROM work_sites WHERE id = ?", (k['site_id'],)).fetchone() if k['site_id'] else None
+        now_ms = time.time() * 1000
+        results = []
+        touched = set()
+        for r in sorted(recs[:500], key=lambda x: float(x.get('ts') or 0)):
+            uid = str(r.get('uid') or '')[:64]
+            res = {'uid': uid, 'ok': False}
+            results.append(res)
+            if not uid or conn.execute("SELECT 1 FROM kiosk_scans_seen WHERE uid = ?", (uid,)).fetchone():
+                res.update(ok=True, dup=True)
+                continue
+            try:
+                emp_id, step, ts = int(r.get('emp_id')), int(r.get('step')), float(r.get('ts'))
+            except (TypeError, ValueError):
+                res['error'] = 'بيانات غير صالحة'
+                continue
+            conn.execute("INSERT INTO kiosk_scans_seen (uid, kiosk_id) VALUES (?, ?)", (uid, k['id']))
+            acc = conn.execute("SELECT * FROM employee_accounts WHERE employee_id = ?", (emp_id,)).fetchone()
+            emp = conn.execute("SELECT * FROM employees WHERE id = ?", (emp_id,)).fetchone()
+            if not acc or not emp or not acc['active'] or not emp['active'] or not acc['qr_secret']:
+                res['error'] = 'الموظف غير معروف أو حسابه موقوف'
+                continue
+            res['name'] = emp['name']
+            import hmac as _hm
+            if not _hm.compare_digest(_qr_code(acc['qr_secret'], emp_id, step), str(r.get('code') or '')):
+                res['error'] = 'رمز غير صحيح'
+                continue
+            flags = []
+            # الوقت: وقت جهاز المدخل المتزامن، ولا يُقبل وقت في المستقبل أو أقدم من 7 أيام
+            if ts > now_ms + 120000 or ts < now_ms - 7 * 86400000:
+                res['error'] = 'وقت جهاز المدخل غير صحيح — يحتاج اتصالاً بالإنترنت لضبطه'
+                continue
+            if abs(step - int(ts / 1000 // QR_STEP)) > QR_WINDOW:
+                res['error'] = 'الرمز منتهي — اطلب من الموظف فتح الرمز من جديد'
+                continue
+            if r.get('clock') != 'synced':
+                flags.append('ساعة جهاز المدخل لم تُضبط من الخادم قبل هذا المسح')
+            if r.get('offline'):
+                flags.append('سُجّل أثناء انقطاع إنترنت جهاز المدخل')
+            try:
+                from zoneinfo import ZoneInfo
+                when = datetime.fromtimestamp(ts / 1000, ZoneInfo(os.environ.get('ATT_TZ', 'Asia/Amman'))).replace(tzinfo=None)
+            except Exception:
+                when = datetime.fromtimestamp(ts / 1000)
+            d, t = when.strftime('%Y-%m-%d'), when.strftime('%H:%M:%S')
+            last = conn.execute("SELECT time FROM mobile_punches WHERE employee_id = ? AND date = ? AND status = 'accepted' "
+                                "ORDER BY time DESC LIMIT 1", (emp_id, d)).fetchone()
+            if last and abs((when - datetime.strptime(f"{d} {last['time']}", '%Y-%m-%d %H:%M:%S')).total_seconds()) < KIOSK_DEDUP_SEC:
+                res.update(ok=True, dup=True, error='')
+                continue
+            moves = today_moves(conn, emp_id, d)
+            kind = 'in' if not any(m['kind'] == 'in' for m in moves) else 'out'
+            conn.execute(
+                "INSERT INTO mobile_punches (employee_id, name, dept, kind, date, time, site_id, site_name, status, device_label, ip, flags, source) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'accepted', ?, ?, ?, 'kiosk')",
+                (emp_id, emp['name'], emp['dept'] or '', kind, d, t, site['id'] if site else None, site['name'] if site else k['name'],
+                 k['name'], _ip(), '؛ '.join(flags) or None))
+            _merge_punch(conn, emp, d, t, kind, 'kiosk')
+            touched.add(d)
+            res.update(ok=True, kind=kind, kind_label=KINDS[kind], time=t[:5], date=d)
+        conn.commit()
+        if touched:
+            schedule_analysis(2)
+        return jsonify({'ok': True, 'results': results, 'server_ms': int(time.time() * 1000)})
     finally:
         conn.close()

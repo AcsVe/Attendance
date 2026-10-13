@@ -212,6 +212,9 @@ PERMISSION_REQUIRED_ENDPOINTS = {
     'mobile.api_sites': 'can_edit_org_settings',
     'mobile.api_site_edit': 'can_edit_org_settings',
     'mobile.api_mobile_settings': 'can_edit_org_settings',
+    'mobile.api_kiosks': 'can_edit_org_settings',
+    'mobile.api_kiosks_bulk': 'can_edit_org_settings',
+    'mobile.api_mobile_punches_delete': 'can_manage_employees',
 }
 
 # دور «اطّلاع فقط» (viewer): لا يعدّل شيئاً — مسموح له فقط بهذه الطلبات غير GET (حسابات وتقارير بلا حفظ)
@@ -281,7 +284,7 @@ def enforce_role_permissions():
             from urllib.parse import urlparse
             if urlparse(origin).netloc.lower() != (request.host or '').lower():
                 return jsonify({'ok': False, 'error': 'طلب مرفوض (مصدر غير موثوق)'}), 403
-    if request.path == '/me' or request.path.startswith('/me/'):
+    if request.path in ('/me', '/kiosk') or request.path.startswith(('/me/', '/kiosk/')):
         return   # تطبيق الموظف على الهاتف — له جلسته وصلاحياته الخاصة (mobile.py)
     if not session.get('user_id'):
         return
@@ -1781,7 +1784,8 @@ def run_full_analysis(conn):
         "SELECT p.name, p.date, p.dept, p.time_in, p.time_out FROM punches p "
         "LEFT JOIN employees e ON e.name = p.name "
         "WHERE NOT (COALESCE(e.attendance_mode, 'both') = 'device' AND COALESCE(p.batch_id, '') = 'mobile') "
-        "AND NOT (COALESCE(e.attendance_mode, 'both') = 'mobile' AND COALESCE(p.batch_id, '') != 'mobile')").fetchall()
+        "AND NOT (COALESCE(e.attendance_mode, 'both') = 'mobile' AND COALESCE(p.batch_id, '') NOT IN ('mobile', 'kiosk'))").fetchall()
+    # جهاز المدخل (kiosk) يُحتسب لكل الموظفين مهما كانت طريقة التوثيق — هو جهاز حضور داخل المبنى
     punches_df = pd.DataFrame([dict(r) for r in punches_rows])
 
     settings = db.get_all_settings()

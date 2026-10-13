@@ -46,6 +46,7 @@
   <div class="card hide" id="ovBanner" style="background:#e6f1f6;color:var(--pd);font-weight:700;font-size:.9rem"></div>
 
   <div id="t-today">
+    <a class="btn btn-l" href="/me/qr" style="width:100%;margin-bottom:12px;text-decoration:none;font-size:1.05rem;padding:15px"><i class="fas fa-qrcode" aria-hidden="true"></i> رمز المدخل (QR) — للتسجيل على جهاز المدخل</a>
     <div class="card">
       <div class="clock" id="clock">--:--:--</div>
       <div class="date" id="date"></div>
@@ -257,7 +258,8 @@
         var lat = POS ? POS.coords.latitude.toFixed(7) : null, lng = POS ? POS.coords.longitude.toFixed(7) : null, hdr = {};
         if (NATIVE) { var ts = String(Date.now()); hdr = { 'X-App': 'android', 'X-App-Ts': ts, 'X-App-Sig': NATIVE.sign(k + '|' + lat + '|' + lng + '|' + ts + '|' + (bio.bio ? 1 : 0)) }; }
         return api('/me/api/punch', { method: 'POST', headers: hdr, body: JSON.stringify({ kind: k, lat: lat, lng: lng, accuracy: POS ? POS.coords.accuracy : null, mock: !!(POS && POS.mock),
-          rooted: NATIVE ? !!NATIVE.isRooted() : false, samples: SAMPLES, bio: !!bio.bio, webauthn: bio.webauthn || null }) })
+          rooted: NATIVE ? !!NATIVE.isRooted() : false, samples: SAMPLES, bio: !!bio.bio, webauthn: bio.webauthn || null,
+          client_ts: Date.now(), auto_time: NATIVE && NATIVE.autoTime ? !!NATIVE.autoTime() : null, dev_opts: NATIVE && NATIVE.devOptions ? !!NATIVE.devOptions() : null }) })
           .then(function (d) { toast(d.ok ? d.message : d.error, d.ok); });
       }, function (msg) { toast(msg); })
         .catch(function () { toast('تعذّر الاتصال بالخادم — تحقق من الإنترنت'); })
@@ -278,7 +280,17 @@
   var deferred = null;
   window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferred = e; if (!NATIVE) $('installBtn').classList.remove('hide'); });
   $('installBtn').addEventListener('click', function () { if (deferred) { deferred.prompt(); deferred = null; $('installBtn').classList.add('hide'); } });
-  if ('serviceWorker' in navigator && !NATIVE) navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function () {});
+  /* نحفظ سرّ «رمز المدخل» ووقت الخادم في الهاتف مسبقاً ليعمل الرمز لاحقاً دون إنترنت */
+  (function () {
+    var t0 = Date.now();
+    api('/me/api/qr').then(function (d) {
+      if (!d || !d.ok) return;
+      var t1 = Date.now(), e = null;
+      try { e = NATIVE && NATIVE.elapsed ? Number(NATIVE.elapsed()) : null; } catch (x) {}
+      try { localStorage.setItem('att_qr_v1', JSON.stringify({ emp: d.emp_id, name: d.name, secret: d.secret, step: d.step, srv: d.server_ms + (t1 - t0) / 2, local: t1, el: e })); } catch (x) {}
+    }).catch(function () {});
+  })();
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function () {});
   load();
   setInterval(load, 60000);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) load(); });

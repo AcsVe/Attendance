@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f2b38">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>جهاز المدخل — الحضور والانصراف</title>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;background:#0f2b38;color:#fff;font-family:'Tajawal',sans-serif;overflow:hidden}
+    .top{position:fixed;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 16px;background:rgba(0,0,0,.35);z-index:3;font-weight:700}
+    .clock{font-size:2rem;font-weight:800;letter-spacing:1px;direction:ltr}
+    .pill{font-size:.8rem;padding:4px 10px;border-radius:20px;background:#1e8e5a}
+    .pill.off{background:#c0392b}.pill.warn{background:#d9822b}
+    #cam{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+    #cam.back{transform:none}
+    .frame{position:fixed;left:50%;top:50%;width:min(64vw,64vh);height:min(64vw,64vh);transform:translate(-50%,-50%);border:4px solid rgba(255,255,255,.85);border-radius:26px;box-shadow:0 0 0 100vmax rgba(0,0,0,.35);z-index:1}
+    .hint{position:fixed;bottom:0;left:0;right:0;text-align:center;padding:14px 16px calc(14px + env(safe-area-inset-bottom));background:rgba(0,0,0,.45);font-size:1.15rem;font-weight:700;z-index:3}
+    .result{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;z-index:5;text-align:center;padding:20px}
+    .result.ok{display:flex;background:rgba(30,142,90,.96)}.result.bad{display:flex;background:rgba(192,57,43,.96)}.result.info{display:flex;background:rgba(217,130,43,.96)}
+    .result .big{font-size:clamp(2rem,7vw,4rem);font-weight:800}
+    .result .name{font-size:clamp(1.6rem,5vw,3rem);font-weight:800}
+    .result .msg{font-size:clamp(1rem,3vw,1.5rem);font-weight:700;max-width:800px;line-height:1.6}
+    .pair{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:6;background:#0f2b38;padding:20px}
+    .card{background:#fff;color:#1e2a2b;border-radius:18px;padding:22px;max-width:420px;width:100%;text-align:center}
+    .card h1{font-size:1.4rem;color:#124A5F;margin-bottom:8px}
+    .card input{width:100%;font:800 2rem 'Tajawal';text-align:center;letter-spacing:8px;padding:12px;border:2px solid #d4e4e6;border-radius:12px;margin:14px 0;direction:ltr}
+    .btn{border:0;border-radius:12px;font:700 1rem 'Tajawal',sans-serif;padding:12px 18px;cursor:pointer;background:#1B6E8C;color:#fff}
+    .tools{display:flex;gap:6px}
+    .tools button{background:rgba(255,255,255,.15);color:#fff;border:0;border-radius:10px;padding:6px 10px;font:700 .8rem 'Tajawal';cursor:pointer}
+    .err{color:#c0392b;font-weight:700;min-height:1.4em}
+    .hide{display:none!important}
+  </style>
+</head>
+<body>
+<div class="pair hide" id="pair">
+  <div class="card">
+    <h1>إقران جهاز المدخل</h1>
+    <p style="color:#6b7c7e;line-height:1.7">من لوحة الإدارة ← «مواقع العمل» ← «أجهزة المداخل»، أضف جهازاً واكتب هنا رمز الإقران المكوّن من 6 أرقام.</p>
+    <input id="code" inputmode="numeric" maxlength="6" autocomplete="off" aria-label="رمز الإقران">
+    <div class="err" id="perr"></div>
+    <button class="btn" id="pbtn" style="width:100%">إقران</button>
+  </div>
+</div>
+
+<video id="cam" playsinline muted autoplay aria-label="كاميرا قراءة الرمز"></video>
+<div class="frame" aria-hidden="true"></div>
+<div class="top">
+  <div><div id="kname">جهاز المدخل</div><div class="tools"><button id="flip" type="button">تبديل الكاميرا</button><button id="fs" type="button">ملء الشاشة</button></div></div>
+  <div style="text-align:center"><div class="clock" id="clock">--:--:--</div><div id="date" style="font-size:.85rem;opacity:.85"></div></div>
+  <div style="text-align:left"><span class="pill" id="net">متصل</span><div style="font-size:.8rem;margin-top:4px;opacity:.85" id="queue"></div></div>
+</div>
+<div class="hint" id="hint">افتح «رمز المدخل» في تطبيق الدوام وقرّبه من الكاميرا</div>
+<div class="result" id="res" role="status" aria-live="assertive"><div class="big" id="rBig"></div><div class="name" id="rName"></div><div class="msg" id="rMsg"></div></div>
+
+<script src="{{ url_for('static', filename='vendor/jsQR.js') }}"></script>
+<script>
+(function () {
+  var $ = function (i) { return document.getElementById(i); };
+  var TK = 'att_kiosk_token', QK = 'att_kiosk_queue', RK = 'att_kiosk_roster', CK = 'att_kiosk_clock';
+  var token = '', roster = {}, cfg = { step: 30, window: 2, dedup: 60 }, queue = [], recent = {};
+  var clockSynced = false, base = null;        // base = {srv, perf}
+  try { token = localStorage.getItem(TK) || ''; queue = JSON.parse(localStorage.getItem(QK) || '[]'); } catch (e) {}
+  try { var R = JSON.parse(localStorage.getItem(RK) || 'null'); if (R) { roster = R.roster; cfg = R.cfg; $('kname').textContent = R.name; } } catch (e) {}
+  function saveQ() { try { localStorage.setItem(QK, JSON.stringify(queue)); } catch (e) {} $('queue').textContent = queue.length ? ('بانتظار الإرسال: ' + queue.length) : ''; }
+
+  /* الساعة الموثوقة: وقت الخادم + المدة منذ آخر ضبط (عدّاد المتصفح الذي لا يتأثر بتغيير ساعة الجهاز) */
+  function now() {
+    if (base) return base.srv + (performance.now() - base.perf);
+    try { var c = JSON.parse(localStorage.getItem(CK) || 'null'); if (c) return Date.now() + (c.srv - c.wall); } catch (e) {}
+    return Date.now();
+  }
+  function api(url, body) {
+    return fetch(url, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', 'X-Kiosk': token }, body: body ? JSON.stringify(body) : undefined })
+      .then(function (r) { return r.json(); });
+  }
+  function net(state) { var n = $('net'); n.className = 'pill' + (state === 'off' ? ' off' : state === 'warn' ? ' warn' : ''); n.textContent = state === 'off' ? 'دون اتصال' : state === 'warn' ? 'الساعة غير مضبوطة' : 'متصل'; }
+  function sync() {
+    if (!token) return Promise.resolve();
+    var t0 = performance.now();
+    return api('/kiosk/api/sync').then(function (d) {
+      if (d.unpaired) { localStorage.removeItem(TK); token = ''; showPair(); return; }
+      if (!d.ok) return;
+      var t1 = performance.now();
+      base = { srv: d.server_ms + (t1 - t0) / 2, perf: t1 }; clockSynced = true;
+      try { localStorage.setItem(CK, JSON.stringify({ srv: base.srv, wall: Date.now() })); } catch (e) {}
+      roster = {}; d.roster.forEach(function (r) { roster[r.id] = r; });
+      cfg = { step: d.step, window: d.window, dedup: d.dedup };
+      $('kname').textContent = d.name;
+      try { localStorage.setItem(RK, JSON.stringify({ roster: roster, cfg: cfg, name: d.name })); } catch (e) {}
+      net('on'); flush();
+    }).catch(function () { net(clockSynced ? 'off' : 'warn'); });
+  }
+  function flush() {
+    if (!queue.length || !token) return Promise.resolve(null);
+    var batch = queue.slice(0, 200);
+    return api('/kiosk/api/scans', { records: batch }).then(function (d) {
+      if (!d.ok) return null;
+      var done = {}; d.results.forEach(function (r) { done[r.uid] = r; });
+      queue = queue.filter(function (q) { return !done[q.uid]; }); saveQ(); net('on');
+      return done;
+    }).catch(function () { net('off'); return null; });
+  }
+
+  /* التحقق من رمز الموظف داخل الجهاز (يعمل دون إنترنت) */
+  function hex(buf) { return Array.prototype.map.call(new Uint8Array(buf), function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); }
+  function hmac(secret, msg) {
+    var enc = new TextEncoder();
+    return crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+      .then(function (k) { return crypto.subtle.sign('HMAC', k, enc.encode(msg)); }).then(function (s) { return hex(s).slice(0, 10); });
+  }
+  var showing = false;
+  function show(kind, big, name, msg, ms) {
+    showing = true; var r = $('res'); r.className = 'result ' + kind;
+    $('rBig').textContent = big; $('rName').textContent = name || ''; $('rMsg').textContent = msg || '';
+    beep(kind === 'ok'); setTimeout(function () { r.className = 'result'; showing = false; }, ms || 2600);
+  }
+  var actx = null;
+  function beep(ok) { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); var o = actx.createOscillator(), g = actx.createGain(); o.frequency.value = ok ? 880 : 220; g.gain.value = .15; o.connect(g); g.connect(actx.destination); o.start(); o.stop(actx.currentTime + (ok ? .15 : .4)); } catch (e) {} if (navigator.vibrate) navigator.vibrate(ok ? 80 : [100, 60, 100]); }
+  function handle(text) {
+    if (showing) return;
+    var m = /^ATT1\.(\d+)\.(\d+)\.([0-9a-f]{10})$/.exec(text || '');
+    if (!m) { show('bad', 'رمز غير معروف', '', 'استخدم «رمز المدخل» من تطبيق الدوام'); return; }
+    var emp = +m[1], step = +m[2], code = m[3], r = roster[emp];
+    if (!r) { show('bad', 'غير معروف', '', 'هذا الموظف غير مسجَّل في الجهاز — يتحدّث الجهاز تلقائياً عند الاتصال'); sync(); return; }
+    var t = now(), cur = Math.floor(t / 1000 / cfg.step);
+    if (Math.abs(step - cur) > cfg.window) { show('bad', 'الرمز منتهي', r.name, 'أعد فتح «رمز المدخل» في التطبيق — وإن تكرر فاتصل بالإنترنت مرة لضبط ساعة التطبيق'); return; }
+    if (recent[emp] && t - recent[emp] < cfg.dedup * 1000) { show('info', 'سُجّلت قبل قليل', r.name, ''); return; }
+    showing = true;
+    hmac(r.secret, emp + ':' + step).then(function (c) {
+      showing = false;
+      if (c !== code) { show('bad', 'رمز غير صحيح', r.name, 'يبدو أن الرمز منسوخ أو قديم'); return; }
+      recent[emp] = t;
+      var rec = { uid: (crypto.randomUUID ? crypto.randomUUID() : String(t) + Math.random()), emp_id: emp, step: step, code: code, ts: Math.round(t), clock: clockSynced ? 'synced' : 'unsynced', offline: !navigator.onLine };
+      queue.push(rec); saveQ();
+      show('ok', 'تم التسجيل', r.name, new Date(t).toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit' }), 3000);
+      flush().then(function (done) {
+        var x = done && done[rec.uid];
+        if (x && x.ok && x.kind_label) { $('rBig').textContent = x.kind_label + ' ' + x.time; $('rMsg').textContent = ''; }
+        else if (x && !x.ok) { show('bad', 'لم يُقبل', r.name, x.error || ''); }
+        else if (!done) { $('rMsg').textContent += ' — سيُرسل عند عودة الإنترنت'; }
+      });
+    });
+  }
+
+  /* الكاميرا وقراءة الرمز (BarcodeDetector إن توفّر، وإلا jsQR) */
+  var facing = 'user', stream = null, detector = null, canvas = document.createElement('canvas'), ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if ('BarcodeDetector' in window) { try { detector = new BarcodeDetector({ formats: ['qr_code'] }); } catch (e) {} }
+  function startCam() {
+    if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }).then(function (s) {
+      stream = s; var v = $('cam'); v.srcObject = s; v.classList.toggle('back', facing !== 'user'); v.play();
+    }).catch(function () { $('hint').textContent = 'اسمح للمتصفح باستخدام الكاميرا ثم أعد تحميل الصفحة'; });
+  }
+  function scan() {
+    var v = $('cam');
+    if (!showing && v.readyState >= 2) {
+      if (detector) {
+        detector.detect(v).then(function (codes) { if (codes.length) handle(codes[0].rawValue); }).catch(function () {});
+      } else if (window.jsQR) {
+        var w = 480, h = Math.round(480 * v.videoHeight / v.videoWidth) || 360; canvas.width = w; canvas.height = h;
+        ctx.drawImage(v, 0, 0, w, h);
+        var q = jsQR(ctx.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: 'dontInvert' });
+        if (q) handle(q.data);
+      }
+    }
+    setTimeout(scan, 220);
+  }
+  function tick() {
+    var t = new Date(now());
+    $('clock').textContent = t.toLocaleTimeString('en-GB');
+    $('date').textContent = t.toLocaleDateString('ar', { weekday: 'long', day: 'numeric', month: 'long' });
+  }
+
+  function showPair() { $('pair').classList.remove('hide'); var p = new URLSearchParams(location.search).get('pair'); if (p) { $('code').value = p; } }
+  $('pbtn').addEventListener('click', function () {
+    fetch('/kiosk/api/pair', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: $('code').value.trim() }) })
+      .then(function (r) { return r.json(); }).then(function (d) {
+        if (!d.ok) { $('perr').textContent = d.error; return; }
+        token = d.token; localStorage.setItem(TK, token); $('pair').classList.add('hide'); history.replaceState(null, '', '/kiosk'); sync(); startCam();
+      }).catch(function () { $('perr').textContent = 'تعذّر الاتصال بالخادم'; });
+  });
+  $('flip').addEventListener('click', function () { facing = facing === 'user' ? 'environment' : 'user'; startCam(); });
+  $('fs').addEventListener('click', function () { (document.documentElement.requestFullscreen || function () {}).call(document.documentElement); });
+  window.addEventListener('online', sync);
+  window.addEventListener('offline', function () { net('off'); });
+
+  saveQ(); setInterval(tick, 1000); tick();
+  if (!token) showPair(); else { sync(); startCam(); }
+  scan();
+  setInterval(sync, 5 * 60000);
+  setInterval(flush, 30000);
+  if ('wakeLock' in navigator) { var wl = function () { navigator.wakeLock.request('screen').catch(function () {}); }; wl(); document.addEventListener('visibilitychange', function () { if (!document.hidden) wl(); }); }
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function () {});
+})();
+</script>
+</body>
+</html>

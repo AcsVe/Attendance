@@ -349,6 +349,27 @@ def init_db():
     for col in ('last_login_at', 'last_login_ip', 'email'):
         if col not in user_cols:
             cur.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
+    # ===== أجهزة المداخل (QR): تابلت عند الباب يقرأ رمز الموظف المتغيّر =====
+    acc_cols = {r['name'] for r in cur.execute("PRAGMA table_info(employee_accounts)").fetchall()}
+    if 'qr_secret' not in acc_cols:
+        cur.execute("ALTER TABLE employee_accounts ADD COLUMN qr_secret TEXT")
+    cur.execute('''CREATE TABLE IF NOT EXISTS qr_kiosks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        site_id INTEGER,
+        token_hash TEXT,
+        pair_code TEXT,
+        pair_expires TEXT,
+        active INTEGER NOT NULL DEFAULT 1,
+        last_seen TEXT,
+        last_ip TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+    )''')
+    cur.execute('''CREATE TABLE IF NOT EXISTS kiosk_scans_seen (
+        uid TEXT PRIMARY KEY,
+        kiosk_id INTEGER,
+        created_at TEXT DEFAULT (datetime('now'))
+    )''')
     # ===== نسيان كلمة المرور: روابط بريد لمرة واحدة + طلبات تصل للإدارة (لمن لا بريد له) =====
     cur.execute('''CREATE TABLE IF NOT EXISTS password_reset_tokens (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

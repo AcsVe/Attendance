@@ -116,6 +116,31 @@
       <tbody id="sitesTable"></tbody>
     </table></div>
   </div>
+
+  <div class="card" id="kioskCard">
+    <div class="card-title"><i class="fas fa-qrcode" aria-hidden="true"></i> أجهزة المداخل (QR) <span class="m-count" id="kioskCount">0</span></div>
+    <p style="font-size:.85rem;color:var(--muted);line-height:1.8;margin-bottom:10px">
+      تابلت أو هاتف قديم يُثبَّت عند الباب ويُفتح عليه الرابط <b dir="ltr" id="kioskUrl"></b>. يفتح الموظف «رمز المدخل» في تطبيقه
+      (يتغيّر كل 30 ثانية ويعمل دون إنترنت) ويقرّبه من الكاميرا، فيُسجَّل <b>الحضور ثم الانصراف</b> بوقت جهاز المدخل المضبوط من الخادم.
+      إن انقطع إنترنت الجهاز يحفظ الحركات ويرسلها لاحقاً. تُحتسب هذه الحركات لكل الموظفين مثل جهاز البصمة.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:10px">
+      <div class="form-group" style="margin:0;flex:1 1 200px"><label>اسم الجهاز</label><input type="text" id="kioskName" placeholder="مثال: المدخل الرئيسي"></div>
+      <div class="form-group" style="margin:0;flex:1 1 200px"><label>موقع العمل</label><select id="kioskSite"></select></div>
+      <button class="btn btn-primary btn-sm" onclick="kioskAdd()"><i class="fas fa-plus" aria-hidden="true"></i> إضافة جهاز</button>
+    </div>
+    <div class="m-bulk">
+      <span id="kioskSel" style="font-size:.85rem;color:var(--muted)"></span>
+      <button class="btn btn-outline btn-sm" onclick="kioskBulk('pair')">رمز إقران جديد</button>
+      <button class="btn btn-outline btn-sm" onclick="kioskBulk('disable')">تعطيل</button>
+      <button class="btn btn-outline btn-sm" onclick="kioskBulk('enable')">تفعيل</button>
+      <button class="btn btn-outline btn-sm" onclick="kioskBulk('unpair')">إلغاء الإقران</button>
+      <button class="btn btn-red btn-sm" onclick="kioskBulk('delete')"><i class="fas fa-trash" aria-hidden="true"></i> حذف المحدد</button>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th class="no-filter"><input type="checkbox" id="kioskAll" aria-label="تحديد الكل" onchange="toggleSelectAll('kioskTable', this.checked); kioskCount()"></th><th>الجهاز</th><th>موقع العمل</th><th>الإقران</th><th>آخر اتصال</th><th>حركات اليوم</th><th>الحالة</th></tr></thead>
+      <tbody id="kioskTable"></tbody>
+    </table></div>
+  </div>
 </div>
 
 <!-- ============ حركات الهاتف والمتابعة ============ -->
