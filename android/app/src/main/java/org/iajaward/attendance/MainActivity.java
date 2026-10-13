@@ -26,6 +26,7 @@ import android.provider.MediaStore;
 import android.provider.Settings;
 import android.util.Base64;
 import android.view.Window;
+import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.GeolocationPermissions;
 import android.webkit.JavascriptInterface;
@@ -70,12 +71,15 @@ public class MainActivity extends Activity {
     private String geoOrigin;
     private GeolocationPermissions.Callback geoCallback;
     private String host;
+    private boolean askedFine = false;
 
     @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         Window w = getWindow();
+        // منع لقطات الشاشة وتسجيل الشاشة، وإخفاء المحتوى في قائمة التطبيقات الأخيرة
+        w.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
         w.setStatusBarColor(Color.parseColor("#1B6E8C"));
         host = Uri.parse(BuildConfig.BASE_URL).getHost();
 
@@ -102,7 +106,8 @@ public class MainActivity extends Activity {
         } else {
             web.loadUrl(BuildConfig.BASE_URL + BuildConfig.START_PATH);
         }
-        if (BuildConfig.EMPLOYEE && !hasLocation()) {
+        if (BuildConfig.EMPLOYEE && !hasFineLocation()) {
+            askedFine = true;
             requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_LOCATION);
         }
     }
@@ -187,9 +192,18 @@ public class MainActivity extends Activity {
                 geoCallback.invoke(geoOrigin, ok, false);
                 geoCallback = null;
             }
+            if (ok && !hasFineLocation() && BuildConfig.EMPLOYEE) {
+                sendLocationError("اخترتَ «الموقع التقريبي» ولا يكفي لتسجيل الدوام — افتح إعدادات الهاتف ← التطبيقات ← RAS Check-in ← الأذونات ← الموقع، وفعّل «استخدام الموقع الدقيق»");
+                return;
+            }
             if (ok && wantLocation) startNativeLocation();
             if (!ok && BuildConfig.EMPLOYEE) sendLocationError("اسمح للتطبيق باستخدام الموقع من إعدادات الهاتف ← التطبيقات ← RAS Check-in ← الأذونات");
         }
+    }
+
+    /** الموقع الدقيق (GPS) — الموقع التقريبي وحده لا يكفي لتسجيل الدوام */
+    private boolean hasFineLocation() {
+        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
     }
 
     private boolean hasLocation() {
@@ -227,7 +241,14 @@ public class MainActivity extends Activity {
     // =====================================================
     @SuppressLint("MissingPermission")
     private void startNativeLocation() {
-        if (!hasLocation()) {
+        if (!hasFineLocation()) {
+            if (askedFine) {   // سبق السؤال في هذه الجلسة — لا نكرر نافذة الإذن بلا نهاية
+                sendLocationError(hasLocation()
+                        ? "اخترتَ «الموقع التقريبي» ولا يكفي لتسجيل الدوام — افتح إعدادات الهاتف ← التطبيقات ← RAS Check-in ← الأذونات ← الموقع، وفعّل «استخدام الموقع الدقيق»"
+                        : "اسمح للتطبيق باستخدام الموقع من إعدادات الهاتف ← التطبيقات ← RAS Check-in ← الأذونات");
+                return;
+            }
+            askedFine = true;
             requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_LOCATION);
             return;
         }

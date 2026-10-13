@@ -170,7 +170,13 @@
     var accOk = !S || acc <= S.max_accuracy;
     if (S && S.require_app && !NATIVE) { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-mobile-screen" aria-hidden="true"></i><span>التسجيل متاح من تطبيق الموظف فقط — <a href="/app">نزّل التطبيق</a></span>'; return { ok: false }; }
     if (POS.mock) { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-ban" aria-hidden="true"></i><span>تم اكتشاف تطبيق موقع وهمي على هاتفك — أغلقه للتمكن من التسجيل</span>'; return { ok: false }; }
-    if (!accOk) { g.className = 'gps wait'; g.innerHTML = '<i class="fas fa-satellite-dish fa-beat-fade" aria-hidden="true"></i><span>دقة الموقع ضعيفة (' + Math.round(acc) + ' م) — انتظر قليلاً</span>'; }
+    if (!accOk && acc >= 1000) {   // «الموقع التقريبي» يعطي دقة بالكيلومترات — يلزم الموقع الدقيق
+      g.className = 'gps bad';
+      g.innerHTML = '<i class="fas fa-location-crosshairs" aria-hidden="true"></i><span>' + (NATIVE
+        ? 'الموقع التقريبي لا يكفي لتسجيل الدوام — من إعدادات الهاتف ← التطبيقات ← RAS Check-in ← الأذونات ← الموقع، فعّل «استخدام الموقع الدقيق»'
+        : 'اخترتَ «الموقع التقريبي» ولا يكفي لتسجيل الدوام — اضغط رمز القفل بجانب عنوان الموقع ← الأذونات ← الموقع، واختر «الموقع الدقيق» ثم أعد فتح الصفحة') + '</span>';
+    }
+    else if (!accOk) { g.className = 'gps wait'; g.innerHTML = '<i class="fas fa-satellite-dish fa-beat-fade" aria-hidden="true"></i><span>دقة الموقع ضعيفة (' + Math.round(acc) + ' م) — انتظر قليلاً</span>'; }
     else if (inside) { g.className = 'gps ok'; g.innerHTML = '<i class="fas fa-circle-check" aria-hidden="true"></i><span>' + (S.override ? 'استثناء مؤقت: مسموح لك التسجيل من هذا المكان' : S.anywhere ? 'مسموح لك التسجيل من أي مكان' : 'أنت داخل موقع العمل: ' + esc(best.name)) + ' · دقة ' + Math.round(acc) + ' م</span>'; }
     else if (best) { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-location-dot" aria-hidden="true"></i><span>خارج موقع العمل — ' + Math.round(bd) + ' م عن «' + esc(best.name) + '» (المسموح ' + best.radius + ' م)</span>'; }
     else { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-triangle-exclamation" aria-hidden="true"></i><span>لم تُحدَّد مواقع عمل لقسمك — راجع الإدارة</span>'; }

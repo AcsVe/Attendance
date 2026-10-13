@@ -149,6 +149,8 @@ def check_location(conn, emp, acc, lat, lng, accuracy, cfg, override=None):
                 best, best_d = s, d
         return True, '', best, best_d
     max_acc = float(cfg.get('mobile_max_accuracy') or 150)
+    if accuracy is not None and accuracy > max_acc and accuracy >= 1000:
+        return False, 'الموقع التقريبي لا يكفي لتسجيل الدوام — فعّل «الموقع الدقيق» من أذونات الموقع ثم أعد المحاولة', None, None
     if accuracy is not None and accuracy > max_acc:
         return False, f'دقة الموقع ضعيفة ({int(accuracy)} م) — انتظر قليلاً في مكان مفتوح ثم أعد المحاولة', None, None
     sites = sites_for(conn, emp['dept'])
