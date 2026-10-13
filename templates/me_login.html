@@ -8,28 +8,29 @@
 <body>
 <div class="wrap" style="padding-top:8vh">
   <div style="text-align:center;margin-bottom:18px">
-    {% if settings.org_logo_filename %}<img src="{{ url_for('static', filename='uploads/' + settings.org_logo_filename) }}" alt="" style="max-height:70px;max-width:220px">
-    {% else %}<div style="width:74px;height:74px;border-radius:22px;background:linear-gradient(135deg,var(--p),var(--s));color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:2rem"><i class="fas fa-fingerprint"></i></div>{% endif %}
+    {% if settings.org_logo_filename %}<img src="{{ url_for('static', filename='uploads/' + settings.org_logo_filename) }}" alt="شعار {{ settings.org_name or 'المؤسسة' }}" style="max-height:70px;max-width:220px">
+    {% else %}<div style="width:74px;height:74px;border-radius:22px;background:linear-gradient(135deg,var(--p),var(--s));color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:2rem"><i class="fas fa-fingerprint" aria-hidden="true"></i></div>{% endif %}
     <h1 style="font-size:1.45rem;margin-top:12px;color:var(--pd)">تسجيل الدوام</h1>
     <div class="muted">{{ settings.org_name or '' }}</div>
   </div>
   <div class="card">
-    {% if error %}<div class="err"><i class="fas fa-circle-exclamation"></i> {{ error }}</div>{% endif %}
+    {% if error %}<div class="err"><i class="fas fa-circle-exclamation" aria-hidden="true"></i> {{ error }}</div>{% endif %}
     <div id="quick" class="hide" style="text-align:center">
       <div style="font-size:1.1rem;font-weight:800;color:var(--pd)">أهلاً <span id="qName"></span></div>
-      <button type="button" class="btn btn-p" id="qBtn" style="width:100%;margin-top:14px;padding:18px;font-size:1.1rem"><i class="fas fa-fingerprint"></i> الدخول بالبصمة / Face ID</button>
+      <button type="button" class="btn btn-p" id="qBtn" style="width:100%;margin-top:14px;padding:18px;font-size:1.1rem"><i class="fas fa-fingerprint" aria-hidden="true"></i> الدخول بالبصمة / Face ID</button>
       <div id="qMsg" class="muted" style="margin-top:8px;min-height:1.2em"></div>
       <a href="#" id="qPw" class="muted" style="display:inline-block;margin-top:6px">الدخول باسم المستخدم وكلمة المرور</a>
     </div>
     <form method="post" id="f" autocomplete="on">
-      <label>اسم المستخدم</label>
-      <input name="username" dir="ltr" autocomplete="username" autocapitalize="none" required autofocus>
-      <label>كلمة المرور</label>
-      <input name="password" type="password" autocomplete="current-password" required>
+      <label for="mu">اسم المستخدم</label>
+      <input id="mu" name="username" dir="ltr" autocomplete="username" autocapitalize="none" required autofocus>
+      <label for="mp">كلمة المرور</label>
+      <input id="mp" name="password" type="password" autocomplete="current-password" required>
       <input type="hidden" name="device" id="dev">
-      <button class="btn btn-p" style="width:100%;margin-top:16px"><i class="fas fa-right-to-bracket"></i> دخول</button>
+      <button class="btn btn-p" style="width:100%;margin-top:16px"><i class="fas fa-right-to-bracket" aria-hidden="true"></i> دخول</button>
+      <p style="text-align:center;margin-top:12px"><a href="{{ url_for('mobile.me_forgot') }}">نسيت كلمة المرور؟</a></p>
     </form>
-    <p class="muted" style="margin-top:12px;line-height:1.7"><a href="/app"><i class="fas fa-download"></i> تنزيل تطبيق الموظف (أندرويد)</a><br><i class="fas fa-mobile-screen"></i> يرتبط حسابك بهذا الهاتف عند أول دخول، ولا يمكن استخدامه من هاتف آخر إلا بعد فكّ الربط من الإدارة.</p>
+    <p class="muted" style="margin-top:12px;line-height:1.7"><a href="/app"><i class="fas fa-download" aria-hidden="true"></i> تنزيل تطبيق الموظف (أندرويد)</a><br><i class="fas fa-mobile-screen" aria-hidden="true"></i> يرتبط حسابك بهذا الهاتف عند أول دخول، ولا يمكن استخدامه من هاتف آخر إلا بعد فكّ الربط من الإدارة.</p>
   </div>
 </div>
 <script>

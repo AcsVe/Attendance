@@ -502,6 +502,60 @@ def me_quick_login():
     return _start_session(emp, token, jsonify({'ok': True, 'next': url_for('mobile.me_home')}))
 
 
+@bp.route('/me/forgot', methods=['GET', 'POST'])
+def me_forgot():
+    cfg = settings()
+    if request.method == 'GET':
+        return render_template('me_forgot.html', settings=cfg, done=False, error=None)
+    A = _admin()
+    if A.forgot_blocked():
+        return render_template('me_forgot.html', settings=cfg, done=False, error='طلبات كثيرة — حاول بعد 15 دقيقة'), 429
+    username = (request.form.get('username') or '').strip().lower()
+    conn = db.get_db()
+    try:
+        acc = conn.execute("SELECT * FROM employee_accounts WHERE lower(username) = ?", (username,)).fetchone()
+        emp = conn.execute("SELECT * FROM employees WHERE id = ?", (acc['employee_id'],)).fetchone() if acc else None
+        if acc and emp:
+            sent = False
+            if (emp['email'] or '').strip():
+                token = A.reset_token_create(conn, 'emp', emp['id'])
+                conn.commit()
+                sent = A.reset_mail(emp['email'].strip(), emp['name'], url_for('mobile.me_reset', token=token, _external=True))
+            if not sent:
+                A.reset_request_add(conn, 'emp', emp['id'], acc['username'])
+            _audit_emp(conn, 'password_forgot', 'employee_accounts', emp['name'], 'رابط بالبريد' if sent else 'طلب للإدارة')
+            conn.commit()
+    finally:
+        conn.close()
+    return render_template('me_forgot.html', settings=cfg, done=True, error=None)
+
+
+@bp.route('/me/reset/<token>', methods=['GET', 'POST'])
+def me_reset(token):
+    cfg = settings()
+    A = _admin()
+    conn = db.get_db()
+    try:
+        row = A.reset_token_get(conn, 'emp', token)
+        if not row:
+            return render_template('me_reset.html', settings=cfg, error='الرابط غير صالح أو انتهت صلاحيته — اطلب رابطاً جديداً', ok=False, invalid=True)
+        if request.method == 'GET':
+            return render_template('me_reset.html', settings=cfg, error=None, ok=False, invalid=False)
+        pw, pw2 = request.form.get('password') or '', request.form.get('password2') or ''
+        if len(pw) < 6 or pw != pw2:
+            return render_template('me_reset.html', settings=cfg, error='كلمة المرور 6 أحرف على الأقل، ويجب أن تتطابق الخانتان', ok=False, invalid=False)
+        conn.execute("UPDATE employee_accounts SET password_hash = ? WHERE employee_id = ?", (generate_password_hash(pw), row['subject_id']))
+        conn.execute("UPDATE password_reset_tokens SET used_at = ? WHERE id = ?", (now_local().strftime('%Y-%m-%d %H:%M:%S'), row['id']))
+        conn.execute("UPDATE password_reset_requests SET status = 'done', handled_by = '(رابط البريد)', handled_at = ? "
+                     "WHERE kind = 'emp' AND subject_id = ? AND status = 'pending'", (now_local().strftime('%Y-%m-%d %H:%M:%S'), row['subject_id']))
+        emp = conn.execute("SELECT name FROM employees WHERE id = ?", (row['subject_id'],)).fetchone()
+        _audit_emp(conn, 'password_reset', 'employee_accounts', emp['name'] if emp else '', 'عبر رابط البريد')
+        conn.commit()
+        return render_template('me_reset.html', settings=cfg, error=None, ok=True, invalid=False)
+    finally:
+        conn.close()
+
+
 @bp.route('/me/logout')
 def me_logout():
     session.pop('emp_id', None)
@@ -990,6 +1044,41 @@ def api_punches():
             r['kind_label'] = KINDS.get(r['kind'], r['kind'])
         names = sorted({r['name'] for r in conn.execute("SELECT DISTINCT name FROM mobile_punches")})
         return jsonify({'ok': True, 'rows': rows, 'counts': counts, 'from': d_from, 'to': d_to, 'names': names})
+    finally:
+        conn.close()
+
+
+@bp.route('/api/mobile/punches/delete', methods=['POST'])
+@admin_required
+def api_mobile_punches_delete():
+    """حذف حركات هاتف محددة (مرحلة التجارب أو حركة خاطئة) ثم إعادة بناء دوام الأيام المتأثرة"""
+    ids = [int(i) for i in ((request.get_json(silent=True) or {}).get('ids') or []) if str(i).isdigit()]
+    if not ids:
+        return jsonify({'ok': False, 'error': 'حدّد حركة واحدة على الأقل'}), 400
+    conn = db.get_db()
+    try:
+        ph = ','.join('?' * len(ids))
+        rows = [r for r in conn.execute(f"SELECT id, employee_id, name, dept, date FROM mobile_punches WHERE id IN ({ph})", ids)
+                if _employee_scope_ok(r['dept'])]
+        if not rows:
+            return jsonify({'ok': True, 'count': 0})
+        conn.execute(f"DELETE FROM mobile_punches WHERE id IN ({','.join('?' * len(rows))})", [r['id'] for r in rows])
+        # إعادة بناء صف الهاتف لكل (موظف، يوم) متأثر من الحركات المتبقية
+        for emp_id, name, d in {(r['employee_id'], r['name'], r['date']) for r in rows}:
+            emp = conn.execute("SELECT * FROM employees WHERE id = ?", (emp_id,)).fetchone()
+            conn.execute("DELETE FROM punches WHERE name = ? AND date = ? AND batch_id = 'mobile'", (name, d))
+            if emp:
+                for m in today_moves(conn, emp_id, d):
+                    if m['kind'] in ('in', 'out'):
+                        _merge_punch(conn, emp, d, m['time'], m['kind'])
+                try:
+                    _apply_leave(conn, emp, d)
+                except Exception:
+                    pass
+            _audit_emp(conn, 'mobile_punch_delete', 'mobile_punches', name, d)
+        conn.commit()
+        schedule_analysis(1)
+        return jsonify({'ok': True, 'count': len(rows)})
     finally:
         conn.close()
 

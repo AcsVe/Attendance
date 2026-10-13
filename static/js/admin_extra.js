@@ -89,3 +89,78 @@ function urExport() {
 window.EXTRA_LOADERS = Object.assign(window.EXTRA_LOADERS || {}, {
   users: () => { if (typeof loadUsers === 'function') loadUsers(); loadUsersReview(); },
 });
+
+
+/* ================= أدوات الصيانة: حذف السجلات ================= */
+function mtCount() {
+  const boxes = Array.from(document.querySelectorAll('.mt-check'));
+  const sel = boxes.filter(c => c.checked);
+  const rows = sel.reduce((a, c) => a + (+c.dataset.count || 0), 0);
+  document.getElementById('mtSel').textContent = `المحدَّد: ${sel.length} من ${boxes.length} — ${rows.toLocaleString('ar')} سجل`;
+  document.getElementById('mtAll').checked = sel.length && sel.length === boxes.length;
+}
+function _mtRender(groups) {
+  const keep = new Set(Array.from(document.querySelectorAll('.mt-check:checked')).map(c => c.value));
+  document.getElementById('mtTable').innerHTML = groups.map(g => `<tr>
+    <td><input type="checkbox" class="mt-check" value="${g.key}" data-count="${g.count}" ${keep.has(g.key) ? 'checked' : ''} onchange="mtCount()" aria-label="${escapeHtml(g.label)}"></td>
+    <td>${escapeHtml(g.label)}${g.dated ? '' : ' <small style="color:#c0392b">(كل الفترات — لا يتأثر بالتاريخ)</small>'}</td>
+    <td><b>${g.count.toLocaleString('ar')}</b></td></tr>`).join('');
+  mtCount();
+}
+async function loadMaintenance() {
+  const p = new URLSearchParams({ from: document.getElementById('mtFrom').value, to: document.getElementById('mtTo').value });
+  const d = await api('/api/maintenance/counts?' + p);
+  if (d) _mtRender(d.groups);
+}
+async function runPurge() {
+  const groups = Array.from(document.querySelectorAll('.mt-check:checked')).map(c => c.value);
+  if (!groups.length) { toast('اختر نوعاً واحداً على الأقل', true); return; }
+  const confirmWord = document.getElementById('mtConfirm').value.trim();
+  if (confirmWord !== 'حذف') { toast('اكتب كلمة «حذف» في خانة التأكيد', true); return; }
+  const from = document.getElementById('mtFrom').value, to = document.getElementById('mtTo').value;
+  if (!confirm(`سيُحذف ${groups.length} نوع من السجلات ${from || to ? `للفترة ${from || 'البداية'} — ${to || 'اليوم'}` : 'لكل الفترات'}.\nتُحفظ نسخة احتياطية قبل الحذف. متابعة؟`)) return;
+  const d = await api('/api/maintenance/purge', { method: 'POST', body: JSON.stringify({ groups, from, to, confirm: confirmWord }) });
+  if (!d) return;
+  document.getElementById('mtConfirm').value = '';
+  document.querySelectorAll('.mt-check').forEach(c => { c.checked = false; });
+  document.getElementById('mtResult').innerHTML = `<div style="background:#eef7f1;border-radius:10px;padding:10px 12px;line-height:1.9">✓ تم الحذف:<br>${d.done.map(escapeHtml).join('<br>')}<br><small style="color:var(--muted)">النسخة الاحتياطية: ${escapeHtml(d.backup)}</small></div>`;
+  _mtRender(d.groups);
+  toast('تم الحذف وإعادة التحليل');
+}
+window.EXTRA_LOADERS = Object.assign(window.EXTRA_LOADERS || {}, { maintenance: loadMaintenance });
+
+
+/* ================= طلبات نسيان كلمة المرور (للمدير) ================= */
+let rrRows = [];
+async function rrLoad() {
+  if (typeof CURRENT_ROLE === 'undefined' || CURRENT_ROLE !== 'admin') return;
+  let d;
+  try { d = await (await fetch('/api/reset-requests', { credentials: 'same-origin' })).json(); } catch (e) { return; }
+  if (!d || !d.ok) return;
+  rrRows = d.rows;
+  const b = document.getElementById('rrBanner');
+  b.classList.toggle('hide', !rrRows.length);
+  b.style.display = rrRows.length ? 'flex' : 'none';
+  document.getElementById('rrText').textContent = `طلبات نسيان كلمة المرور بانتظارك: ${rrRows.length}`;
+  if (document.getElementById('rrModal').classList.contains('open')) rrRender();
+}
+function rrRender() {
+  document.getElementById('rrTable').innerHTML = rrRows.map(r => `<tr>
+    <td><b>${escapeHtml(r.name || '')}</b></td><td>${r.kind === 'emp' ? 'موظف' : ''} ${escapeHtml(r.dept || '')}</td>
+    <td dir="ltr" style="text-align:right">${escapeHtml(r.label || '')}</td><td>${escapeHtml(r.created_at || '')}</td>
+    <td style="white-space:nowrap"><button class="btn btn-primary btn-sm" onclick="rrAct(${r.id}, 'reset')"><i class="fas fa-key" aria-hidden="true"></i> كلمة مرور جديدة</button>
+      <button class="btn btn-outline btn-sm" onclick="rrAct(${r.id}, 'dismiss')">تجاهل</button></td></tr>`).join('')
+    || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:14px">لا توجد طلبات</td></tr>';
+}
+function rrOpen() { rrRender(); document.getElementById('rrModal').classList.add('open'); }
+async function rrAct(id, action) {
+  if (action === 'dismiss' && !confirm('تجاهل هذا الطلب؟')) return;
+  const d = await api('/api/reset-requests/' + id, { method: 'POST', body: JSON.stringify({ action }) });
+  if (!d) return;
+  await rrLoad();
+  if (d.credentials && d.credentials.length && typeof maShowCreds === 'function') {
+    document.getElementById('rrModal').classList.remove('open');
+    maShowCreds(d.credentials);
+  } else toast('تم');
+}
+document.addEventListener('DOMContentLoaded', () => { rrLoad(); setInterval(rrLoad, 120000); });

@@ -14,54 +14,54 @@
 <body>
 <div class="wrap" style="padding-top:5vh">
   <div style="text-align:center;margin-bottom:16px">
-    <h1 style="font-size:1.4rem;color:var(--pd)"><i class="fas fa-mobile-screen"></i> تطبيقات نظام الحضور</h1>
+    <h1 style="font-size:1.4rem;color:var(--pd)"><i class="fas fa-mobile-screen" aria-hidden="true"></i> تطبيقات نظام الحضور</h1>
     <div class="muted">{{ settings.org_name or '' }}{% if version %} · الإصدار {{ version }}{% endif %}</div>
   </div>
 
   <div class="card">
     <div class="app">
-      <div class="ic" style="background:linear-gradient(135deg,#1e8e5a,#2fb37a)"><i class="fas fa-fingerprint"></i></div>
+      <div class="ic" style="background:linear-gradient(135deg,#1e8e5a,#2fb37a)"><i class="fas fa-fingerprint" aria-hidden="true"></i></div>
       <div style="flex:1">
-        <h2>تطبيق الموظف — تسجيل الدوام</h2>
+        <h2>تطبيق الموظف — <span dir="ltr">RAS Check-in</span></h2>
         <p class="muted">حضور، انصراف، خروج مؤقت من داخل موقع العمل. يكشف تطبيقات الموقع الوهمي.</p>
-        {% if files.employee %}<a class="btn btn-p" style="margin-top:10px;width:100%" href="{{ files.employee.url }}" download><i class="fab fa-android"></i> تنزيل للأندرويد ({{ files.employee.size }} MB)</a>
+        {% if files.employee %}<a class="btn btn-p" style="margin-top:10px;width:100%" href="{{ files.employee.url }}" download><i class="fab fa-android" aria-hidden="true"></i> تنزيل للأندرويد ({{ files.employee.size }} MB)</a>
         {% else %}<div class="na" style="margin-top:10px">ملف التطبيق غير متوفر بعد على الخادم</div>{% endif %}
-        <a class="btn btn-l" style="margin-top:8px;width:100%" href="#iphone"><i class="fab fa-apple"></i> آيفون: طريقة التثبيت</a>
+        <a class="btn btn-l" style="margin-top:8px;width:100%" href="#iphone"><i class="fab fa-apple" aria-hidden="true"></i> آيفون: طريقة التثبيت</a>
       </div>
     </div>
   </div>
 
   <div class="card">
     <div class="app">
-      <div class="ic" style="background:linear-gradient(135deg,#1B6E8C,#2E4E7A)"><i class="fas fa-user-shield"></i></div>
+      <div class="ic" style="background:linear-gradient(135deg,#1B6E8C,#2E4E7A)"><i class="fas fa-user-shield" aria-hidden="true"></i></div>
       <div style="flex:1">
-        <h2>تطبيق الإدارة — مستخدمو النظام</h2>
-        <p class="muted">التقارير، المتابعة المباشرة، الموظفون، الأجهزة — بصلاحيات حسابك.</p>
-        {% if files.admin %}<a class="btn btn-p" style="margin-top:10px;width:100%" href="{{ files.admin.url }}" download><i class="fab fa-android"></i> تنزيل للأندرويد ({{ files.admin.size }} MB)</a>
+        <h2>تطبيق الإدارة — <span dir="ltr">RAS Admin</span></h2>
+        <p class="muted">التقارير، المتابعة المباشرة، الموظفون، الأجهزة — بصلاحيات حسابك. يُثبَّت بجانب تطبيق الموظف على الهاتف نفسه.</p>
+        {% if files.admin %}<a class="btn btn-p" style="margin-top:10px;width:100%" href="{{ files.admin.url }}" download><i class="fab fa-android" aria-hidden="true"></i> تنزيل للأندرويد ({{ files.admin.size }} MB)</a>
         {% else %}<div class="na" style="margin-top:10px">ملف التطبيق غير متوفر بعد على الخادم</div>{% endif %}
-        <a class="btn btn-l" style="margin-top:8px;width:100%" href="/dashboard"><i class="fab fa-windows"></i> على الكمبيوتر: افتح النظام ثم «تثبيت على هذا الجهاز»</a>
+        <a class="btn btn-l" style="margin-top:8px;width:100%" href="/dashboard"><i class="fab fa-windows" aria-hidden="true"></i> على الكمبيوتر: افتح النظام ثم «تثبيت على هذا الجهاز»</a>
       </div>
     </div>
   </div>
 
   <div class="card">
-    <h2><i class="fab fa-android"></i> طريقة التثبيت على أندرويد</h2>
+    <h2><i class="fab fa-android" aria-hidden="true"></i> طريقة التثبيت على أندرويد</h2>
     <ol>
       <li>اضغط «تنزيل» ثم افتح الملف من الإشعارات.</li>
       <li>إن ظهر «غير مسموح» اختر «الإعدادات» ← فعّل «السماح من هذا المصدر» ثم ارجع.</li>
       <li>اضغط «تثبيت». عند أول فتح اسمح باستخدام الموقع «أثناء استخدام التطبيق» (تطبيق الموظف).</li>
       <li>سجّل الدخول باسم المستخدم وكلمة المرور من الإدارة — يرتبط حسابك بهذا الهاتف.</li>
     </ol>
-    <h2 id="iphone" style="margin-top:12px"><i class="fab fa-apple"></i> على آيفون (تطبيق الموظف)</h2>
+    <h2 id="iphone" style="margin-top:12px"><i class="fab fa-apple" aria-hidden="true"></i> على آيفون (تطبيق الموظف)</h2>
     <ol>
       <li>افتح هذا الرابط في <b>Safari</b> (وليس Chrome): <a href="/me" dir="ltr">{{ request.host }}/me</a></li>
-      <li>اضغط زر المشاركة <i class="fas fa-arrow-up-from-bracket"></i> ثم «<b>إضافة إلى الشاشة الرئيسية</b>» ثم «إضافة».</li>
+      <li>اضغط زر المشاركة <i class="fas fa-arrow-up-from-bracket" aria-hidden="true"></i> ثم «<b>إضافة إلى الشاشة الرئيسية</b>» ثم «إضافة».</li>
       <li>افتح التطبيق من <b>الأيقونة الجديدة</b> وسجّل الدخول منها أول مرة — يرتبط حسابك بهذا الآيفون.</li>
       <li>عند السؤال اسمح بالموقع «أثناء استخدام التطبيق». (إن رفضته: الإعدادات ← الخصوصية ← خدمات الموقع ← مواقع Safari ← «أثناء الاستخدام».)</li>
       <li>إن طلبت الإدارة البصمة: «حسابي» ← «تفعيل البصمة على هذا الهاتف» (Face ID / Touch ID).</li>
     </ol>
     <p class="muted" style="font-size:.85rem">استخدم دائماً الأيقونة نفسها. مسح بيانات Safari بالكامل أو تغيير الهاتف يتطلب «فكّ ربط الهاتف» من الإدارة.</p>
-    <h2 style="margin-top:12px"><i class="fab fa-windows"></i> على Windows (للإدارة)</h2>
+    <h2 style="margin-top:12px"><i class="fab fa-windows" aria-hidden="true"></i> على Windows (للإدارة)</h2>
     <ol>
       <li>افتح النظام في Edge أو Chrome وسجّل الدخول.</li>
       <li>اضغط زر «تثبيت على هذا الجهاز» أعلى الصفحة (أو من قائمة المتصفح: التطبيقات ← تثبيت).</li>

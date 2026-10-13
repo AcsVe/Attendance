@@ -18,16 +18,16 @@
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="الحضور والانصراف">
+  <meta name="apple-mobile-web-app-title" content="RAS Admin">
   <meta name="mobile-web-app-capable" content="yes">
 </head>
 <body>
   <div class="login-wrap">
     <div class="login-card">
       {% if settings and settings.org_logo_filename %}
-        <img src="{{ url_for('static', filename='uploads/' + settings.org_logo_filename) }}" alt="شعار المؤسسة" style="max-height:64px;max-width:220px;margin-bottom:8px">
+        <img src="{{ url_for('static', filename='uploads/' + settings.org_logo_filename) }}" alt="شعار {{ settings.org_name or 'المؤسسة' }}" style="max-height:64px;max-width:220px;margin-bottom:8px">
       {% else %}
-        <i class="fas fa-fingerprint logo-icon"></i>
+        <i class="fas fa-fingerprint logo-icon" aria-hidden="true"></i>
       {% endif %}
       <h1>نظام تحليل سجلات الحضور والانصراف</h1>
       <p class="subtitle">{{ (settings and settings.org_name) or 'الجمعية الثقافية العربية - مدرسة الرائد العربي' }}</p>
@@ -36,15 +36,16 @@
       {% endif %}
       <form method="post" action="{{ url_for('login') }}">
         <div class="form-group">
-          <label>اسم المستخدم</label>
-          <input type="text" name="username" required autofocus>
+          <label for="lu">اسم المستخدم</label>
+          <input type="text" id="lu" name="username" required autofocus autocomplete="username" dir="ltr">
         </div>
         <div class="form-group">
-          <label>كلمة المرور</label>
-          <input type="password" name="password" required>
+          <label for="lp">كلمة المرور</label>
+          <input type="password" id="lp" name="password" required autocomplete="current-password">
         </div>
-        <button type="submit" class="btn btn-primary"><i class="fas fa-sign-in-alt"></i> تسجيل الدخول</button>
+        <button type="submit" class="btn btn-primary"><i class="fas fa-sign-in-alt" aria-hidden="true"></i> تسجيل الدخول</button>
       </form>
+      <p style="margin-top:14px;font-size:.88rem"><a href="{{ url_for('forgot_password') }}">نسيت كلمة المرور؟</a></p>
     </div>
   </div>
   <script>

@@ -186,7 +186,7 @@ public class MainActivity extends Activity {
                 geoCallback = null;
             }
             if (ok && wantLocation) startNativeLocation();
-            if (!ok && BuildConfig.EMPLOYEE) sendLocationError("اسمح للتطبيق باستخدام الموقع من إعدادات الهاتف ← التطبيقات ← دوامي ← الأذونات");
+            if (!ok && BuildConfig.EMPLOYEE) sendLocationError("اسمح للتطبيق باستخدام الموقع من إعدادات الهاتف ← التطبيقات ← RAS Check-in ← الأذونات");
         }
     }
 

@@ -7,6 +7,7 @@
 إدخال يدوي، أوقات الأقسام، وإعدادات عامة - بنفس لغة التصميم البصري
 المعتمدة (Sidebar + Topbar + بطاقات إحصاء + جداول + نوافذ منبثقة + Toast).
 """
+import hashlib
 import os
 import io
 import csv
@@ -219,7 +220,7 @@ VIEWER_ALLOWED_WRITES = {'api_overtime', 'api_overtime_export_csv', 'api_change_
 # مسارات admin فقط بغض النظر عن أي صلاحية دقيقة - إدارة المستخدمين حصراً
 # (تبويب "المستخدمون" بالكامل مخفي عن غير admin بالواجهة أيضاً، مطابقةً
 # للأصل المكتبي بالضبط)
-ADMIN_ONLY_ENDPOINTS = {'api_users', 'api_user_edit', 'api_users_review', 'api_users_bulk'}
+ADMIN_ONLY_ENDPOINTS = {'api_users', 'api_user_edit', 'api_users_review', 'api_users_bulk', 'api_reset_requests', 'api_reset_request_action', 'api_maintenance_counts', 'api_maintenance_purge'}
 
 # مسارات القراءة الخاضعة لتقييد "الأقسام المسموحة" - تُصفَّى بياناتها
 # تلقائياً حسب user_departments لو المستخدم مقيَّد (راجع scoped_dept_filter)
@@ -386,6 +387,179 @@ def login():
         session[perm] = bool(user[perm])
     session['allowed_depts'] = [r['dept'] for r in dept_rows]
     return redirect(url_for('dashboard'))
+
+
+# ============================================================
+# ===== نسيان كلمة المرور (مستخدمو النظام والموظفون) =====
+# ============================================================
+_FORGOT_HITS = {}
+
+
+def forgot_blocked():
+    import time as _t
+    key = request.remote_addr or ''
+    now = _t.time()
+    hits = [t for t in _FORGOT_HITS.get(key, []) if now - t < 900]
+    hits.append(now)
+    _FORGOT_HITS[key] = hits
+    return len(hits) > 6
+
+
+def reset_token_create(conn, kind, subject_id, minutes=30):
+    import secrets as _s
+    from datetime import timedelta as _td
+    token = _s.token_urlsafe(32)
+    exp = (datetime.now() + _td(minutes=minutes)).strftime('%Y-%m-%d %H:%M:%S')
+    conn.execute("INSERT INTO password_reset_tokens (kind, subject_id, token_hash, expires_at) VALUES (?, ?, ?, ?)",
+                 (kind, subject_id, hashlib.sha256(token.encode()).hexdigest(), exp))
+    return token
+
+
+def reset_token_get(conn, kind, token):
+    row = conn.execute("SELECT * FROM password_reset_tokens WHERE token_hash = ? AND kind = ?",
+                       (hashlib.sha256((token or '').encode()).hexdigest(), kind)).fetchone()
+    if not row or row['used_at'] or row['expires_at'] < datetime.now().strftime('%Y-%m-%d %H:%M:%S'):
+        return None
+    return row
+
+
+def reset_mail(to_email, name, link):
+    """يرسل رابط إعادة التعيين — يرجع True عند النجاح، False إن لم يُضبط البريد أو فشل الإرسال"""
+    settings = db.get_all_settings()
+    if not to_email or not (settings.get('smtp_sender_email') or settings.get('graph_sender_upn')):
+        return False
+    org = settings.get('org_name') or 'نظام الحضور والانصراف'
+    try:
+        email_sender.send_email_auto(
+            settings, [to_email], f'{org} — إعادة تعيين كلمة المرور',
+            f'مرحباً {name}،\n\nلإعادة تعيين كلمة المرور افتح الرابط التالي (صالح لمدة 30 دقيقة ولمرة واحدة):\n{link}\n\n'
+            f'إن لم تطلب ذلك فتجاهل هذه الرسالة؛ كلمة مرورك الحالية لم تتغيّر.')
+        return True
+    except Exception:
+        return False
+
+
+def reset_request_add(conn, kind, subject_id, label):
+    if conn.execute("SELECT 1 FROM password_reset_requests WHERE kind = ? AND subject_id = ? AND status = 'pending'",
+                    (kind, subject_id)).fetchone():
+        return
+    conn.execute("INSERT INTO password_reset_requests (kind, subject_id, label, ip, created_at) VALUES (?, ?, ?, ?, ?)",
+                 (kind, subject_id, label, (request.headers.get('CF-Connecting-IP') or request.remote_addr or '')[:45], _audit_now()))
+
+
+@app.route('/forgot', methods=['GET', 'POST'])
+def forgot_password():
+    settings = db.get_all_settings()
+    if request.method == 'GET':
+        return render_template('forgot.html', settings=settings, done=False, error=None)
+    if forgot_blocked():
+        return render_template('forgot.html', settings=settings, done=False, error='طلبات كثيرة — حاول بعد 15 دقيقة'), 429
+    q = (request.form.get('username') or '').strip()
+    conn = db.get_db()
+    try:
+        user = conn.execute("SELECT * FROM users WHERE lower(username) = lower(?) OR (email != '' AND lower(email) = lower(?))", (q, q)).fetchone()
+        if user:
+            sent = False
+            if user['email']:
+                token = reset_token_create(conn, 'user', user['id'])
+                conn.commit()
+                sent = reset_mail(user['email'], user['full_name'] or user['username'], url_for('reset_password', token=token, _external=True))
+            if not sent:
+                reset_request_add(conn, 'user', user['id'], user['username'])
+            session['username'] = ''
+            log_audit(conn, 'password_forgot', 'user', new_value=f"{user['username']} — {'رابط بالبريد' if sent else 'طلب للإدارة'}")
+            conn.commit()
+    finally:
+        conn.close()
+    # الرد نفسه دائماً حتى لا يُعرف هل الحساب موجود
+    return render_template('forgot.html', settings=settings, done=True, error=None)
+
+
+@app.route('/reset/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    settings = db.get_all_settings()
+    conn = db.get_db()
+    try:
+        row = reset_token_get(conn, 'user', token)
+        if not row:
+            return render_template('reset.html', settings=settings, error='الرابط غير صالح أو انتهت صلاحيته — اطلب رابطاً جديداً', ok=False, invalid=True)
+        if request.method == 'GET':
+            return render_template('reset.html', settings=settings, error=None, ok=False, invalid=False)
+        pw, pw2 = request.form.get('password') or '', request.form.get('password2') or ''
+        if len(pw) < 8 or pw != pw2:
+            return render_template('reset.html', settings=settings, error='كلمة المرور 8 أحرف على الأقل، ويجب أن تتطابق الخانتان', ok=False, invalid=False)
+        conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (generate_password_hash(pw), row['subject_id']))
+        conn.execute("UPDATE password_reset_tokens SET used_at = ? WHERE id = ?", (_audit_now(), row['id']))
+        conn.execute("UPDATE password_reset_requests SET status = 'done', handled_by = '(رابط البريد)', handled_at = ? "
+                     "WHERE kind = 'user' AND subject_id = ? AND status = 'pending'", (_audit_now(), row['subject_id']))
+        u = conn.execute("SELECT username FROM users WHERE id = ?", (row['subject_id'],)).fetchone()
+        session['username'] = ''
+        log_audit(conn, 'password_reset', 'user', new_value=(u['username'] if u else '') + ' — عبر رابط البريد')
+        conn.commit()
+        return render_template('reset.html', settings=settings, error=None, ok=True, invalid=False)
+    finally:
+        conn.close()
+
+
+@app.route('/api/reset-requests')
+@login_required
+def api_reset_requests():
+    conn = db.get_db()
+    try:
+        rows = [dict(r) for r in conn.execute(
+            "SELECT * FROM password_reset_requests WHERE status = 'pending' ORDER BY id DESC").fetchall()]
+        for r in rows:
+            if r['kind'] == 'emp':
+                e = conn.execute("SELECT e.name, e.dept FROM employees e WHERE e.id = ?", (r['subject_id'],)).fetchone()
+                r['name'], r['dept'] = (e['name'], e['dept']) if e else (r['label'], '')
+            else:
+                u = conn.execute("SELECT username, full_name FROM users WHERE id = ?", (r['subject_id'],)).fetchone()
+                r['name'], r['dept'] = ((u['full_name'] or u['username']), 'مستخدم النظام') if u else (r['label'], '')
+        return jsonify({'ok': True, 'rows': rows})
+    finally:
+        conn.close()
+
+
+@app.route('/api/reset-requests/<int:req_id>', methods=['POST'])
+@login_required
+def api_reset_request_action(req_id):
+    import secrets as _s
+    action = (request.get_json(silent=True) or {}).get('action')
+    conn = db.get_db()
+    try:
+        r = conn.execute("SELECT * FROM password_reset_requests WHERE id = ? AND status = 'pending'", (req_id,)).fetchone()
+        if not r:
+            return jsonify({'ok': False, 'error': 'الطلب غير موجود أو عولج مسبقاً'}), 404
+        cred = None
+        if action == 'reset':
+            if r['kind'] == 'emp':
+                pw = ''.join(_s.choice('23456789') for _ in range(4)) + ''.join(_s.choice('abcdefghjkmnpqrstuvwxyz') for _ in range(4))
+                acc = conn.execute("SELECT a.id, a.username, e.name, e.dept FROM employee_accounts a JOIN employees e ON e.id = a.employee_id "
+                                   "WHERE a.employee_id = ?", (r['subject_id'],)).fetchone()
+                if not acc:
+                    return jsonify({'ok': False, 'error': 'لا يوجد حساب تطبيق لهذا الموظف'}), 404
+                conn.execute("UPDATE employee_accounts SET password_hash = ? WHERE id = ?", (generate_password_hash(pw), acc['id']))
+                cred = {'name': acc['name'], 'dept': acc['dept'] or '', 'username': acc['username'], 'password': pw}
+            else:
+                pw = _s.token_urlsafe(9)
+                u = conn.execute("SELECT username, full_name FROM users WHERE id = ?", (r['subject_id'],)).fetchone()
+                if not u:
+                    return jsonify({'ok': False, 'error': 'المستخدم غير موجود'}), 404
+                conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (generate_password_hash(pw), r['subject_id']))
+                cred = {'name': u['full_name'] or u['username'], 'dept': 'مستخدم النظام', 'username': u['username'], 'password': pw}
+            status = 'done'
+        elif action == 'dismiss':
+            status = 'dismissed'
+        else:
+            return jsonify({'ok': False, 'error': 'إجراء غير معروف'}), 400
+        conn.execute("UPDATE password_reset_requests SET status = ?, handled_by = ?, handled_at = ? WHERE id = ?",
+                     (status, session.get('username', ''), _audit_now(), req_id))
+        log_audit(conn, 'password_reset' if cred else 'password_request_dismiss', 'user' if r['kind'] == 'user' else 'employee_accounts',
+                  employee_name=cred['name'] if cred and r['kind'] == 'emp' else None, new_value=r['label'])
+        conn.commit()
+        return jsonify({'ok': True, 'credentials': [cred] if cred else []})
+    finally:
+        conn.close()
 
 
 @app.route('/logout')
@@ -2453,6 +2627,110 @@ def api_departure_permission_delete(perm_id):
 # ============================================================
 # ===== سجل التدقيق (قراءة فقط) =====
 # ============================================================
+# ============================================================
+# ===== أدوات الصيانة: حذف السجلات (مرحلة التجارب) =====
+# ============================================================
+# كل مجموعة: (العنوان، [(الجدول، عمود التاريخ أو None، شرط إضافي)])
+PURGE_GROUPS = {
+    'device_punches': ('بصمات أجهزة البصمة والملفات المرفوعة', [('punches', 'date', "COALESCE(batch_id, '') != 'mobile'")]),
+    'mobile_punches': ('حركات تطبيق الهاتف (المقبولة والمرفوضة)', [('mobile_punches', 'date', None), ('punches', 'date', "batch_id = 'mobile'")]),
+    'manual': ('الإدخالات اليدوية', [('manual_time_entries', 'date', None)]),
+    'permissions': ('أذونات التأخير والمغادرة', [('late_permissions', 'date', None), ('departure_permissions', 'date', None)]),
+    'absences': ('أسباب الغياب والغياب المفروض', [('absence_reasons', 'date', None), ('forced_absences', 'date', None)]),
+    'exceptions': ('استثناءات التواريخ', [('date_exceptions', 'date', None)]),
+    'holidays': ('العطل الرسمية', [('official_holidays', 'date', None)]),
+    'notifications': ('إشعارات الموظفين', [('employee_notifications', 'created_at', None)]),
+    'overrides': ('استثناءات الموقع', [('geofence_overrides', 'starts_at', None)]),
+    'audit': ('سجل التدقيق', [('audit_log', 'timestamp', None)]),
+    'employees': ('الموظفون وحسابات التطبيق والبصمات الحيوية (كل شيء مرتبط بهم)', [
+        ('webauthn_credentials', None, None), ('employee_notifications', None, None), ('geofence_overrides', None, None),
+        ('employee_accounts', None, None), ('employees', None, None)]),
+}
+
+
+def _purge_where(date_col, cond, d_from, d_to):
+    where, params = [], []
+    if cond:
+        where.append(cond)
+    if date_col and d_from:
+        where.append(f"{date_col} >= ?"); params.append(d_from)
+    if date_col and d_to:
+        where.append(f"substr({date_col}, 1, 10) <= ?"); params.append(d_to)
+    return (' WHERE ' + ' AND '.join(where)) if where else '', params
+
+
+def _purge_counts(conn, d_from, d_to):
+    out = []
+    for key, (label, parts) in PURGE_GROUPS.items():
+        n = 0
+        for table, col, cond in parts:
+            if key == 'employees' and table != 'employees':
+                continue
+            w, p = _purge_where(col, cond, d_from, d_to)
+            n += conn.execute(f"SELECT COUNT(*) FROM {table}{w}", p).fetchone()[0]
+        out.append({'key': key, 'label': label, 'count': n, 'dated': key != 'employees'})
+    return out
+
+
+@app.route('/api/maintenance/counts')
+@login_required
+def api_maintenance_counts():
+    conn = db.get_db()
+    try:
+        return jsonify({'ok': True, 'groups': _purge_counts(conn, request.args.get('from', '')[:10], request.args.get('to', '')[:10])})
+    finally:
+        conn.close()
+
+
+@app.route('/api/maintenance/purge', methods=['POST'])
+@login_required
+def api_maintenance_purge():
+    d = request.get_json(silent=True) or {}
+    groups = [g for g in (d.get('groups') or []) if g in PURGE_GROUPS]
+    if not groups:
+        return jsonify({'ok': False, 'error': 'اختر نوعاً واحداً على الأقل'}), 400
+    if (d.get('confirm') or '').strip() != 'حذف':
+        return jsonify({'ok': False, 'error': 'اكتب كلمة «حذف» للتأكيد'}), 400
+    d_from, d_to = (d.get('from') or '')[:10], (d.get('to') or '')[:10]
+    # نسخة احتياطية تلقائية قبل الحذف (يمكن استرجاعها من مجلد البيانات)
+    import sqlite3 as _sq
+    bk_dir = os.path.join(os.path.dirname(db.DB_PATH), 'before-delete')
+    os.makedirs(bk_dir, exist_ok=True)
+    bk = os.path.join(bk_dir, f"before-delete-{_audit_now().replace(':', '').replace(' ', '_')}.db")
+    src = db.get_db()
+    dst = _sq.connect(bk)
+    src.backup(dst)
+    dst.close()
+    src.close()
+    for old in sorted(os.listdir(bk_dir))[:-10]:          # نحتفظ بآخر 10 نسخ فقط
+        try:
+            os.remove(os.path.join(bk_dir, old))
+        except OSError:
+            pass
+    conn = db.get_db()
+    try:
+        done = []
+        for key in groups:
+            label, parts = PURGE_GROUPS[key]
+            n = 0
+            for table, col, cond in parts:
+                w, p = _purge_where(col, cond, d_from, d_to)
+                n += conn.execute(f"DELETE FROM {table}{w}", p).rowcount
+            done.append(f"{label}: {n}")
+        log_audit(conn, 'purge', 'maintenance', new_value=' | '.join(done)[:1000],
+                  reason=f"الفترة: {d_from or 'البداية'} → {d_to or 'النهاية'}")
+        conn.commit()
+        try:
+            run_full_analysis(conn)
+        except Exception:
+            conn.execute("DELETE FROM report_cache")   # لا توجد بيانات كافية للتحليل
+        conn.commit()
+        return jsonify({'ok': True, 'done': done, 'backup': os.path.basename(bk),
+                        'groups': _purge_counts(conn, d_from, d_to)})
+    finally:
+        conn.close()
+
+
 @app.route('/api/audit-log')
 @login_required
 def api_audit_log():
@@ -3193,6 +3471,7 @@ def api_users():
         username = (data.get('username') or '').strip()
         password = data.get('password') or ''
         full_name = (data.get('full_name') or '').strip()
+        email = (data.get('email') or '').strip()[:200]
         # ===== الدور: افتراضياً "viewer" (اطّلاع فقط) ما لم يُحدَّد غير
         # ذلك صراحةً - حتى لا يُنشأ مستخدم بصلاحية كاملة عن طريق الخطأ =====
         role = (data.get('role') or 'viewer').strip()
@@ -3215,6 +3494,8 @@ def api_users():
                  int(perms['can_push_devices']), int(perms['can_edit_org_settings']))
             )
             _set_user_departments(conn, cur.lastrowid, data.get('allowed_departments'))
+            if email:
+                conn.execute("UPDATE users SET email = ? WHERE id = ?", (email, cur.lastrowid))
             log_audit(conn, 'create', 'user', new_value=f"{username} ({role})")
             conn.commit()
         except sqlite3.IntegrityError:
@@ -3224,7 +3505,7 @@ def api_users():
         return jsonify({'ok': True})
 
     rows = [dict(r) for r in conn.execute(
-        "SELECT id, username, full_name, role, can_manage_employees, can_manage_departments, "
+        "SELECT id, username, full_name, email, role, can_manage_employees, can_manage_departments, "
         "can_push_devices, can_edit_org_settings, created_at FROM users ORDER BY id").fetchall()]
     for r in rows:
         dept_rows = conn.execute("SELECT dept FROM user_departments WHERE user_id = ?", (r['id'],)).fetchall()
@@ -3238,6 +3519,23 @@ def api_users():
 def api_user_edit(user_id):
     if request.method == 'PUT':
         data = request.get_json(force=True) or {}
+        if 'email' in data and 'role' not in data:          # تعديل البريد فقط
+            conn = db.get_db()
+            conn.execute("UPDATE users SET email = ? WHERE id = ?", ((data.get('email') or '').strip()[:200], user_id))
+            conn.commit()
+            conn.close()
+            return jsonify({'ok': True})
+        if 'new_password' in data:                           # كلمة مرور جديدة يحدّدها المدير
+            pw = data.get('new_password') or ''
+            if len(pw) < 8:
+                return jsonify({'ok': False, 'error': 'كلمة المرور 8 أحرف على الأقل'}), 400
+            conn = db.get_db()
+            u = conn.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
+            conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (generate_password_hash(pw), user_id))
+            log_audit(conn, 'password_reset', 'user', new_value=(u['username'] if u else str(user_id)) + ' — بواسطة المدير')
+            conn.commit()
+            conn.close()
+            return jsonify({'ok': True})
         role = (data.get('role') or '').strip()
         if role not in _VALID_ROLES:
             return jsonify({'ok': False, 'error': 'دور غير صالح'}), 400

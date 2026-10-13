@@ -3,7 +3,7 @@
    يعتمد على: api() و toast() و escapeHtml() و toggleSelectAll() من app.js، و Leaflet للخرائط
    ===================================================================== */
 Object.assign(PAGE_TITLES, {
-  'mobile-accounts': 'حسابات تطبيق الهاتف', 'mobile-sites': 'مواقع العمل (Geofence)', 'mobile-moves': 'حركات الهاتف والمتابعة',
+  'mobile-accounts': 'حسابات تطبيق الهاتف', 'mobile-sites': 'مواقع العمل (النطاق الجغرافي)', 'mobile-moves': 'المتابعة المباشرة وحركات الهاتف',
 });
 window.EXTRA_LOADERS = Object.assign(window.EXTRA_LOADERS || {}, {
   'mobile-accounts': () => { loadAccounts(); loadMobileSettings(); },
@@ -65,7 +65,7 @@ function maRender() {
       <td>${r.device_label ? `${mEsc(r.device_label)}<br><small style="color:var(--muted)">${mEsc(r.bound_at || '')}</small>` : (r.has_account ? '<span class="badge badge-late">لم يُربط بعد</span>' : '—')}</td>
       <td><small>${mEsc(r.last_move || '—')}</small></td>
       <td>${!r.has_account ? '<span class="badge badge-none">بدون حساب</span>' : (r.acc_active ? '<span class="badge badge-ontime">مفعّل</span>' : '<span class="badge badge-absent">موقوف</span>')}${r.anywhere ? ' <span class="badge badge-holiday" title="يسجّل من أي مكان">أي مكان</span>' : ''}</td>
-      <td><button class="btn btn-outline btn-sm" onclick="maEdit(${r.id})" title="تعديل اسم المستخدم/كلمة المرور"><i class="fas fa-pen"></i></button></td></tr>`).join('')
+      <td><button class="btn btn-outline btn-sm" onclick="maEdit(${r.id})" title="تعديل اسم المستخدم/كلمة المرور" aria-label="تعديل اسم المستخدم/كلمة المرور"><i class="fas fa-pen" aria-hidden="true"></i></button></td></tr>`).join('')
     || '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:16px">لا يوجد موظفون مطابقون</td></tr>';
   document.getElementById('maAll').checked = false;
   maCount();
@@ -229,8 +229,8 @@ async function loadSites() {
       <td>${s.radius_m} م</td><td><small>${s.depts.length ? s.depts.map(mEsc).join('، ') : 'كل الأقسام'}</small></td>
       <td><small dir="ltr">${mEsc(s.ips || '—')}</small>${s.ip_required ? '<br><span class="badge badge-ontime">إلزامي</span>' : ''}</td><td>${s.moves}</td>
       <td><button class="btn btn-sm ${s.active ? 'btn-primary' : 'btn-outline'}" onclick="siteToggle(${s.id}, ${s.active ? 0 : 1})">${s.active ? 'مفعّل' : 'معطّل'}</button></td>
-      <td style="white-space:nowrap"><button class="btn btn-outline btn-sm" onclick="siteEdit(${s.id})"><i class="fas fa-pen"></i></button>
-        <a class="btn btn-outline btn-sm" target="_blank" href="https://www.google.com/maps?q=${s.lat},${s.lng}"><i class="fas fa-map-location-dot"></i></a></td></tr>`).join('')
+      <td style="white-space:nowrap"><button class="btn btn-outline btn-sm" onclick="siteEdit(${s.id})" aria-label="تعديل" title="تعديل"><i class="fas fa-pen" aria-hidden="true"></i></button>
+        <a class="btn btn-outline btn-sm" target="_blank" href="https://www.google.com/maps?q=${s.lat},${s.lng}"><i class="fas fa-map-location-dot" aria-hidden="true"></i></a></td></tr>`).join('')
     || '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:16px">لا توجد مواقع عمل بعد — أضف موقعاً حتى يستطيع الموظفون التسجيل</td></tr>';
   siteRenderDepts([]);
   setTimeout(() => {
@@ -394,12 +394,27 @@ function mvFilter() {
   const rows = mvRowsCache.filter(r => !q || [r.name, r.dept, r.site_name, r.reason, r.kind_label, r.device_label, r.flags].some(v => (v || '').toLowerCase().includes(q)));
   document.getElementById('mvShown').textContent = `${rows.length} من ${mvRowsCache.length}`;
   document.getElementById('mvTable').innerHTML = rows.map(r => `<tr${r.status === 'rejected' ? ' style="background:#fff5f5"' : (r.flags ? ' style="background:#fffbeb"' : '')}>
-    <td>${mEsc(r.date)}</td><td dir="ltr" style="text-align:right">${mEsc(r.time.slice(0, 5))}</td><td><b>${mEsc(r.name)}</b></td><td>${mEsc(r.dept || '')}</td>
+    <td><input type="checkbox" class="row-check" data-id="${r.id}" onchange="mvSelCount()" aria-label="تحديد"></td><td>${mEsc(r.date)}</td><td dir="ltr" style="text-align:right">${mEsc(r.time.slice(0, 5))}</td><td><b>${mEsc(r.name)}</b></td><td>${mEsc(r.dept || '')}</td>
     <td>${mEsc(r.kind_label)}</td><td>${mEsc(r.site_name || '—')}${r.distance_m != null ? ` <small style="color:var(--muted)">(${Math.round(r.distance_m)} م)</small>` : ''}</td>
-    <td>${r.accuracy != null ? Math.round(r.accuracy) + ' م' : '—'}<br><small style="color:var(--muted)">${r.source === 'app' ? '<i class="fas fa-mobile-screen"></i> التطبيق' : '<i class="fas fa-globe"></i> المتصفح'}</small></td>
+    <td>${r.accuracy != null ? Math.round(r.accuracy) + ' م' : '—'}<br><small style="color:var(--muted)">${r.source === 'app' ? '<i class="fas fa-mobile-screen" aria-hidden="true"></i> التطبيق' : '<i class="fas fa-globe" aria-hidden="true"></i> المتصفح'}</small></td>
     <td>${r.status === 'accepted' ? '<span class="badge badge-ontime">مقبولة</span>' : `<span class="badge badge-absent" title="${mEsc(r.reason || '')}">مرفوضة</span><br><small style="color:#842029">${mEsc(r.reason || '')}</small>`}${r.flags ? `<br><small style="color:#b45309">⚠ ${mEsc(r.flags)}</small>` : ''}</td>
-    <td>${r.lat != null ? `<a target="_blank" href="https://www.google.com/maps?q=${r.lat},${r.lng}"><i class="fas fa-map-location-dot"></i></a>` : ''}</td></tr>`).join('')
-    || '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:16px">لا توجد حركات في هذه الفترة</td></tr>';
+    <td>${r.lat != null ? `<a target="_blank" href="https://www.google.com/maps?q=${r.lat},${r.lng}"><i class="fas fa-map-location-dot" aria-hidden="true"></i></a>` : ''}</td></tr>`).join('')
+    || '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:16px">لا توجد حركات في هذه الفترة</td></tr>';
+  document.getElementById('mvAll').checked = false;
+  mvSelCount();
+}
+
+function mvSelCount() {
+  const all = document.querySelectorAll('#mvTable .row-check').length, n = document.querySelectorAll('#mvTable .row-check:checked').length;
+  document.getElementById('mvSelN').textContent = n ? `(${n} من ${all})` : '';
+}
+
+async function mvDelete() {
+  const ids = Array.from(document.querySelectorAll('#mvTable .row-check:checked')).filter(c => c.closest('tr').style.display !== 'none').map(c => +c.dataset.id);
+  if (!ids.length) { toast('حدّد حركة واحدة على الأقل', true); return; }
+  if (!confirm(`حذف ${ids.length} حركة نهائياً؟ يُعاد تحليل الحضور بعدها.`)) return;
+  const d = await api('/api/mobile/punches/delete', { method: 'POST', body: JSON.stringify({ ids }) });
+  if (d) { toast(`حُذفت ${d.count} حركة`); loadMoves(); loadLive(); }
 }
 
 function mvExport(fmt) {
@@ -466,16 +481,16 @@ async function openEmployeeCard(id) {
       <div class="form-group"><label>الحالة</label><select id="ecActive" class="search-input" ${can}><option value="1">فعّال</option><option value="0">معلّق (لا يدخل التطبيق ولا يظهر في المتابعة)</option></select></div>
       <div class="form-group"><label>ملاحظات</label><input type="text" id="ecNotes" value="${mEsc(e.notes || '')}" ${can}></div>
     </div>
-    <button class="btn btn-primary" onclick="ecSave()" ${can}><i class="fas fa-save"></i> حفظ</button>
+    <button class="btn btn-primary" onclick="ecSave()" ${can}><i class="fas fa-save" aria-hidden="true"></i> حفظ</button>
     <div class="card" style="margin-top:14px;background:#f8fbfc">
-      <div class="card-title"><i class="fas fa-mobile-screen"></i> حساب التطبيق</div>
+      <div class="card-title"><i class="fas fa-mobile-screen" aria-hidden="true"></i> حساب التطبيق</div>
       ${a ? `<div style="line-height:2">اسم المستخدم: <b dir="ltr">${mEsc(a.username)}</b> · ${a.active ? 'مفعّل' : '<b style="color:#c0392b">موقوف</b>'}${a.anywhere ? ' · يسجّل من أي مكان' : ''}<br>
         الهاتف: ${a.device_label ? mEsc(a.device_label) + ' <small>(' + mEsc(a.bound_at || '') + ')</small>' : 'لم يُربط بعد'} · آخر دخول: ${mEsc(a.last_login_at || '—')} · البصمة الحيوية: ${d.bio ? 'مفعّلة' : '—'}</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
-          <button class="btn btn-outline btn-sm" onclick="ecAcc('reset_password')"><i class="fas fa-key"></i> كلمة مرور جديدة</button>
-          <button class="btn btn-outline btn-sm" onclick="ecAcc('unbind')"><i class="fas fa-link-slash"></i> فكّ ربط الهاتف</button>
+          <button class="btn btn-outline btn-sm" onclick="ecAcc('reset_password')"><i class="fas fa-key" aria-hidden="true"></i> كلمة مرور جديدة</button>
+          <button class="btn btn-outline btn-sm" onclick="ecAcc('unbind')"><i class="fas fa-link-slash" aria-hidden="true"></i> فكّ ربط الهاتف</button>
           <button class="btn btn-outline btn-sm" onclick="ecAcc('${a.active ? 'disable' : 'enable'}')">${a.active ? 'إيقاف الحساب' : 'تفعيل الحساب'}</button></div>`
-      : `<p style="color:var(--muted)">لا يوجد حساب تطبيق.</p><button class="btn btn-primary btn-sm" onclick="ecAcc('create')"><i class="fas fa-user-plus"></i> إنشاء حساب</button>`}
+      : `<p style="color:var(--muted)">لا يوجد حساب تطبيق.</p><button class="btn btn-primary btn-sm" onclick="ecAcc('create')"><i class="fas fa-user-plus" aria-hidden="true"></i> إنشاء حساب</button>`}
     </div>`;
   ec$('ecMode').value = e.attendance_mode || 'both';
   ec$('ecActive').value = e.active ? '1' : '0';
@@ -495,7 +510,7 @@ async function openEmployeeCard(id) {
       ${d.moves.map(m => `<tr${m.status === 'rejected' ? ' style="background:#fff5f5"' : (m.flags ? ' style="background:#fffbeb"' : '')}><td>${mEsc(m.date)}</td><td dir="ltr">${mEsc(m.time.slice(0, 5))}</td><td>${mEsc(m.kind_label)}</td>
         <td>${mEsc(m.site_name || '—')}${m.distance_m != null ? ' <small>(' + Math.round(m.distance_m) + ' م)</small>' : ''}</td>
         <td>${m.status === 'accepted' ? 'مقبولة' : '<span style="color:#c0392b">' + mEsc(m.reason || 'مرفوضة') + '</span>'}${m.flags ? '<br><small style="color:#b45309">⚠ ' + mEsc(m.flags) + '</small>' : ''}</td>
-        <td>${m.lat != null ? `<a target="_blank" href="https://www.google.com/maps?q=${m.lat},${m.lng}"><i class="fas fa-map-location-dot"></i></a>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" style="color:var(--muted)">لا توجد حركات</td></tr>'}
+        <td>${m.lat != null ? `<a target="_blank" href="https://www.google.com/maps?q=${m.lat},${m.lng}"><i class="fas fa-map-location-dot" aria-hidden="true"></i></a>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" style="color:var(--muted)">لا توجد حركات</td></tr>'}
     </tbody></table></div>`;
   const nowIso = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
   ec$('ec-ov').innerHTML = `
@@ -511,7 +526,7 @@ async function openEmployeeCard(id) {
       <div class="form-group"><label>إلى</label><input type="datetime-local" id="ovTo"></div>
     </div>
     <label style="display:flex;gap:8px;align-items:center;font-weight:600;margin:6px 0"><input type="checkbox" id="ovNoLoc"> السماح حتى بدون تحديد الموقع (عطل GPS)</label>
-    <button class="btn btn-primary" onclick="ecOverride()" ${can}><i class="fas fa-unlock"></i> منح الاستثناء</button>
+    <button class="btn btn-primary" onclick="ecOverride()" ${can}><i class="fas fa-unlock" aria-hidden="true"></i> منح الاستثناء</button>
     <h4 style="margin:14px 0 6px;color:var(--primary-dark)">الاستثناءات</h4>
     <div class="table-wrap"><table><thead><tr><th>من</th><th>إلى</th><th>السبب</th><th>بواسطة</th><th>الحالة</th><th></th></tr></thead><tbody>
       ${d.overrides.map(o => `<tr><td>${mEsc(o.starts_at)}</td><td>${mEsc(o.ends_at)}</td><td>${mEsc(o.reason)}${o.no_location ? ' <small>(بدون موقع)</small>' : ''}</td><td>${mEsc(o.created_by || '')}</td>
@@ -521,7 +536,7 @@ async function openEmployeeCard(id) {
   ec$('ec-msg').innerHTML = `
     <div class="form-group"><label>العنوان *</label><input type="text" id="ecMsgTitle" placeholder="مثال: تذكير بموعد الاجتماع"></div>
     <div class="form-group"><label>النص</label><textarea id="ecMsgBody" rows="4" style="width:100%;border:1px solid var(--border);border-radius:10px;padding:10px;font-family:inherit"></textarea></div>
-    <button class="btn btn-primary" onclick="ecNotify([${e.id}], ec$('ecMsgTitle').value, ec$('ecMsgBody').value)"><i class="fas fa-paper-plane"></i> إرسال إلى تطبيق الموظف</button>
+    <button class="btn btn-primary" onclick="ecNotify([${e.id}], ec$('ecMsgTitle').value, ec$('ecMsgBody').value)"><i class="fas fa-paper-plane" aria-hidden="true"></i> إرسال إلى تطبيق الموظف</button>
     <h4 style="margin:14px 0 6px;color:var(--primary-dark)">الإشعارات المرسلة</h4>
     <ul style="list-style:none;padding:0">${d.notifications.map(n => `<li style="border-bottom:1px dashed var(--border);padding:7px 0"><b>${mEsc(n.title)}</b> <small style="color:var(--muted)">${mEsc(n.created_at)} · ${mEsc(n.created_by || '')} · ${n.read_at ? 'قُرئ ' + mEsc(n.read_at) : 'لم يُقرأ'}</small>${n.body ? '<div style="white-space:pre-line;color:var(--muted)">' + mEsc(n.body) + '</div>' : ''}</li>`).join('') || '<li style="color:var(--muted)">لا توجد</li>'}</ul>`;
   ec$('ec-log').innerHTML = `<div class="table-wrap"><table><thead><tr><th>الوقت</th><th>المستخدم</th><th>العملية</th><th>التفاصيل</th></tr></thead><tbody>
@@ -588,8 +603,8 @@ function ecNotifyDialog(ids) {
   ['maModalCsv', 'maModalPrint'].forEach(x => { document.getElementById(x).style.display = 'none'; });
   const save = document.getElementById('maModalSave');
   save.style.display = '';
-  save.innerHTML = '<i class="fas fa-paper-plane"></i> إرسال';
-  save.onclick = async () => { await ecNotify(ids, document.getElementById('bnTitle').value, document.getElementById('bnBody').value); document.getElementById('maModal').classList.remove('open'); save.innerHTML = '<i class="fas fa-save"></i> حفظ'; };
+  save.innerHTML = '<i class="fas fa-paper-plane" aria-hidden="true"></i> إرسال';
+  save.onclick = async () => { await ecNotify(ids, document.getElementById('bnTitle').value, document.getElementById('bnBody').value); document.getElementById('maModal').classList.remove('open'); save.innerHTML = '<i class="fas fa-save" aria-hidden="true"></i> حفظ'; };
   document.getElementById('maModal').classList.add('open');
 }
 

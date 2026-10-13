@@ -1,4 +1,4 @@
-/* نظام تحليل الحضور والانصراف - منطق الواجهة الأمامية (SPA بتبويبات) */
+/* نظام تحليل الحضور والانصراف - منطق الواجهة الأمامية (SPA في تبويبات) */
 
 /* ===== فلترة عامة لكل الجداول - تُضاف تلقائياً لأي <table class="dt-filterable">
    بصف إدخال أسفل رأس الجدول مباشرة، وتفلتر صفوف الـtbody الظاهرة حسب نص كل
@@ -147,12 +147,12 @@ async function bulkDeleteSelected(tbodyId, urlBuilder, reloadFn, opts = {}) {
 
 const PAGE_TITLES = {
   dashboard: 'لوحة التحكم', upload: 'رفع البيانات والتحليل', reports: 'التقارير',
-  overtime: 'العمل الإضافي', compare: 'المقارنات', blueprint: 'Blueprint', export: 'تصدير',
+  overtime: 'العمل الإضافي', compare: 'المقارنات', blueprint: 'النظرة الشاملة', export: 'التصدير',
   manual: 'الإدخال اليدوي', exceptions: 'استثناءات التواريخ', 'absence-reasons': 'أسباب الغياب',
   holidays: 'العطل الرسمية',
-  permissions: 'أذونات التأخير/المغادرة', employees: 'الموظفون', devices: 'إدارة الأجهزة',
+  permissions: 'أذونات التأخير والمغادرة', employees: 'الموظفون', devices: 'أجهزة البصمة',
   'dept-times': 'أوقات الأقسام', settings: 'الإعدادات العامة', schedule: 'الجدولة التلقائية',
-  audit: 'سجل التدقيق', users: 'المستخدمون',
+  audit: 'سجل التدقيق', users: 'المستخدمون والصلاحيات', maintenance: 'أدوات الصيانة',
 };
 
 let currentTab = 'dashboard';
@@ -177,7 +177,7 @@ function _disableContainer(selector) {
 
 function applyRolePermissions() {
   if (CURRENT_ROLE !== 'admin') {
-    document.querySelectorAll('[data-tab="users"]').forEach(el => { el.style.display = 'none'; });
+    document.querySelectorAll('[data-tab="users"], [data-tab="maintenance"]').forEach(el => { el.style.display = 'none'; });
   }
   if (!PERMS.can_manage_employees) {
     _disableContainer('#empAddCard');
@@ -212,9 +212,46 @@ function toggleSidebar() {
   document.getElementById('sidebarOverlay').classList.toggle('open');
 }
 
+/* ===== مجموعات القائمة الجانبية: طيّ/فتح يُحفظ لكل مستخدم على هذا الجهاز ===== */
+function _navCollapsed() { try { return JSON.parse(localStorage.getItem('att_nav_collapsed') || '[]'); } catch (e) { return []; } }
+function toggleNavGroup(id, open) {
+  const g = document.querySelector(`.nav-group[data-group="${id}"]`);
+  if (!g) return;
+  const collapsed = open === undefined ? !g.classList.contains('collapsed') : !open;
+  g.classList.toggle('collapsed', collapsed);
+  g.querySelector('.nav-group-title').setAttribute('aria-expanded', String(!collapsed));
+  const list = _navCollapsed().filter(x => x !== id);
+  if (collapsed) list.push(id);
+  try { localStorage.setItem('att_nav_collapsed', JSON.stringify(list)); } catch (e) {}
+}
+function initNavGroups() {
+  _navCollapsed().forEach(id => { const g = document.querySelector(`.nav-group[data-group="${id}"]`); if (g) g.classList.add('collapsed'); });
+  // مجموعة كل عناصرها مخفية بالصلاحيات تُخفى كاملة
+  document.querySelectorAll('.nav-group').forEach(g => {
+    const visible = Array.from(g.querySelectorAll('.nav-item')).some(b => b.style.display !== 'none');
+    g.style.display = visible ? '' : 'none';
+  });
+}
+
+/* ===== موضع التمرير لكل تبويب: يعود كما كان بعد التحديث (F5) أو الرجوع للتبويب ===== */
+const _scrollKey = t => 'att_scroll_' + t;
+window.addEventListener('scroll', () => {
+  clearTimeout(window._scrollSaveT);
+  window._scrollSaveT = setTimeout(() => { try { sessionStorage.setItem(_scrollKey(currentTab), String(window.scrollY)); } catch (e) {} }, 150);
+}, { passive: true });
+function _restoreScroll(tab) {
+  let y = 0; try { y = +sessionStorage.getItem(_scrollKey(tab)) || 0; } catch (e) {}
+  if (!y) { window.scrollTo(0, 0); return; }
+  // المحتوى يُحمَّل من الخادم؛ نعيد المحاولة حتى يصبح طول الصفحة كافياً
+  let n = 0;
+  const tryIt = () => { if (document.body.scrollHeight - window.innerHeight >= y - 5 || n++ > 20) window.scrollTo(0, y); else setTimeout(tryIt, 100); };
+  tryIt();
+}
+
 function showTab(tab, opts) {
   opts = opts || {};
-  if (!document.getElementById('tab-' + tab)) tab = 'dashboard';
+  const btn = document.querySelector(`.nav-item[data-tab="${tab}"]`);
+  if (!document.getElementById('tab-' + tab) || (btn && btn.style.display === 'none')) tab = 'dashboard';
   currentTab = tab;
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
@@ -222,12 +259,21 @@ function showTab(tab, opts) {
   document.getElementById('pageTitle').textContent = PAGE_TITLES[tab] || tab;
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('sidebarOverlay').classList.remove('open');
+  document.title = (PAGE_TITLES[tab] || tab) + ' — نظام الحضور والانصراف';
+  const active = document.querySelector(`.nav-item[data-tab="${tab}"]`);
+  if (active) {
+    const g = active.closest('.nav-group');
+    if (g && g.classList.contains('collapsed')) toggleNavGroup(g.dataset.group, true);
+    active.scrollIntoView({ block: 'nearest' });
+  }
+  if (!opts.keepScroll) setTimeout(() => _restoreScroll(tab), 0);
   // ===== نسجّل التبويب الحالي بعنوان الصفحة (hash) وبتاريخ التصفّح
   // (history) بدل تركه بذاكرة JS فقط - هيك زر "رجوع" بالتلفون يتنقّل
   // بين التبويبات داخل نفس التطبيق (بدل ما يطلع فوراً لصفحة تسجيل
   // الدخول بذاكرة المتصفح ويبدو وكأن المستخدم خرج من حسابه)، وتحديث
   // الصفحة (refresh) يرجّع نفس التبويب المفتوح (بدل الرجوع دائماً
   // للوحة التحكم) لأن العنوان بعد التحديث بيضل فيه اسم التبويب =====
+  try { sessionStorage.setItem('att_last_tab', tab); } catch (e) {}
   if (!opts.skipHistory) {
     const newHash = '#' + tab;
     if (window.location.hash !== newHash) {
@@ -280,13 +326,13 @@ async function loadLastImportNotice() {
     box.innerHTML = `
       <div class="alert" style="background:#eaf4f8;border:1px solid var(--primary-light);color:#124a5f;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:8px;margin-bottom:14px">
         <div>
-          <i class="fas fa-info-circle"></i>
+          <i class="fas fa-info-circle" aria-hidden="true"></i>
           <b>آخر عملية سحب/استيراد بصمات:</b> ${escapeHtml(data.label)} — ${escapeHtml(data.timestamp)}
           ${data.username ? ' بواسطة ' + escapeHtml(data.username) : ''}
           ${data.detail ? `<br><span style="font-size:.85rem">${escapeHtml(data.detail)}</span>` : ''}
           <br><span style="font-size:.8rem">تأكدي من هذا قبل تكرار نفس عملية السحب/الاستيراد لتفادي الانتظار غير الضروري (خصوصاً لملفات كبيرة).</span>
         </div>
-        <button class="btn btn-outline btn-sm" style="white-space:nowrap" onclick="dismissLastImportNotice()"><i class="fas fa-times"></i></button>
+        <button class="btn btn-outline btn-sm" style="white-space:nowrap" onclick="dismissLastImportNotice()" aria-label="إغلاق" title="إغلاق"><i class="fas fa-times" aria-hidden="true"></i></button>
       </div>`;
   } catch (e) {}
 }
@@ -504,7 +550,7 @@ async function runAnalyze() {
   box.innerHTML = '<span class="spinner"></span> جارٍ التحليل...';
   try {
     const data = await api('/api/analyze', { method: 'POST' });
-    box.innerHTML = `<div class="alert alert-success">تم التحليل بنجاح - ${data.rows} سجل جاهز بتبويب التقارير.</div>`;
+    box.innerHTML = `<div class="alert alert-success">تم التحليل بنجاح - ${data.rows} سجل جاهز في تبويب التقارير.</div>`;
     toast('تم التحليل بنجاح');
     loadMetaInto();
   } catch (e) {
@@ -570,7 +616,7 @@ const STATUS_BADGE = {
 
 // ===== حالات يمكن النقر على شارتها بجدول التقارير لفتح تبويب تسجيل
 // الحدث مباشرة (إذن تأخير/سبب غياب) - بدل الاضطرار للبحث عن نفس الموظف/
-// التاريخ يدوياً بتبويب آخر، تماماً كسلوك النسخة المكتبية (home.py) عند
+// التاريخ يدوياً في تبويب آخر، تماماً كسلوك النسخة المكتبية (home.py) عند
 // النقر على هذه الحالات بجدول النتائج =====
 const _CLICKABLE_REPORT_STATUSES = { 'متأخر': 'late', 'تأخير بسيط': 'late', 'غائب': 'absent' };
 
@@ -579,7 +625,7 @@ function _reportStatusCell(r) {
   const kind = _CLICKABLE_REPORT_STATUSES[r.status];
   if (!kind) return badge;
   return `<span style="cursor:pointer" title="اضغط لتسجيل ${kind === 'late' ? 'إذن تأخير' : 'سبب غياب'} لهذا السجل" ` +
-    `onclick="registerReportEvent('${kind}', '${escapeHtml(r.name).replace(/'/g, "\\'")}', '${r.date}')">${badge} <i class="fas fa-pen" style="font-size:.75em;color:var(--muted)"></i></span>`;
+    `onclick="registerReportEvent('${kind}', '${escapeHtml(r.name).replace(/'/g, "\\'")}', '${r.date}')">${badge} <i class="fas fa-pen" style="font-size:.75em;color:var(--muted)" aria-hidden="true"></i></span>`;
 }
 
 // ===== صندوق "تسجيل حدث" السريع - يُفتَح مباشرة بالضغط على كلمة "متأخر"/
@@ -700,12 +746,12 @@ function renderPagination(total, page, pageSize) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const el = document.getElementById('reportsPagination');
   if (totalPages <= 1) { el.innerHTML = `<span style="color:var(--muted);font-size:.85rem">${total} سجل</span>`; return; }
-  let html = `<button ${page <= 1 ? 'disabled' : ''} onclick="loadReports(${page - 1})"><i class="fas fa-chevron-right"></i></button>`;
+  let html = `<button ${page <= 1 ? 'disabled' : ''} onclick="loadReports(${page - 1})" aria-label="الصفحة السابقة" title="الصفحة السابقة"><i class="fas fa-chevron-right" aria-hidden="true"></i></button>`;
   const startP = Math.max(1, page - 2), endP = Math.min(totalPages, page + 2);
   for (let i = startP; i <= endP; i++) {
     html += `<button class="${i === page ? 'active' : ''}" onclick="loadReports(${i})">${i}</button>`;
   }
-  html += `<button ${page >= totalPages ? 'disabled' : ''} onclick="loadReports(${page + 1})"><i class="fas fa-chevron-left"></i></button>`;
+  html += `<button ${page >= totalPages ? 'disabled' : ''} onclick="loadReports(${page + 1})"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>`;
   html += `<span style="color:var(--muted);font-size:.85rem;margin-inline-start:8px">${total} سجل إجمالاً</span>`;
   el.innerHTML = html;
 }
@@ -739,7 +785,7 @@ function exportExcelMultiSheet() {
 async function sendExportEmailNow(btn) {
   if (btn) btn.disabled = true;
   const resultEl = document.getElementById('expResult');
-  resultEl.innerHTML = '<p style="color:var(--muted)"><i class="fas fa-spinner fa-spin"></i> جارٍ الإرسال...</p>';
+  resultEl.innerHTML = '<p style="color:var(--muted)"><i class="fas fa-spinner fa-spin" aria-hidden="true"></i> جارٍ الإرسال...</p>';
   const body = {
     dept: document.getElementById('expDept').value,
     employee: document.getElementById('expEmployee').value,
@@ -750,11 +796,11 @@ async function sendExportEmailNow(btn) {
   try {
     const data = await api('/api/export/send-email', { method: 'POST', body: JSON.stringify(body) });
     if (data) {
-      resultEl.innerHTML = `<p style="color:var(--success,#0a6640)"><i class="fas fa-check-circle"></i> ${escapeHtml(data.message)}</p>`;
+      resultEl.innerHTML = `<p style="color:var(--success,#0a6640)"><i class="fas fa-check-circle" aria-hidden="true"></i> ${escapeHtml(data.message)}</p>`;
       toast(data.message);
     }
   } catch (e) {
-    resultEl.innerHTML = `<p style="color:#c0392b"><i class="fas fa-times-circle"></i> ${escapeHtml(e.message)}</p>`;
+    resultEl.innerHTML = `<p style="color:#c0392b"><i class="fas fa-times-circle" aria-hidden="true"></i> ${escapeHtml(e.message)}</p>`;
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -1109,7 +1155,7 @@ async function loadManualEntries() {
       <td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.date)}</td>
       <td>${escapeHtml(r.time_in || '—')}</td><td>${escapeHtml(r.time_out || '—')}</td>
       <td>${escapeHtml(r.reason)}</td><td>${escapeHtml(r.entered_at)}</td>
-      <td><button class="btn btn-red btn-sm" onclick="deleteManualEntry(${r.id})"><i class="fas fa-trash"></i></button></td>
+      <td><button class="btn btn-red btn-sm" onclick="deleteManualEntry(${r.id})" aria-label="حذف" title="حذف"><i class="fas fa-trash" aria-hidden="true"></i></button></td>
     </tr>`).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:16px">لا توجد إدخالات يدوية</td></tr>';
 }
 
@@ -1187,7 +1233,7 @@ async function loadDateExceptions() {
     <tr>
       <td><input type="checkbox" class="row-check" data-id="${r.id}"></td>
       <td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.reason || '')}</td>
-      <td><button class="btn btn-red btn-sm" onclick="deleteDateException(${r.id})"><i class="fas fa-trash"></i></button></td>
+      <td><button class="btn btn-red btn-sm" onclick="deleteDateException(${r.id})" aria-label="حذف" title="حذف"><i class="fas fa-trash" aria-hidden="true"></i></button></td>
     </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">لا توجد استثناءات مسجَّلة</td></tr>';
   loadForcedAbsences();
 }
@@ -1249,7 +1295,7 @@ async function loadForcedAbsences() {
     <tr>
       <td><input type="checkbox" class="row-check" data-id="${r.id}"></td>
       <td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.reason || '')}</td>
-      <td><button class="btn btn-red btn-sm" onclick="deleteForcedAbsence(${r.id})"><i class="fas fa-trash"></i></button></td>
+      <td><button class="btn btn-red btn-sm" onclick="deleteForcedAbsence(${r.id})" aria-label="حذف" title="حذف"><i class="fas fa-trash" aria-hidden="true"></i></button></td>
     </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">لا توجد حالات غياب إجباري مسجَّلة</td></tr>';
 }
 
@@ -1293,8 +1339,8 @@ async function loadAbsenceReasons() {
       <td>${escapeHtml(r.date)}</td>
       <td><input type="text" class="search-input" id="arReason-${escapeHtml(key)}" value="${escapeHtml(r.reason || '')}" placeholder="سبب الغياب (اختياري)"></td>
       <td style="white-space:nowrap">
-        <button class="btn btn-primary btn-sm" onclick="saveAbsenceReason(this)"><i class="fas fa-save"></i></button>
-        <button class="btn btn-red btn-sm" onclick="deleteAbsenceReason(this)"><i class="fas fa-trash"></i></button>
+        <button class="btn btn-primary btn-sm" onclick="saveAbsenceReason(this)" aria-label="حفظ" title="حفظ"><i class="fas fa-save" aria-hidden="true"></i></button>
+        <button class="btn btn-red btn-sm" onclick="deleteAbsenceReason(this)" aria-label="حذف" title="حذف"><i class="fas fa-trash" aria-hidden="true"></i></button>
       </td>
     </tr>`;
   }).join('');
@@ -1353,7 +1399,7 @@ async function loadHolidays() {
     <tr>
       <td><input type="checkbox" class="row-check" data-id="${encodeURIComponent(r.date)}"></td>
       <td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.label || '')}</td>
-      <td><button class="btn btn-red btn-sm" onclick="deleteHoliday('${encodeURIComponent(r.date)}')"><i class="fas fa-trash"></i></button></td>
+      <td><button class="btn btn-red btn-sm" onclick="deleteHoliday('${encodeURIComponent(r.date)}')" aria-label="حذف" title="حذف"><i class="fas fa-trash" aria-hidden="true"></i></button></td>
     </tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:16px">لا توجد عطل مسجَّلة</td></tr>';
 }
 
@@ -1419,7 +1465,7 @@ async function loadPermissions() {
         <td><input type="checkbox" class="row-check" data-id="${r.id}"></td>
         <td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.date)}</td><td>${r.minutes || 0}</td>
         <td>${escapeHtml(r.custom_attendance_time || '—')}</td><td>${escapeHtml(r.label || '')}</td>
-        <td><button class="btn btn-red btn-sm" onclick="deleteLatePermission(${r.id})"><i class="fas fa-trash"></i></button></td>
+        <td><button class="btn btn-red btn-sm" onclick="deleteLatePermission(${r.id})" aria-label="حذف" title="حذف"><i class="fas fa-trash" aria-hidden="true"></i></button></td>
       </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px">لا توجد أذونات تأخير مسجَّلة</td></tr>';
   }
 
@@ -1431,7 +1477,7 @@ async function loadPermissions() {
         <td><input type="checkbox" class="row-check" data-id="${r.id}"></td>
         <td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.date)}</td>
         <td>${escapeHtml(r.departure_time)}</td><td>${escapeHtml(r.return_time)}</td><td>${escapeHtml(r.reason || '')}</td>
-        <td><button class="btn btn-red btn-sm" onclick="deleteDeparturePermission(${r.id})"><i class="fas fa-trash"></i></button></td>
+        <td><button class="btn btn-red btn-sm" onclick="deleteDeparturePermission(${r.id})" aria-label="حذف" title="حذف"><i class="fas fa-trash" aria-hidden="true"></i></button></td>
       </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px">لا توجد أذونات مغادرة مسجَّلة</td></tr>';
   }
 }
@@ -1461,6 +1507,8 @@ const AUDIT_ACTION_LABELS = {
   mobile_unbind: 'فكّ ربط الهاتف', mobile_disable: 'إيقاف حسابات', mobile_enable: 'تفعيل حسابات', mobile_delete: 'حذف حسابات',
   mobile_anywhere_on: 'السماح من أي مكان', mobile_anywhere_off: 'إلغاء «أي مكان»', mobile_settings: 'إعدادات التطبيق',
   site_add: 'إضافة موقع عمل', site_edit: 'تعديل موقع عمل', site_delete: 'حذف موقع عمل',
+  password_forgot: 'طلب استعادة كلمة المرور', password_reset: 'تعيين كلمة مرور جديدة', password_request_dismiss: 'تجاهل طلب كلمة المرور',
+  purge: 'حذف سجلات (أدوات الصيانة)', mobile_punch_delete: 'حذف حركة هاتف', mobile_unbind: 'فكّ ربط الهاتف',
 };
 const AUDIT_TARGET_LABELS = {
   manual_entry: 'إدخال يدوي', date_exception: 'استثناء تاريخ', date_exception_bulk: 'استثناء تاريخ (جماعي)', official_holiday: 'عطلة رسمية',
@@ -1469,6 +1517,7 @@ const AUDIT_TARGET_LABELS = {
   employee_accounts: 'حسابات التطبيق', work_site: 'مواقع العمل', device: 'أجهزة البصمة', device_attendance: 'سجلات الجهاز',
   device_users: 'مستخدمو الجهاز', device_sqlite: 'استيراد SQLite', device_mdb: 'استيراد MDB', onedrive: 'OneDrive', gdrive: 'Google Drive',
   push: 'إرسال مزامنة', receive: 'استقبال مزامنة', employees_from_sqlite: 'استيراد موظفين', mobile: 'تطبيق الهاتف',
+  maintenance: 'أدوات الصيانة', mobile_punches: 'حركات الهاتف',
 };
 
 function _auditParams() {
@@ -1633,7 +1682,7 @@ async function loadEmployees() {
   const tbody = document.getElementById('employeesTable');
   tbody.innerHTML = data.rows.map(r => `
     <tr><td><input type="checkbox" class="row-check" data-id="${r.id}"></td><td><a href="#" onclick="openEmployeeCard(${r.id});return false" style="font-weight:700;color:var(--primary-dark)">${escapeHtml(r.name)}</a>${r.active === 0 ? ' <span class="badge badge-absent">معلّق</span>' : ''}</td><td>${escapeHtml(r.dept || '')}</td><td dir="ltr" style="text-align:right">${escapeHtml(r.device_uid || '—')}</td>
-    <td style="white-space:nowrap"><button class="btn btn-outline btn-sm" title="ملف الموظف" onclick="openEmployeeCard(${r.id})"><i class="fas fa-id-card"></i></button> <button class="btn btn-red btn-sm" onclick="deleteEmployee(${r.id})" ${PERMS.can_manage_employees ? '' : 'disabled title="ليس لديك صلاحية لهذا الإجراء"'}><i class="fas fa-trash"></i></button></td></tr>
+    <td style="white-space:nowrap"><button class="btn btn-outline btn-sm" title="ملف الموظف" onclick="openEmployeeCard(${r.id})" aria-label="ملف الموظف"><i class="fas fa-id-card" aria-hidden="true"></i></button> <button class="btn btn-red btn-sm" onclick="deleteEmployee(${r.id})" ${PERMS.can_manage_employees ? '' : 'disabled title="ليس لديك صلاحية لهذا الإجراء"'} aria-label="ليس لديك صلاحية لهذا الإجراء"><i class="fas fa-trash" aria-hidden="true"></i></button></td></tr>
   `).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">لا يوجد موظفون بعد</td></tr>';
 }
 
@@ -1668,8 +1717,8 @@ async function loadDevices() {
       <td>${escapeHtml(d.name)}</td><td dir="ltr" style="text-align:right">${escapeHtml(d.ip)}</td><td>${d.port}</td>
       <td>${escapeHtml(d.location || '')}</td>
       <td><span class="badge ${d.active ? 'badge-ontime' : 'badge-none'}">${d.active ? 'مفعَّل' : 'معطَّل'}</span></td>
-      <td><button class="btn btn-outline btn-sm" onclick="testDevice(${d.id}, this)"><i class="fas fa-plug"></i> اختبار</button></td>
-      <td><button class="btn btn-red btn-sm" onclick="deleteDevice(${d.id})"><i class="fas fa-trash"></i></button></td>
+      <td><button class="btn btn-outline btn-sm" onclick="testDevice(${d.id}, this)"><i class="fas fa-plug" aria-hidden="true"></i> اختبار</button></td>
+      <td><button class="btn btn-red btn-sm" onclick="deleteDevice(${d.id})" aria-label="حذف" title="حذف"><i class="fas fa-trash" aria-hidden="true"></i></button></td>
     </tr>`).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:16px">لا توجد أجهزة مسجَّلة بعد</td></tr>';
 
   const selects = ['fingerSourceDevice', 'doorDevice', 'clearAttDevice', 'deleteUsersDevice', 'faceSourceDevice'];
@@ -1756,7 +1805,7 @@ async function importMdb() {
     if (data.imported === 0) {
       html += `<p style="font-size:.85rem;color:var(--muted);margin-top:8px">تم العثور على ${data.raw_count || 0} سجل خام بالملف ضمن الفترة المحددة.` +
         (data.raw_count > 0
-          ? ' البيانات موجودة لكن لم تُطابَق أي منها لموظف - تأكد من تعبئة "رقم البصمة" لموظفيك بتبويب الموظفين.'
+          ? ' البيانات موجودة لكن لم تُطابَق أي منها لموظف - تأكد من تعبئة "رقم البصمة" لموظفيك في تبويب الموظفين.'
           : ' لا توجد بيانات بالملف ضمن هذه الفترة الزمنية - جرّب توسيع الفترة أو تركها فارغة لاستيراد كل البيانات.') +
         `</p>`;
     }
@@ -1796,7 +1845,7 @@ async function importSqlite() {
     if (data.imported === 0) {
       html += `<p style="font-size:.85rem;color:var(--muted);margin-top:8px">تم العثور على ${data.raw_count || 0} سجل خام بالملف ضمن الفترة المحددة.` +
         (data.raw_count > 0
-          ? ' البيانات موجودة لكن لم تُطابَق أي منها لموظف - تأكد من تعبئة "رقم البصمة" لموظفيك بتبويب الموظفين.'
+          ? ' البيانات موجودة لكن لم تُطابَق أي منها لموظف - تأكد من تعبئة "رقم البصمة" لموظفيك في تبويب الموظفين.'
           : ' لا توجد بيانات بالملف ضمن هذه الفترة الزمنية - جرّب توسيع الفترة أو تركها فارغة لاستيراد كل البيانات.') +
         `</p>`;
     }
@@ -2035,7 +2084,7 @@ async function loadDeptTimes() {
   const tbody = document.getElementById('deptTimesTable');
   tbody.innerHTML = data.rows.map(r => `
     <tr><td><input type="checkbox" class="row-check" data-id="${encodeURIComponent(r.dept)}"></td><td>${escapeHtml(r.dept)}</td><td>${escapeHtml(r.attendance_time || '—')}</td><td>${escapeHtml(r.departure_time || '—')}</td>
-    <td><button class="btn btn-red btn-sm" onclick="deleteDeptTime('${encodeURIComponent(r.dept)}')"><i class="fas fa-trash"></i></button></td></tr>
+    <td><button class="btn btn-red btn-sm" onclick="deleteDeptTime('${encodeURIComponent(r.dept)}')" aria-label="حذف" title="حذف"><i class="fas fa-trash" aria-hidden="true"></i></button></td></tr>
   `).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">لا توجد أقسام مخصَّصة</td></tr>';
 }
 
@@ -2106,7 +2155,7 @@ async function saveSettings() {
     const shift1 = document.getElementById('setShift1Names').value.split(',').map(s => s.trim()).filter(Boolean);
     const shift2 = document.getElementById('setShift2Names').value.split(',').map(s => s.trim()).filter(Boolean);
     await api('/api/shift-names', { method: 'POST', body: JSON.stringify({ shift1, shift2 }) });
-    box.innerHTML = '<div class="alert alert-success">تم حفظ الإعدادات - اضغط "تحليل البيانات" بتبويب رفع البيانات لتطبيقها.</div>';
+    box.innerHTML = '<div class="alert alert-success">تم حفظ الإعدادات - اضغط "تحليل البيانات" في تبويب رفع البيانات لتطبيقها.</div>';
     toast('تم حفظ الإعدادات');
     document.getElementById('syncPushCard').style.display = payload.sync_central_url ? 'block' : 'none';
   } catch (e) {
@@ -2391,6 +2440,7 @@ async function addUser() {
   const payload = Object.assign({
     username: document.getElementById('usrUsername').value.trim(),
     full_name: document.getElementById('usrFullName').value.trim(),
+    email: document.getElementById('usrEmail').value.trim(),
     password: document.getElementById('usrPassword').value,
     role: document.getElementById('usrRole').value,
     allowed_departments: _readSelectedDepts(document.getElementById('usrDepts')),
@@ -2439,7 +2489,8 @@ async function loadUsers() {
   tbody.innerHTML = data.rows.map(r => {
     const p = 'u' + r.id;
     return `
-    <tr><td><input type="checkbox" class="row-check" data-id="${r.id}"></td><td dir="ltr" style="text-align:right">${escapeHtml(r.username)}</td><td>${escapeHtml(r.full_name || '')}</td>
+    <tr><td><input type="checkbox" class="row-check" data-id="${r.id}"></td><td dir="ltr" style="text-align:right">${escapeHtml(r.username)}</td><td>${escapeHtml(r.full_name || '')}
+      <input type="email" dir="ltr" value="${escapeHtml(r.email || '')}" placeholder="البريد الإلكتروني" aria-label="البريد الإلكتروني" style="margin-top:6px;font-size:.8rem" onchange="saveUserEmail(${r.id}, this.value)"></td>
     <td>
       <select id="${p}Role" class="search-input" style="min-width:150px" onchange="applyRoleDefaults('${p}')">
         <option value="viewer" ${r.role === 'viewer' ? 'selected' : ''}>مشاهد (viewer)</option>
@@ -2453,13 +2504,27 @@ async function loadUsers() {
         <label style="display:flex;align-items:center;gap:4px;font-weight:normal"><input type="checkbox" id="${p}PermSettings" ${r.can_edit_org_settings ? 'checked' : ''}> إعدادات</label>
       </div>
       <select id="${p}Depts" class="search-input" multiple size="3" style="margin-top:6px;height:auto;min-width:150px"></select>
-      <button class="btn btn-primary btn-sm" onclick="saveUserPerms(${r.id})" style="margin-top:6px"><i class="fas fa-save"></i> حفظ</button>
+      <button class="btn btn-primary btn-sm" onclick="saveUserPerms(${r.id})" style="margin-top:6px"><i class="fas fa-save" aria-hidden="true"></i> حفظ</button>
     </td>
     <td>${escapeHtml(r.created_at)}</td>
-    <td><button class="btn btn-red btn-sm" onclick="deleteUser(${r.id})"><i class="fas fa-trash"></i></button></td></tr>
+    <td style="white-space:nowrap"><button class="btn btn-outline btn-sm" title="كلمة مرور جديدة" aria-label="كلمة مرور جديدة" onclick="setUserPassword(${r.id}, '${escapeHtml(r.username)}')"><i class="fas fa-key" aria-hidden="true"></i></button>
+      <button class="btn btn-red btn-sm" title="حذف" aria-label="حذف" onclick="deleteUser(${r.id})"><i class="fas fa-trash" aria-hidden="true"></i></button></td></tr>
   `;
   }).join('');
   data.rows.forEach(r => _fillDeptMultiSelect(document.getElementById('u' + r.id + 'Depts'), r.allowed_departments));
+}
+
+async function saveUserEmail(id, email) {
+  const d = await api('/api/users/' + id, { method: 'PUT', body: JSON.stringify({ email }) });
+  if (d) toast('حُفظ البريد');
+}
+
+async function setUserPassword(id, username) {
+  const pw = prompt(`كلمة المرور الجديدة للمستخدم «${username}» (8 أحرف على الأقل):`);
+  if (pw === null) return;
+  if (pw.length < 8) { toast('كلمة المرور 8 أحرف على الأقل', true); return; }
+  const d = await api('/api/users/' + id, { method: 'PUT', body: JSON.stringify({ new_password: pw }) });
+  if (d) toast('تم تغيير كلمة المرور — سلّمها للمستخدم');
 }
 
 async function deleteUser(id) {
@@ -2480,17 +2545,19 @@ document.addEventListener('DOMContentLoaded', () => {
   loadStats();
   loadLastImportNotice();
   // نجلب الإعدادات فوراً (وليس فقط عند فتح تبويب "الإعدادات") حتى يظهر
-  // زر "نشر ومزامنة" بتبويب "رفع البيانات" مباشرة لو هذه نسخة فرع مُعدَّة
+  // زر "نشر ومزامنة" في تبويب "رفع البيانات" مباشرة لو هذه نسخة فرع مُعدَّة
   loadSettings();
 
   // ===== نستعيد التبويب المفتوح من عنوان الصفحة (#tab) لو موجود - يحصل
   // بعد إعادة تحميل الصفحة (F5) أو رجوع من فتح رابط مباشر بهذا التبويب.
   // replaceState (وليس push) حتى لا نضيف خطوة زائدة بتاريخ التصفّح =====
-  const initialTab = (window.location.hash || '').replace('#', '') || 'dashboard';
+  applyRolePermissions();
+  initNavGroups();
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+  let initialTab = decodeURIComponent((window.location.hash || '').replace('#', '')) || '';
+  if (!initialTab) { try { initialTab = sessionStorage.getItem('att_last_tab') || 'dashboard'; } catch (e) { initialTab = 'dashboard'; } }
   history.replaceState({ tab: initialTab }, '', '#' + initialTab);
-  if (initialTab !== 'dashboard') {
-    showTab(initialTab, { skipHistory: true });
-  }
+  showTab(initialTab, { skipHistory: true });
 
   // ===== تسجيل Service Worker لتفعيل "تثبيت التطبيق" (PWA) على أندرويد/
   // ويندوز - راجع static/sw.js لتفاصيل نطاق التخزين المؤقت المحدود عمداً =====
@@ -2501,7 +2568,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ===== نفس معالجة bfcache بصفحة تسجيل الدخول، لكن بالاتجاه المعاكس:
 // لو صفحة لوحة التحكم نفسها ظهرت من ذاكرة المتصفح (bfcache) - مثلاً
-// المستخدم سجَّل خروج بتبويب آخر ثم رجع بزر "رجوع" - نعيد تحميلها من
+// المستخدم سجَّل خروج في تبويب آخر ثم رجع بزر "رجوع" - نعيد تحميلها من
 // السيرفر لضمان تحويلها لصفحة الدخول فوراً لو الجلسة لم تعد صالحة،
 // بدل عرض لوحة تحكم قديمة مخزَّنة كأن المستخدم ما زال داخلاً =====
 window.addEventListener('pageshow', (event) => {

@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
   {% include '_me_head.html' %}
-  <title>دوامي — {{ emp.name }}</title>
+  <title>تسجيل الدوام — {{ emp.name }}</title>
   <style>
     .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
     .top h1{font-size:1.15rem;color:var(--pd)}.top .muted{font-size:.82rem}
@@ -33,13 +33,13 @@
 <body>
 <div class="wrap">
   <div class="top">
-    <div><h1><i class="fas fa-user-circle"></i> {{ emp.name }}</h1><div class="muted">{{ emp.dept or '' }}</div></div>
-    <a class="btn btn-l" style="padding:9px 12px" href="{{ url_for('mobile.me_logout') }}" onclick="return confirm('تسجيل الخروج من التطبيق؟')"><i class="fas fa-sign-out-alt"></i></a>
+    <div><h1><i class="fas fa-user-circle" aria-hidden="true"></i> {{ emp.name }}</h1><div class="muted">{{ emp.dept or '' }}</div></div>
+    <a class="btn btn-l" style="padding:9px 12px" href="{{ url_for('mobile.me_logout') }}" onclick="return confirm('تسجيل الخروج من التطبيق؟')"><i class="fas fa-sign-out-alt" aria-hidden="true"></i></a>
   </div>
 
   <div class="tabs"><button class="on" data-t="today">اليوم</button><button data-t="month">الشهر</button><button data-t="notes">الإشعارات <span id="unread" class="tag t-out hide" style="padding:0 7px">0</span></button><button data-t="acc">حسابي</button></div>
   <div class="card hide" id="quickBanner" style="background:#eef7f1;font-size:.9rem;line-height:1.7">
-    <b style="color:var(--pd)"><i class="fas fa-fingerprint"></i> ادخل بعد اليوم بـ Face ID / البصمة</b><br>
+    <b style="color:var(--pd)"><i class="fas fa-fingerprint" aria-hidden="true"></i> ادخل بعد اليوم بـ Face ID / البصمة</b><br>
     <span class="muted">بدل كتابة اسم المستخدم وكلمة المرور كل مرة.</span>
     <div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-p" id="quickOn" style="flex:2">تفعيل الآن</button><button class="btn btn-l" id="quickLater" style="flex:1">لاحقاً</button></div>
   </div>
@@ -51,12 +51,12 @@
       <div class="date" id="date"></div>
       <div class="state" id="state">…</div>
       <div class="acts">
-        <button class="act a-in" data-k="in" disabled><i class="fas fa-right-to-bracket"></i>تسجيل حضور</button>
-        <button class="act a-out" data-k="out" disabled><i class="fas fa-right-from-bracket"></i>تسجيل انصراف</button>
-        <button class="act a-lo" data-k="leave_out" disabled><i class="fas fa-person-walking-arrow-right"></i>خروج مؤقت</button>
-        <button class="act a-lb" data-k="leave_back" disabled><i class="fas fa-person-walking-arrow-loop-left"></i>عودة من الخروج</button>
+        <button class="act a-in" data-k="in" disabled><i class="fas fa-right-to-bracket" aria-hidden="true"></i>تسجيل حضور</button>
+        <button class="act a-out" data-k="out" disabled><i class="fas fa-right-from-bracket" aria-hidden="true"></i>تسجيل انصراف</button>
+        <button class="act a-lo" data-k="leave_out" disabled><i class="fas fa-person-walking-arrow-right" aria-hidden="true"></i>خروج مؤقت</button>
+        <button class="act a-lb" data-k="leave_back" disabled><i class="fas fa-person-walking-arrow-loop-left" aria-hidden="true"></i>عودة من الخروج</button>
       </div>
-      <div class="gps wait" id="gps"><i class="fas fa-location-crosshairs fa-beat-fade"></i><span>جارٍ تحديد موقعك…</span></div>
+      <div class="gps wait" id="gps"><i class="fas fa-location-crosshairs fa-beat-fade" aria-hidden="true"></i><span>جارٍ تحديد موقعك…</span></div>
     </div>
     <div class="card">
       <b style="color:var(--pd)">حركات اليوم</b>
@@ -79,22 +79,22 @@
 
   <div id="t-acc" class="hide">
     <div class="card" id="bioCard">
-      <b style="color:var(--pd)"><i class="fas fa-fingerprint"></i> بصمة الوجه / الإصبع</b>
+      <b style="color:var(--pd)"><i class="fas fa-fingerprint" aria-hidden="true"></i> بصمة الوجه / الإصبع</b>
       <p class="muted" id="bioText" style="margin:6px 0 10px;line-height:1.7"></p>
-      <button class="btn btn-p hide" id="bioBtn" style="width:100%"><i class="fas fa-fingerprint"></i> تفعيل البصمة على هذا الهاتف</button>
+      <button class="btn btn-p hide" id="bioBtn" style="width:100%"><i class="fas fa-fingerprint" aria-hidden="true"></i> تفعيل البصمة على هذا الهاتف</button>
     </div>
     <div class="card">
       <b style="color:var(--pd)">تغيير كلمة المرور</b>
       <label>كلمة المرور الحالية</label><input type="password" id="pw0" autocomplete="current-password">
       <label>كلمة المرور الجديدة (6 أحرف على الأقل)</label><input type="password" id="pw1" autocomplete="new-password">
-      <button class="btn btn-p" style="width:100%;margin-top:14px" onclick="changePw()"><i class="fas fa-key"></i> حفظ</button>
+      <button class="btn btn-p" style="width:100%;margin-top:14px" onclick="changePw()"><i class="fas fa-key" aria-hidden="true"></i> حفظ</button>
     </div>
     <div class="card muted" style="line-height:1.9">
-      <button class="btn btn-p hide" id="installBtn" style="width:100%;margin-bottom:10px"><i class="fas fa-download"></i> تثبيت التطبيق على هذا الهاتف</button>
-      <i class="fas fa-circle-info"></i> لتثبيت التطبيق: <a href="/app">صفحة التطبيق</a> (أندرويد APK) أو من قائمة المتصفح «إضافة إلى الشاشة الرئيسية».<br>
-      <i class="fas fa-location-dot"></i> يجب السماح للمتصفح باستخدام الموقع وتشغيل GPS.<br>
-      <i class="fas fa-mobile-screen"></i> حسابك مرتبط بهذا الهاتف — عند تغيير الهاتف اطلب من الإدارة فكّ الربط.<br>
-      <i class="fas fa-fingerprint"></i> إن نسيت هاتفك سجّل على جهاز البصمة كالمعتاد.
+      <button class="btn btn-p hide" id="installBtn" style="width:100%;margin-bottom:10px"><i class="fas fa-download" aria-hidden="true"></i> تثبيت التطبيق على هذا الهاتف</button>
+      <i class="fas fa-circle-info" aria-hidden="true"></i> لتثبيت التطبيق: <a href="/app">صفحة التطبيق</a> (أندرويد APK) أو من قائمة المتصفح «إضافة إلى الشاشة الرئيسية».<br>
+      <i class="fas fa-location-dot" aria-hidden="true"></i> يجب السماح للمتصفح باستخدام الموقع وتشغيل GPS.<br>
+      <i class="fas fa-mobile-screen" aria-hidden="true"></i> حسابك مرتبط بهذا الهاتف — عند تغيير الهاتف اطلب من الإدارة فكّ الربط.<br>
+      <i class="fas fa-fingerprint" aria-hidden="true"></i> إن نسيت هاتفك سجّل على جهاز البصمة كالمعتاد.
     </div>
   </div>
 </div>
@@ -126,19 +126,19 @@
   // ===== الموقع =====
   function where() {
     var g = $('gps');
-    if (S && S.mode === 'device') { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-fingerprint"></i><span>دوامك يُوثَّق عبر جهاز البصمة فقط</span>'; return { ok: false }; }
-    if (S && S.override && S.override.no_location && !POS) { g.className = 'gps ok'; g.innerHTML = '<i class="fas fa-unlock"></i><span>استثناء: التسجيل مسموح بدون تحديد الموقع</span>'; return { ok: true }; }
+    if (S && S.mode === 'device') { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-fingerprint" aria-hidden="true"></i><span>دوامك يُوثَّق عبر جهاز البصمة فقط</span>'; return { ok: false }; }
+    if (S && S.override && S.override.no_location && !POS) { g.className = 'gps ok'; g.innerHTML = '<i class="fas fa-unlock" aria-hidden="true"></i><span>استثناء: التسجيل مسموح بدون تحديد الموقع</span>'; return { ok: true }; }
     if (!POS) return { ok: false };
     var acc = POS.coords.accuracy, best = null, bd = null;
     (S && S.sites || []).forEach(function (s) { var d = dist(POS.coords.latitude, POS.coords.longitude, s.lat, s.lng); if (bd === null || d - s.radius < bd - best.radius) { best = s; bd = d; } });
     var inside = S && (S.anywhere || S.override || (best && bd - Math.min(acc, 30) <= best.radius));
     var accOk = !S || acc <= S.max_accuracy;
-    if (S && S.require_app && !NATIVE) { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-mobile-screen"></i><span>التسجيل متاح من تطبيق الموظف فقط — <a href="/app">نزّل التطبيق</a></span>'; return { ok: false }; }
-    if (POS.mock) { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-ban"></i><span>تم اكتشاف تطبيق موقع وهمي على هاتفك — أغلقه للتمكن من التسجيل</span>'; return { ok: false }; }
-    if (!accOk) { g.className = 'gps wait'; g.innerHTML = '<i class="fas fa-satellite-dish fa-beat-fade"></i><span>دقة الموقع ضعيفة (' + Math.round(acc) + ' م) — انتظر قليلاً</span>'; }
-    else if (inside) { g.className = 'gps ok'; g.innerHTML = '<i class="fas fa-circle-check"></i><span>' + (S.override ? 'استثناء مؤقت: مسموح لك التسجيل من هذا المكان' : S.anywhere ? 'مسموح لك التسجيل من أي مكان' : 'أنت داخل موقع العمل: ' + esc(best.name)) + ' · دقة ' + Math.round(acc) + ' م</span>'; }
-    else if (best) { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-location-dot"></i><span>خارج موقع العمل — ' + Math.round(bd) + ' م عن «' + esc(best.name) + '» (المسموح ' + best.radius + ' م)</span>'; }
-    else { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-triangle-exclamation"></i><span>لم تُحدَّد مواقع عمل لقسمك — راجع الإدارة</span>'; }
+    if (S && S.require_app && !NATIVE) { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-mobile-screen" aria-hidden="true"></i><span>التسجيل متاح من تطبيق الموظف فقط — <a href="/app">نزّل التطبيق</a></span>'; return { ok: false }; }
+    if (POS.mock) { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-ban" aria-hidden="true"></i><span>تم اكتشاف تطبيق موقع وهمي على هاتفك — أغلقه للتمكن من التسجيل</span>'; return { ok: false }; }
+    if (!accOk) { g.className = 'gps wait'; g.innerHTML = '<i class="fas fa-satellite-dish fa-beat-fade" aria-hidden="true"></i><span>دقة الموقع ضعيفة (' + Math.round(acc) + ' م) — انتظر قليلاً</span>'; }
+    else if (inside) { g.className = 'gps ok'; g.innerHTML = '<i class="fas fa-circle-check" aria-hidden="true"></i><span>' + (S.override ? 'استثناء مؤقت: مسموح لك التسجيل من هذا المكان' : S.anywhere ? 'مسموح لك التسجيل من أي مكان' : 'أنت داخل موقع العمل: ' + esc(best.name)) + ' · دقة ' + Math.round(acc) + ' م</span>'; }
+    else if (best) { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-location-dot" aria-hidden="true"></i><span>خارج موقع العمل — ' + Math.round(bd) + ' م عن «' + esc(best.name) + '» (المسموح ' + best.radius + ' م)</span>'; }
+    else { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-triangle-exclamation" aria-hidden="true"></i><span>لم تُحدَّد مواقع عمل لقسمك — راجع الإدارة</span>'; }
     return { ok: inside && accOk };
   }
   function render() {
@@ -151,7 +151,7 @@
     $('state').textContent = S.enabled ? STATE[S.last || ''] : 'التسجيل من الهاتف متوقف حالياً من الإدارة';
   }
   window.attNativeLocation = function (d) {   // يستدعيها تطبيق أندرويد مع كل قراءة
-    if (d.error) { var g = $('gps'); g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-location-crosshairs"></i><span>' + esc(d.error) + '</span>'; return; }
+    if (d.error) { var g = $('gps'); g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-location-crosshairs" aria-hidden="true"></i><span>' + esc(d.error) + '</span>'; return; }
     POS = { coords: { latitude: d.lat, longitude: d.lng, accuracy: d.accuracy }, mock: !!d.mock };
     addSample(POS); render();
   };
@@ -159,7 +159,7 @@
     try { NATIVE.startLocation(); } catch (e) {}
   } else if ('geolocation' in navigator) {
     navigator.geolocation.watchPosition(function (p) { POS = p; addSample(p); render(); },
-      function (e) { var g = $('gps'); g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-location-crosshairs"></i><span>' + (e.code === 1 ? 'اسمح للمتصفح باستخدام موقعك (من إعدادات الموقع) ثم أعد فتح الصفحة' : 'تعذّر تحديد الموقع — شغّل GPS') + '</span>'; },
+      function (e) { var g = $('gps'); g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-location-crosshairs" aria-hidden="true"></i><span>' + (e.code === 1 ? 'اسمح للمتصفح باستخدام موقعك (من إعدادات الموقع) ثم أعد فتح الصفحة' : 'تعذّر تحديد الموقع — شغّل GPS') + '</span>'; },
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 });
   } else { $('gps').innerHTML = '<span>هذا المتصفح لا يدعم تحديد الموقع</span>'; }
 
@@ -177,7 +177,7 @@
       $('notes').innerHTML = d.notifications.map(function (n) { return '<li style="display:block"><b>' + (n.read_at ? '' : '🔵 ') + esc(n.title) + '</b> <span class="muted" style="float:left">' + esc(n.created_at.slice(0, 16)) + '</span>' + (n.body ? '<div class="muted" style="white-space:pre-line;margin-top:4px">' + esc(n.body) + '</div>' : '') + '</li>'; }).join('') || '<li class="muted">لا توجد إشعارات</li>';
       $('unread').textContent = d.unread; $('unread').classList.toggle('hide', !d.unread);
       var ob = $('ovBanner'); ob.classList.toggle('hide', !d.override);
-      if (d.override) ob.innerHTML = '<i class="fas fa-unlock"></i> استثناء من الإدارة: يمكنك التسجيل من خارج موقع العمل حتى ' + esc(d.override.until) + (d.override.no_location ? ' (حتى بدون تحديد الموقع)' : '') + '<br><span class="muted">' + esc(d.override.reason) + '</span>';
+      if (d.override) ob.innerHTML = '<i class="fas fa-unlock" aria-hidden="true"></i> استثناء من الإدارة: يمكنك التسجيل من خارج موقع العمل حتى ' + esc(d.override.until) + (d.override.no_location ? ' (حتى بدون تحديد الموقع)' : '') + '<br><span class="muted">' + esc(d.override.reason) + '</span>';
       renderBio();
       $('k-days').textContent = d.summary.days; $('k-late').textContent = d.summary.late_days; $('k-min').textContent = d.summary.late_minutes; $('k-abs').textContent = d.summary.absent; $('k-hours').textContent = d.summary.hours;
       render();

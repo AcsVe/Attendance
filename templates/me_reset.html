@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  {% include '_me_head.html' %}
+  <title>كلمة مرور جديدة — تسجيل الدوام</title>
+</head>
+<body>
+<div class="wrap" style="padding-top:8vh">
+  <div style="text-align:center;margin-bottom:18px">
+    <h1 style="font-size:1.35rem;color:var(--pd)"><i class="fas fa-key" aria-hidden="true"></i> كلمة مرور جديدة</h1>
+    <div class="muted">{{ settings.org_name or '' }}</div>
+  </div>
+  <div class="card">
+    {% if ok %}
+      <p>تم تغيير كلمة المرور بنجاح.</p>
+      <a class="btn btn-p" style="width:100%;margin-top:12px" href="{{ url_for('mobile.me_login') }}">تسجيل الدخول</a>
+    {% elif invalid %}
+      <div class="err">{{ error }}</div>
+      <a class="btn btn-p" style="width:100%;margin-top:12px" href="{{ url_for('mobile.me_forgot') }}">طلب رابط جديد</a>
+    {% else %}
+      {% if error %}<div class="err">{{ error }}</div>{% endif %}
+      <form method="post">
+        <label for="p1">كلمة المرور الجديدة (6 أحرف على الأقل)</label>
+        <input id="p1" name="password" type="password" minlength="6" required autocomplete="new-password">
+        <label for="p2">أعد كتابة كلمة المرور</label>
+        <input id="p2" name="password2" type="password" minlength="6" required autocomplete="new-password">
+        <button class="btn btn-p" style="width:100%;margin-top:16px">حفظ</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+</body>
+</html>

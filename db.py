@@ -346,9 +346,30 @@ def init_db():
         FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
     )''')
     user_cols = {r['name'] for r in cur.execute("PRAGMA table_info(users)").fetchall()}
-    for col in ('last_login_at', 'last_login_ip'):
+    for col in ('last_login_at', 'last_login_ip', 'email'):
         if col not in user_cols:
             cur.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
+    # ===== نسيان كلمة المرور: روابط بريد لمرة واحدة + طلبات تصل للإدارة (لمن لا بريد له) =====
+    cur.execute('''CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind TEXT NOT NULL,                -- user (مستخدم النظام) أو emp (موظف)
+        subject_id INTEGER NOT NULL,
+        token_hash TEXT UNIQUE NOT NULL,
+        expires_at TEXT NOT NULL,
+        used_at TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+    )''')
+    cur.execute('''CREATE TABLE IF NOT EXISTS password_reset_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind TEXT NOT NULL,
+        subject_id INTEGER NOT NULL,
+        label TEXT,
+        ip TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',   -- pending / done / dismissed
+        handled_by TEXT,
+        handled_at TEXT,
+        created_at TEXT
+    )''')
 
     conn.commit()
 

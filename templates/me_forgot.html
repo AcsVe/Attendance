@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  {% include '_me_head.html' %}
+  <title>نسيت كلمة المرور — تسجيل الدوام</title>
+</head>
+<body>
+<div class="wrap" style="padding-top:8vh">
+  <div style="text-align:center;margin-bottom:18px">
+    <h1 style="font-size:1.35rem;color:var(--pd)"><i class="fas fa-key" aria-hidden="true"></i> نسيت كلمة المرور</h1>
+    <div class="muted">{{ settings.org_name or '' }}</div>
+  </div>
+  <div class="card">
+    {% if done %}
+      <p style="line-height:1.9">إذا كان بريدك الإلكتروني مسجَّلاً لدى الإدارة، فستصلك رسالة فيها رابط لتعيين كلمة مرور جديدة.<br>
+      وإلا فقد وصل طلبك إلى الإدارة، وستُعطى كلمة مرور جديدة قريباً.</p>
+      <a class="btn btn-p" style="width:100%;margin-top:12px" href="{{ url_for('mobile.me_login') }}">العودة لتسجيل الدخول</a>
+    {% else %}
+      {% if error %}<div class="err">{{ error }}</div>{% endif %}
+      <p class="muted" style="line-height:1.8;margin-bottom:8px">إن كان هاتفك مرتبطاً بحسابك فيمكنك الدخول بالبصمة أو Face ID دون كلمة المرور.</p>
+      <form method="post">
+        <label for="u">اسم المستخدم</label>
+        <input id="u" name="username" dir="ltr" autocomplete="username" autocapitalize="none" required autofocus>
+        <button class="btn btn-p" style="width:100%;margin-top:16px"><i class="fas fa-paper-plane" aria-hidden="true"></i> إرسال الطلب</button>
+      </form>
+      <p class="muted" style="margin-top:12px"><a href="{{ url_for('mobile.me_login') }}">العودة لتسجيل الدخول</a></p>
+    {% endif %}
+  </div>
+</div>
+</body>
+</html>

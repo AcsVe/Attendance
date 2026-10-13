@@ -19,16 +19,16 @@
 <!-- ============ حسابات التطبيق ============ -->
 <div class="tab-panel" id="tab-mobile-accounts">
   <div class="card">
-    <div class="card-title"><i class="fas fa-mobile-screen"></i> تطبيق الموظف على الهاتف</div>
+    <div class="card-title"><i class="fas fa-mobile-screen" aria-hidden="true"></i> تطبيق الموظف على الهاتف</div>
     <p style="font-size:.88rem;color:var(--muted);line-height:1.9">
       رابط التطبيق للموظفين: <b dir="ltr" id="meLink"></b>
-      <button class="btn btn-outline btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('meLink').textContent).then(()=>toast('نُسخ الرابط'))"><i class="fas fa-copy"></i> نسخ</button><br>
+      <button class="btn btn-outline btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('meLink').textContent).then(()=>toast('نُسخ الرابط'))"><i class="fas fa-copy" aria-hidden="true"></i> نسخ</button><br>
       كل موظف يدخل باسم مستخدم وكلمة مرور، ويرتبط حسابه بهاتفه عند أول دخول. يسجّل الحضور والانصراف والخروج المؤقت من داخل مواقع العمل المعتمدة فقط،
       وتدخل حركاته في التقارير مع بصمات الأجهزة (أبكر حضور وآخر انصراف في اليوم).
     </p>
   </div>
   <div class="card">
-    <div class="card-title"><i class="fas fa-users-gear"></i> الموظفون وحساباتهم (<span id="maShown">0</span> من <span id="maTotal">0</span>)</div>
+    <div class="card-title"><i class="fas fa-users-gear" aria-hidden="true"></i> الموظفون وحساباتهم (<span id="maShown">0</span> من <span id="maTotal">0</span>)</div>
     <div class="filter-bar">
       <input type="search" id="maSearch" class="search-input" placeholder="بحث فوري: الاسم، اسم المستخدم، الهاتف…" oninput="maRender()" style="flex:1;min-width:200px">
     </div>
@@ -36,9 +36,9 @@
     <div class="m-chips" id="maStateChips"></div>
     <div class="m-bulk">
       <b>المحدد: <span id="maSel">0</span></b>
-      <button class="btn btn-primary btn-sm" onclick="maBulk('create')"><i class="fas fa-user-plus"></i> إنشاء حسابات</button>
-      <button class="btn btn-outline btn-sm" onclick="maBulk('reset_password')"><i class="fas fa-key"></i> كلمات مرور جديدة</button>
-      <button class="btn btn-outline btn-sm" onclick="maBulk('unbind')"><i class="fas fa-link-slash"></i> فكّ ربط الهاتف</button>
+      <button class="btn btn-primary btn-sm" onclick="maBulk('create')"><i class="fas fa-user-plus" aria-hidden="true"></i> إنشاء حسابات</button>
+      <button class="btn btn-outline btn-sm" onclick="maBulk('reset_password')"><i class="fas fa-key" aria-hidden="true"></i> كلمات مرور جديدة</button>
+      <button class="btn btn-outline btn-sm" onclick="maBulk('unbind')"><i class="fas fa-link-slash" aria-hidden="true"></i> فكّ ربط الهاتف</button>
       <select id="maMore" class="search-input" onchange="if(this.value){maBulk(this.value);this.value=''}">
         <option value="">— المزيد —</option>
         <option value="enable">تفعيل الحساب</option><option value="disable">إيقاف الحساب</option>
@@ -56,7 +56,7 @@
       <span style="border-inline-start:1px solid #e5cfa6;height:26px"></span>
       <input list="maDeptList" id="maMoveDept" class="search-input" placeholder="القسم">
       <datalist id="maDeptList"></datalist>
-      <button class="btn btn-outline btn-sm" onclick="maMoveDept()"><i class="fas fa-people-arrows"></i> نقل إلى القسم</button>
+      <button class="btn btn-outline btn-sm" onclick="maMoveDept()"><i class="fas fa-people-arrows" aria-hidden="true"></i> نقل إلى القسم</button>
     </div>
     <div class="table-wrap">
       <table>
@@ -66,7 +66,7 @@
     </div>
   </div>
   <div class="card" id="mobileSettingsCard">
-    <div class="card-title"><i class="fas fa-sliders"></i> إعدادات التطبيق</div>
+    <div class="card-title"><i class="fas fa-sliders" aria-hidden="true"></i> إعدادات التطبيق</div>
     <div class="form-grid">
       <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="msEnabled"> التسجيل من الهاتف مفعّل</label>
       <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="msBind"> ربط كل حساب بهاتف واحد فقط</label>
@@ -79,14 +79,14 @@
             <div class="form-group"><label>الحركة المشبوهة (موقع ثابت تماماً، قفزة غير منطقية، خارج شبكة العمل)</label>
         <select id="msSusp" class="search-input"><option value="flag">تُقبل مع علامة ⚠ للمراجعة</option><option value="reject">تُرفض</option></select></div>
     </div>
-    <button class="btn btn-primary" onclick="msSave()"><i class="fas fa-save"></i> حفظ الإعدادات</button>
+    <button class="btn btn-primary" onclick="msSave()"><i class="fas fa-save" aria-hidden="true"></i> حفظ الإعدادات</button>
   </div>
 </div>
 
 <!-- ============ مواقع العمل ============ -->
 <div class="tab-panel" id="tab-mobile-sites">
   <div class="card">
-    <div class="card-title"><i class="fas fa-draw-polygon"></i> <span id="siteFormTitle">إضافة موقع عمل</span></div>
+    <div class="card-title"><i class="fas fa-draw-polygon" aria-hidden="true"></i> <span id="siteFormTitle">إضافة موقع عمل</span></div>
     <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">اضغط على الخريطة لتحديد مركز الموقع، أو «موقعي الحالي»، ثم حدّد نصف القطر. الأقسام فارغة = الموقع متاح لكل الأقسام.</p>
     <div id="siteMap" class="m-map"></div>
     <div class="form-grid quad">
@@ -98,19 +98,19 @@
     <div class="form-group"><label>الأقسام المسموح لها (اتركها كلها بدون تحديد = كل الأقسام)</label><div id="siteDepts" style="display:flex;flex-wrap:wrap;gap:6px 14px"></div></div>
     <div class="form-grid">
       <div class="form-group"><label>شبكة Wi-Fi العمل — عنوان IP العام (اختياري، يفصل بينها فاصلة)</label>
-        <div style="display:flex;gap:6px"><input type="text" id="siteIps" dir="ltr" placeholder="مثال: 94.142.10.20"><button class="btn btn-outline btn-sm" type="button" onclick="siteAddMyIp()" title="عنوان هذا الجهاز كما يراه الخادم — اضغطه وأنت متصل بشبكة العمل"><i class="fas fa-wifi"></i> عنواني الحالي</button></div></div>
+        <div style="display:flex;gap:6px"><input type="text" id="siteIps" dir="ltr" placeholder="مثال: 94.142.10.20"><button class="btn btn-outline btn-sm" type="button" onclick="siteAddMyIp()" title="عنوان هذا الجهاز كما يراه الخادم — اضغطه وأنت متصل بشبكة العمل"><i class="fas fa-wifi" aria-hidden="true"></i> عنواني الحالي</button></div></div>
       <label style="display:flex;gap:8px;align-items:center;font-weight:600;margin-top:24px"><input type="checkbox" id="siteIpReq"> يجب الاتصال بشبكة العمل للتسجيل من هذا الموقع (أقوى حماية من الموقع الوهمي)</label>
     </div>
     <input type="hidden" id="siteId">
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-primary" onclick="siteSave()"><i class="fas fa-save"></i> حفظ الموقع</button>
-      <button class="btn btn-outline" onclick="siteMyLocation()"><i class="fas fa-location-crosshairs"></i> موقعي الحالي</button>
-      <button class="btn btn-outline" onclick="siteReset()"><i class="fas fa-plus"></i> موقع جديد</button>
+      <button class="btn btn-primary" onclick="siteSave()"><i class="fas fa-save" aria-hidden="true"></i> حفظ الموقع</button>
+      <button class="btn btn-outline" onclick="siteMyLocation()"><i class="fas fa-location-crosshairs" aria-hidden="true"></i> موقعي الحالي</button>
+      <button class="btn btn-outline" onclick="siteReset()"><i class="fas fa-plus" aria-hidden="true"></i> موقع جديد</button>
     </div>
   </div>
   <div class="card">
-    <div class="card-title"><i class="fas fa-list"></i> مواقع العمل (<span id="siteCount">0</span>)</div>
-    <button class="btn btn-red btn-sm" style="margin-bottom:8px" onclick="bulkDeleteSelected('sitesTable', id => '/api/mobile/sites/' + id, loadSites)"><i class="fas fa-trash"></i> حذف المحدد</button>
+    <div class="card-title"><i class="fas fa-list" aria-hidden="true"></i> مواقع العمل (<span id="siteCount">0</span>)</div>
+    <button class="btn btn-red btn-sm" style="margin-bottom:8px" onclick="bulkDeleteSelected('sitesTable', id => '/api/mobile/sites/' + id, loadSites)"><i class="fas fa-trash" aria-hidden="true"></i> حذف المحدد</button>
     <div class="table-wrap"><table>
       <thead><tr><th><input type="checkbox" onchange="toggleSelectAll('sitesTable', this.checked)"></th><th>الموقع</th><th>نصف القطر</th><th>الأقسام</th><th>شبكة العمل</th><th>الحركات</th><th>الحالة</th><th></th></tr></thead>
       <tbody id="sitesTable"></tbody>
@@ -121,7 +121,7 @@
 <!-- ============ حركات الهاتف والمتابعة ============ -->
 <div class="tab-panel" id="tab-mobile-moves">
   <div class="card">
-    <div class="card-title"><i class="fas fa-satellite"></i> المتابعة المباشرة — اليوم <span id="liveDate" style="font-weight:600;color:var(--muted)"></span>
+    <div class="card-title"><i class="fas fa-satellite" aria-hidden="true"></i> المتابعة المباشرة — اليوم <span id="liveDate" style="font-weight:600;color:var(--muted)"></span>
       <label style="margin-inline-start:auto;font-size:.82rem;font-weight:600;display:flex;gap:6px;align-items:center"><input type="checkbox" id="liveAuto" checked> تحديث تلقائي كل 30 ثانية</label></div>
     <div class="m-chips" id="liveChips"></div>
     <div id="liveMap" class="m-map"></div>
@@ -130,19 +130,20 @@
       <tbody id="liveTable"></tbody></table></div>
   </div>
   <div class="card">
-    <div class="card-title"><i class="fas fa-list-check"></i> سجل الحركات (<span id="mvShown">0</span>)</div>
+    <div class="card-title"><i class="fas fa-list-check" aria-hidden="true"></i> سجل الحركات (<span id="mvShown">0</span>)</div>
     <div class="filter-bar">
       <input type="date" id="mvFrom" class="search-input" onchange="loadMoves()">
       <input type="date" id="mvTo" class="search-input" onchange="loadMoves()">
       <select id="mvDept" class="search-input" onchange="loadMoves()"><option value="">كل الأقسام</option></select>
       <select id="mvName" class="search-input" onchange="loadMoves()"><option value="">كل الموظفين</option></select>
       <input type="search" id="mvSearch" class="search-input" placeholder="بحث فوري…" oninput="mvFilter()">
-      <button class="btn btn-outline btn-sm" onclick="mvExport('xlsx')"><i class="fas fa-file-excel"></i> Excel</button>
-      <button class="btn btn-outline btn-sm" onclick="mvExport('csv')"><i class="fas fa-file-csv"></i> CSV</button>
+      <button class="btn btn-outline btn-sm" onclick="mvExport('xlsx')"><i class="fas fa-file-excel" aria-hidden="true"></i> Excel</button>
+      <button class="btn btn-outline btn-sm" onclick="mvExport('csv')"><i class="fas fa-file-csv" aria-hidden="true"></i> CSV</button>
+      <button class="btn btn-red btn-sm" onclick="mvDelete()"><i class="fas fa-trash" aria-hidden="true"></i> حذف المحدد <span id="mvSelN"></span></button>
     </div>
     <div class="m-chips" id="mvChips"></div>
     <div class="table-wrap"><table>
-      <thead><tr><th>التاريخ</th><th>الوقت</th><th>الموظف</th><th>القسم</th><th>الحركة</th><th>الموقع / المسافة</th><th>الدقة / المصدر</th><th>الحالة</th><th>الخريطة</th></tr></thead>
+      <thead><tr><th class="no-filter"><input type="checkbox" id="mvAll" aria-label="تحديد الكل" onchange="toggleSelectAll('mvTable', this.checked); mvSelCount()"></th><th>التاريخ</th><th>الوقت</th><th>الموظف</th><th>القسم</th><th>الحركة</th><th>الموقع / المسافة</th><th>الدقة / المصدر</th><th>الحالة</th><th>الخريطة</th></tr></thead>
       <tbody id="mvTable"></tbody></table></div>
   </div>
 </div>
@@ -152,9 +153,9 @@
     <div class="modal-title" id="maModalTitle">بيانات الدخول</div>
     <div id="maModalBody"></div>
     <div class="modal-footer">
-      <button class="btn btn-primary" id="maModalSave" style="display:none"><i class="fas fa-save"></i> حفظ</button>
-      <button class="btn btn-outline" id="maModalCsv" style="display:none"><i class="fas fa-download"></i> تنزيل CSV</button>
-      <button class="btn btn-outline" id="maModalPrint" style="display:none" onclick="maPrint()"><i class="fas fa-print"></i> طباعة</button>
+      <button class="btn btn-primary" id="maModalSave" style="display:none"><i class="fas fa-save" aria-hidden="true"></i> حفظ</button>
+      <button class="btn btn-outline" id="maModalCsv" style="display:none"><i class="fas fa-download" aria-hidden="true"></i> تنزيل CSV</button>
+      <button class="btn btn-outline" id="maModalPrint" style="display:none" onclick="maPrint()"><i class="fas fa-print" aria-hidden="true"></i> طباعة</button>
       <button class="btn btn-outline" onclick="document.getElementById('maModal').classList.remove('open')">إغلاق</button>
     </div>
   </div>
