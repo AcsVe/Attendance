@@ -26,7 +26,14 @@ if errorlevel 1 goto manual
 net session >nul 2>nul || (echo. & echo [!] To restart automatically, run this file as administrator. Or restart the PC. & pause & exit /b 0)
 schtasks /end /tn "ATTENDANCE Website" >nul 2>nul
 timeout /t 2 >nul
-schtasks /run /tn "ATTENDANCE Website" >nul
+schtasks /run /tn "ATTENDANCE Website" >nul 2>nul
+if errorlevel 1 (
+  echo.
+  echo Code updated, but the attendance system is switched OFF ^(att_off.bat was used^).
+  echo To turn it on: run att_on.bat as administrator.
+  pause
+  exit /b 0
+)
 echo.
 echo Done. ATTENDANCE was restarted with the new version.
 pause
