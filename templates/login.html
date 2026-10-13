@@ -11,12 +11,11 @@
   <!-- ===== إعدادات تثبيت التطبيق (PWA) - راجع dashboard.html لنفس الإعدادات
        الكاملة؛ موجودة هنا أيضاً حتى يظهر خيار "إضافة للشاشة الرئيسية"
        حتى قبل تسجيل الدخول ===== -->
-  <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+  <link rel="manifest" href="/manifest.json?v={{ icon_ver }}">
   <meta name="theme-color" content="#1B6E8C">
-  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icons/favicon-32.png') }}">
-  <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='icons/favicon-16.png') }}">
-  <link rel="shortcut icon" href="{{ url_for('static', filename='icons/favicon.ico') }}">
-  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+  <link rel="icon" type="image/png" sizes="32x32" href="/app-icon/32.png?v={{ icon_ver }}">
+  <link rel="icon" type="image/png" sizes="16x16" href="/app-icon/16.png?v={{ icon_ver }}">
+  <link rel="apple-touch-icon" href="/app-icon/180.png?v={{ icon_ver }}">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="RAS Admin">

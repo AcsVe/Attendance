@@ -18,6 +18,7 @@
 </head>
 <body>
 <div class="wrap" style="padding-top:4vh">
+  {% if logo_url %}<img src="{{ logo_url }}" alt="شعار {{ org_display or 'المؤسسة' }}" style="max-height:64px;max-width:200px;object-fit:contain;display:block;margin:0 auto 10px">{% endif %}
   <div class="who" id="who">رمز المدخل</div>
   <div class="sub">قرّب هذا الرمز من جهاز المدخل لتسجيل الحضور أو الانصراف.<br>يتغيّر كل 30 ثانية ويعمل دون إنترنت.</div>
   <div class="qrbox" id="qr" role="img" aria-label="رمز QR الشخصي للحضور"></div>

@@ -33,7 +33,8 @@
 <body>
 <div class="wrap">
   <div class="top">
-    <div><h1 data-notr><i class="fas fa-user-circle" aria-hidden="true"></i> {{ emp.name }}</h1><div class="muted" data-notr>{{ emp.dept or '' }}</div></div>
+    <div style="display:flex;align-items:center;gap:10px;min-width:0">{% if logo_url %}<img src="{{ logo_url }}" alt="شعار {{ org_display or 'المؤسسة' }}" style="height:44px;max-width:90px;object-fit:contain;border-radius:8px;background:#fff;padding:3px;flex:none">{% endif %}
+      <div style="min-width:0"><h1 data-notr>{% if not logo_url %}<i class="fas fa-user-circle" aria-hidden="true"></i> {% endif %}{{ emp.name }}</h1><div class="muted" data-notr>{{ emp.dept or '' }}</div></div></div>
     <a class="btn btn-l" style="padding:9px 12px" href="{{ url_for('mobile.me_logout') }}" onclick="return confirm('تسجيل الخروج من التطبيق؟')"><i class="fas fa-sign-out-alt" aria-hidden="true"></i></a>
   </div>
 

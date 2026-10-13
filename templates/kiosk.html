@@ -8,6 +8,8 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>جهاز المدخل — الحضور والانصراف</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/app-icon/32.png?v={{ icon_ver }}">
+  <link rel="apple-touch-icon" href="/app-icon/180.png?v={{ icon_ver }}">
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
@@ -39,6 +41,7 @@
 <body>
 <div class="pair hide" id="pair">
   <div class="card">
+    {% if logo_url %}<img src="{{ logo_url }}" alt="شعار {{ org_display or 'المؤسسة' }}" style="max-height:60px;max-width:200px;object-fit:contain;display:block;margin:0 auto 10px">{% endif %}
     <h1>إقران جهاز المدخل</h1>
     <p style="color:#6b7c7e;line-height:1.7">من لوحة الإدارة ← «مواقع العمل» ← «أجهزة المداخل»، أضف جهازاً واكتب هنا رمز الإقران المكوّن من 6 أرقام.</p>
     <input id="code" inputmode="numeric" maxlength="6" autocomplete="off" aria-label="رمز الإقران">
@@ -50,7 +53,7 @@
 <video id="cam" playsinline muted autoplay aria-label="كاميرا قراءة الرمز"></video>
 <div class="frame" aria-hidden="true"></div>
 <div class="top">
-  <div><div id="kname">جهاز المدخل</div><div class="tools"><button id="flip" type="button">تبديل الكاميرا</button><button id="fs" type="button">ملء الشاشة</button><button type="button" data-notr onclick="toggleUiLang()">{{ 'العربية' if ui_lang == 'en' else 'English' }}</button></div></div>
+  <div style="display:flex;gap:10px;align-items:center">{% if logo_url %}<img src="{{ logo_url }}" alt="شعار {{ org_display or 'المؤسسة' }}" style="height:46px;max-width:120px;object-fit:contain;background:#fff;border-radius:8px;padding:3px">{% endif %}<div><div id="kname">جهاز المدخل</div><div class="tools"><button id="flip" type="button">تبديل الكاميرا</button><button id="fs" type="button">ملء الشاشة</button><button type="button" data-notr onclick="toggleUiLang()">{{ 'العربية' if ui_lang == 'en' else 'English' }}</button></div></div></div>
   <div style="text-align:center"><div class="clock" id="clock">--:--:--</div><div id="date" style="font-size:.85rem;opacity:.85"></div></div>
   <div style="text-align:left"><span class="pill" id="net">متصل</span><div style="font-size:.8rem;margin-top:4px;opacity:.85" id="queue"></div></div>
 </div>

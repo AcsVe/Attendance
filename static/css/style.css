@@ -314,3 +314,8 @@ input[type=file] { width: 100%; font-family: inherit; font-size: .85rem; }
   [dir=ltr] .sidebar.open { transform: translateX(0) !important; }
 }
 [dir=ltr] td[style*="text-align:right"], [dir=ltr] [dir="ltr"][style*="text-align:right"] { text-align: left !important; }
+
+/* شعار المؤسسة في الشريط العلوي على الهاتف (القائمة الجانبية مخفية هناك) */
+.topbar-logo { display: none; height: 34px; max-width: 110px; object-fit: contain; }
+@media (max-width: 768px) { .topbar-logo { display: block; } }
+.sidebar-logo-chip img { max-height: 40px !important; max-width: 100% !important; object-fit: contain; margin: 0 auto; }

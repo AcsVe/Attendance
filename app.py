@@ -343,7 +343,72 @@ def _inject_lang():
     except Exception:
         st = {}
     org = (st.get('org_name_en') if lang == 'en' else '') or st.get('org_name') or ''
-    return {'ui_lang': lang, 'ui_dir': 'ltr' if lang == 'en' else 'rtl', 'org_display': org}
+    logo, ver = _logo_file(st)
+    return {'ui_lang': lang, 'ui_dir': 'ltr' if lang == 'en' else 'rtl', 'org_display': org,
+            'logo_url': url_for('static', filename='uploads/' + logo) + f'?v={ver}' if logo else '', 'icon_ver': ver}
+
+
+def _logo_file(st=None):
+    """(اسم ملف الشعار إن وُجد فعلاً، رقم إصدار لتجاوز ذاكرة المتصفح)"""
+    st = st if st is not None else db.get_all_settings()
+    name = st.get('org_logo_filename') or ''
+    path = os.path.join(LOGO_UPLOAD_DIR, name) if name else ''
+    if name and os.path.isfile(path):
+        return name, int(os.path.getmtime(path))
+    return '', 0
+
+
+_ICON_SIZES = {16, 32, 180, 192, 512}
+
+
+@app.route('/app-icon/<int:size>.png')
+@app.route('/app-icon/<int:size>-<kind>.png')
+def app_icon(size, kind='any'):
+    """أيقونة التطبيق عند التثبيت (الكمبيوتر والهاتف): تُولَّد من شعار المؤسسة، وإلا الأيقونة الافتراضية"""
+    if size not in _ICON_SIZES:
+        size = 192
+    maskable = kind == 'maskable'
+    logo, ver = _logo_file()
+    if not logo or logo.rsplit('.', 1)[-1].lower() == 'svg':
+        name = {16: 'favicon-16.png', 32: 'favicon-32.png', 180: 'apple-touch-icon.png'}.get(size) or \
+            (f'icon-{size}-maskable.png' if maskable else f'icon-{size}.png')
+        return send_file(os.path.join(app.static_folder, 'icons', name), mimetype='image/png', max_age=3600)
+    cache_dir = os.path.join(os.path.dirname(db.DB_PATH) or '.', 'icon-cache')
+    os.makedirs(cache_dir, exist_ok=True)
+    out = os.path.join(cache_dir, f'{size}-{kind}-{ver}.png')
+    if not os.path.isfile(out):
+        from PIL import Image
+        src = Image.open(os.path.join(LOGO_UPLOAD_DIR, logo)).convert('RGBA')
+        canvas = Image.new('RGBA', (size, size), (255, 255, 255, 255))
+        # هامش أكبر للأيقونات «maskable» (أندرويد يقصّ الأطراف بشكل دائري)
+        pad = int(size * (0.2 if maskable else 0.08)) if size >= 64 else 1
+        box = size - 2 * pad
+        src.thumbnail((box, box), Image.LANCZOS)
+        canvas.alpha_composite(src, ((size - src.width) // 2, (size - src.height) // 2))
+        canvas.convert('RGB').save(out, 'PNG', optimize=True)
+        for old in os.listdir(cache_dir):          # نحذف أيقونات شعار قديم
+            if not old.endswith(f'-{ver}.png'):
+                try:
+                    os.remove(os.path.join(cache_dir, old))
+                except OSError:
+                    pass
+    return send_file(out, mimetype='image/png', max_age=3600)
+
+
+@app.route('/manifest.json')
+@app.route('/manifest-me.json')
+def dynamic_manifest():
+    """ملف التثبيت (PWA) بأيقونات مولَّدة من شعار المؤسسة واسمها"""
+    me = request.path.endswith('-me.json')
+    with open(os.path.join(app.static_folder, 'manifest-me.json' if me else 'manifest.json'), encoding='utf-8') as fh:
+        m = json.load(fh)
+    _logo, ver = _logo_file()
+    m['icons'] = [{'src': f'/app-icon/{sz}{"-maskable" if purpose == "maskable" else ""}.png?v={ver}', 'sizes': f'{sz}x{sz}',
+                   'type': 'image/png', 'purpose': purpose} for purpose in ('any', 'maskable') for sz in (192, 512)]
+    resp = jsonify(m)
+    resp.headers['Content-Type'] = 'application/manifest+json'
+    resp.headers['Cache-Control'] = 'no-cache'
+    return resp
 
 
 @app.after_request
