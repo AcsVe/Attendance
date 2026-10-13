@@ -77,6 +77,10 @@ body { font-family: 'Tajawal', sans-serif; background: var(--bg); color: var(--t
 }
 .topbar h1 { font-size: 1.1rem; font-weight: 800; color: var(--primary); }
 .topbar-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.topbar-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.topbar-right .btn .lbl-s { display: none; }
+.topbar-clock { display: inline-flex; align-items: baseline; gap: 6px; color: var(--muted); font-size: .85rem; white-space: nowrap; }
+.topbar-clock b { color: var(--primary); font-weight: 800; font-variant-numeric: tabular-nums; }
 .main { min-width: 0; }
 .content > .tab-panel { max-width: 1500px; margin-inline: auto; }
 img { max-width: 100%; }
@@ -287,7 +291,18 @@ input[type=file] { width: 100%; font-family: inherit; font-size: .85rem; }
   .content { padding: 12px !important; padding-bottom: 76px !important; }
   .topbar { padding: 10px 14px !important; position: sticky; top: 0; z-index: 120; }
   .topbar h1 { font-size: 1rem; }
-  .topbar-right .btn span.lbl, .topbar-right #clockEl { display: none; }
+  /* شريط علوي بصف واحد على الهاتف: أزرار أيقونات + ساعة وتاريخ مختصران */
+  .topbar { gap: 8px; }
+  .topbar-left { gap: 8px; }
+  .topbar h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topbar-right { flex-wrap: nowrap; gap: 6px; flex-shrink: 0; }
+  .topbar-right .btn { width: 36px; height: 36px; padding: 0; justify-content: center; }
+  .topbar-right .btn span.lbl { display: none; }
+  .topbar-right .btn .lbl-s { display: inline; font-weight: 800; font-size: .8rem; }
+  .topbar-right .btn:has(.lbl-s) i { display: none; }
+  .topbar-clock { flex-direction: column; align-items: center; gap: 0; line-height: 1.15; }
+  .topbar-clock b { font-size: .85rem; }
+  .topbar-clock span { font-size: .68rem; }
   .modal { width: calc(100vw - 20px) !important; max-height: calc(100vh - 30px); overflow: auto; }
   .filter-bar { flex-wrap: wrap; }
   .table-wrap { overflow: auto; -webkit-overflow-scrolling: touch; max-height: calc(100vh - 120px); }
@@ -317,5 +332,5 @@ input[type=file] { width: 100%; font-family: inherit; font-size: .85rem; }
 
 /* شعار المؤسسة في الشريط العلوي على الهاتف (القائمة الجانبية مخفية هناك) */
 .topbar-logo { display: none; height: 34px; max-width: 110px; object-fit: contain; }
-@media (max-width: 768px) { .topbar-logo { display: block; } }
+@media (max-width: 768px) { .topbar-logo { display: block; height: 30px; max-width: 70px; } }
 .sidebar-logo-chip img { max-height: 40px !important; max-width: 100% !important; object-fit: contain; margin: 0 auto; }

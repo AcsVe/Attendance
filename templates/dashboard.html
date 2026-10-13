@@ -100,17 +100,17 @@
 
 <div class="main">
   <div class="topbar">
-    <div style="display:flex;align-items:center;gap:10px">
+    <div class="topbar-left">
       <button class="hamburger" onclick="toggleSidebar()" aria-label="فتح القائمة" title="فتح القائمة"><i class="fas fa-bars" aria-hidden="true"></i></button>
       {% if logo_url %}<img class="topbar-logo" src="{{ logo_url }}" alt="شعار {{ org_display or 'المؤسسة' }}">{% endif %}
       <h1 id="pageTitle">لوحة التحكم</h1>
     </div>
     <div class="topbar-right">
-      <button type="button" class="btn btn-outline btn-sm" data-notr onclick="toggleUiLang()" title="{{ 'Switch to Arabic — التبديل إلى العربية' if ui_lang == 'en' else 'Switch to English' }}"><i class="fas fa-language" aria-hidden="true"></i> {{ 'العربية' if ui_lang == 'en' else 'English' }}</button>
-      <button class="btn btn-primary btn-sm" id="pwaInstallBtn" style="display:none" onclick="pwaInstall()" title="يُضاف النظام كتطبيق في قائمة ابدأ وشريط المهام"><i class="fas fa-download" aria-hidden="true"></i> تثبيت على هذا الجهاز</button>
-      <a class="btn btn-outline btn-sm" href="/app" target="_blank" title="تطبيقات أندرويد للموظفين والإدارة"><i class="fab fa-android" aria-hidden="true"></i> التطبيقات</a>
-            <button class="btn btn-outline btn-sm" onclick="refreshCurrentTab()"><i class="fas fa-sync" aria-hidden="true"></i> تحديث</button>
-      <span style="font-size:.85rem;color:var(--muted)" id="clockEl"></span>
+      <button type="button" class="btn btn-outline btn-sm" data-notr onclick="toggleUiLang()" title="{{ 'Switch to Arabic — التبديل إلى العربية' if ui_lang == 'en' else 'Switch to English' }}"><i class="fas fa-language" aria-hidden="true"></i> <span class="lbl">{{ 'العربية' if ui_lang == 'en' else 'English' }}</span><span class="lbl-s">{{ 'ع' if ui_lang == 'en' else 'EN' }}</span></button>
+      <button class="btn btn-primary btn-sm" id="pwaInstallBtn" style="display:none" onclick="pwaInstall()" title="يُضاف النظام كتطبيق في قائمة ابدأ وشريط المهام"><i class="fas fa-download" aria-hidden="true"></i> <span class="lbl">تثبيت على هذا الجهاز</span></button>
+      <a class="btn btn-outline btn-sm" href="/app" target="_blank" title="تطبيقات أندرويد للموظفين والإدارة" aria-label="التطبيقات"><i class="fab fa-android" aria-hidden="true"></i> <span class="lbl">التطبيقات</span></a>
+      <button class="btn btn-outline btn-sm" onclick="refreshCurrentTab()" title="تحديث" aria-label="تحديث"><i class="fas fa-sync" aria-hidden="true"></i> <span class="lbl">تحديث</span></button>
+      <span id="clockEl" class="topbar-clock" data-notr aria-live="off"><b id="clockTime"></b><span id="clockDate"></span></span>
     </div>
   </div>
   <div id="lvBanner" class="hide" role="status" style="margin:12px 24px 0;background:#eef4fb;border:1px solid #c9dcef;border-radius:12px;padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">

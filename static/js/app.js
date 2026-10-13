@@ -345,8 +345,11 @@ function dismissLastImportNotice() {
 
 /* ===== الساعة الحية ===== */
 function tickClock() {
-  const el = document.getElementById('clockEl');
-  if (el) el.textContent = new Date().toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' });
+  const t = document.getElementById('clockTime'), d = document.getElementById('clockDate');
+  if (!t || !d) return;
+  const en = document.documentElement.lang === 'en', now = new Date(), loc = en ? 'en-GB' : 'ar-EG';
+  t.textContent = now.toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit', hour12: !en });
+  d.textContent = now.toLocaleDateString(loc, { weekday: 'short', day: 'numeric', month: 'short' });
 }
 setInterval(tickClock, 1000);
 tickClock();
