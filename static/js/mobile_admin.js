@@ -3,6 +3,7 @@
    يعتمد على: api() و toast() و escapeHtml() و toggleSelectAll() من app.js، و Leaflet للخرائط
    ===================================================================== */
 Object.assign(PAGE_TITLES, {
+  leaves: 'الخروج المؤقت والمغادرات',
   presence: 'التحقق من التواجد أثناء الدوام',
   'mobile-accounts': 'حسابات تطبيق الهاتف', 'mobile-sites': 'مواقع العمل (النطاق الجغرافي)', 'mobile-moves': 'المتابعة المباشرة وحركات الهاتف',
 });
@@ -11,6 +12,7 @@ window.EXTRA_LOADERS = Object.assign(window.EXTRA_LOADERS || {}, {
   'mobile-sites': () => { loadSites(); loadKiosks(); },
   'mobile-moves': () => { loadLive(); loadMoves(); },
   presence: prLoad,
+  leaves: () => { lvSettings(); lvLoad(); lvReport(); },
 });
 
 const OSM = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
@@ -821,3 +823,121 @@ async function prEvDelete() {
   const d = await api('/api/mobile/presence/events/delete', { method: 'POST', body: JSON.stringify({ ids }) });
   if (d) { toast(`حُذف ${d.count}`); prEvents(); }
 }
+
+
+/* ================= الخروج المؤقت ================= */
+let lvRows = [], lvStatus = '', lvStatuses = {};
+const LV_COLOR = { pending: '#b45309', approved: '#1B6E8C', rejected: '#842029', cancelled: '#6b7c7e', expired: '#6b7c7e', active: '#1B6E8C',
+  overdue: '#c0392b', returned: '#1e8e5a', returned_late: '#e67e22', not_returned: '#c0392b' };
+const lvToday = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+
+async function lvSettings() {
+  const d = await api('/api/mobile/settings');
+  if (!d) return;
+  const s = d.settings || {};
+  document.getElementById('lvApproval').checked = s.leave_approval === '1';
+  document.getElementById('lvEarly').checked = s.leave_unreturned_early !== '0';
+  document.getElementById('lvMax').value = s.leave_max_minutes || 60;
+  document.getElementById('lvGrace').value = s.leave_grace_min || 10;
+}
+async function lvSave() {
+  const d = await api('/api/mobile/settings', { method: 'POST', body: JSON.stringify({
+    leave_approval: document.getElementById('lvApproval').checked, leave_unreturned_early: document.getElementById('lvEarly').checked,
+    leave_max_minutes: document.getElementById('lvMax').value, leave_grace_min: document.getElementById('lvGrace').value }) });
+  if (d) toast('حُفظت إعدادات الخروج المؤقت');
+}
+function lvParams() {
+  const p = new URLSearchParams({ from: document.getElementById('lvFrom').value, to: document.getElementById('lvTo').value });
+  if (lvStatus) p.set('status', lvStatus);
+  return p;
+}
+async function lvLoad() {
+  const f = document.getElementById('lvFrom');
+  if (!f.value) { f.value = lvToday(); document.getElementById('lvTo').value = lvToday(); }
+  const d = await api('/api/leaves?' + lvParams());
+  if (!d) return;
+  lvRows = d.rows; lvStatuses = d.statuses;
+  const chip = (k, l, n) => `<button class="${lvStatus === k ? 'on' : ''}" onclick="lvStatus='${k}';lvLoad()">${l} <b>${n}</b></button>`;
+  document.getElementById('lvChips').innerHTML = chip('', 'الكل', d.total) + Object.entries(d.statuses).map(([k, l]) => chip(k, l, d.counts[k] || 0)).join('');
+  lvRender();
+  lvPendRender(d.pending);
+}
+function lvRender() {
+  const q = (document.getElementById('lvSearch').value || '').trim().toLowerCase();
+  const rows = lvRows.filter(r => !q || [r.name, r.dept, r.reason, r.status_label].some(v => (v || '').toLowerCase().includes(q)));
+  document.getElementById('lvTable').innerHTML = rows.map(r => `<tr>
+    <td><input type="checkbox" class="row-check" data-id="${r.id}" onchange="lvCount()" aria-label="تحديد"></td>
+    <td>${mEsc(r.date)}</td><td><a href="#" onclick="openEmployeeCard(${r.employee_id});return false"><b>${mEsc(r.name || '')}</b></a></td><td>${mEsc(r.dept || '')}</td>
+    <td dir="ltr" style="text-align:right">${mEsc(r.from_time)}</td><td dir="ltr" style="text-align:right">${mEsc(r.to_time)}</td>
+    <td dir="ltr" style="text-align:right">${mEsc(r.out_time || '—')}</td><td dir="ltr" style="text-align:right">${mEsc(r.back_time || '—')}</td>
+    <td>${r.minutes != null ? r.minutes + ' د' : '—'}</td><td>${r.late_min ? '<b style="color:#c0392b">' + r.late_min + ' د</b>' : '—'}</td>
+    <td><span class="pr-dot" style="background:${LV_COLOR[r.status] || '#999'}"></span>${mEsc(r.status_label)}${r.source === 'direct' ? ' <small style="color:var(--muted)">(مباشر)</small>' : ''}</td>
+    <td><small>${mEsc(r.reason || '')}${r.decision_note ? ' — ' + mEsc(r.decision_note) : ''}</small></td></tr>`).join('')
+    || '<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:14px">لا توجد سجلات في هذه الفترة</td></tr>';
+  lvCount();
+}
+function lvCount() {
+  const n = document.querySelectorAll('#lvTable .row-check:checked').length, all = document.querySelectorAll('#lvTable .row-check').length;
+  document.getElementById('lvSel').textContent = n ? `(${n} من ${all})` : '';
+}
+function lvPendRender(rows) {
+  const card = document.getElementById('lvPendingCard');
+  card.style.display = rows.length ? '' : 'none';
+  document.getElementById('lvPendingN').textContent = rows.length;
+  const dur = r => { const [a, b] = [r.from_time, r.to_time].map(x => +x.slice(0, 2) * 60 + +x.slice(3, 5)); return b - a; };
+  document.getElementById('lvPendTable').innerHTML = rows.map(r => `<tr>
+    <td><input type="checkbox" class="row-check" data-id="${r.id}" onchange="lvPendCount()" aria-label="تحديد"></td>
+    <td><b>${mEsc(r.name || '')}</b></td><td>${mEsc(r.dept || '')}</td><td>${mEsc(r.date)}</td>
+    <td dir="ltr" style="text-align:right">${mEsc(r.from_time)}</td><td dir="ltr" style="text-align:right">${mEsc(r.to_time)}</td><td>${dur(r)} د</td>
+    <td>${mEsc(r.reason || '')}</td><td><small>${mEsc((r.requested_at || '').slice(0, 16))}</small></td></tr>`).join('');
+  lvPendCount();
+  lvBannerUpdate(rows.length);
+}
+function lvPendCount() {
+  const n = document.querySelectorAll('#lvPendTable .row-check:checked').length, all = document.querySelectorAll('#lvPendTable .row-check').length;
+  document.getElementById('lvPendSel').textContent = `المحدد ${n} من ${all}`;
+}
+async function lvDecide(action) {
+  const ids = Array.from(document.querySelectorAll('#lvPendTable .row-check:checked')).map(c => +c.dataset.id);
+  if (!ids.length) { toast('حدّد طلباً واحداً على الأقل', true); return; }
+  if (action === 'reject' && !confirm(`رفض ${ids.length} طلب؟`)) return;
+  const d = await api('/api/leaves/decide', { method: 'POST', body: JSON.stringify({ ids, action, note: document.getElementById('lvNote').value }) });
+  if (d) { toast(action === 'approve' ? `تمت الموافقة على ${d.count} طلب — أُبلغ الموظفون` : `رُفض ${d.count} طلب — أُبلغ الموظفون`); document.getElementById('lvNote').value = ''; lvLoad(); }
+}
+async function lvDelete() {
+  const ids = Array.from(document.querySelectorAll('#lvTable .row-check:checked')).filter(c => c.closest('tr').style.display !== 'none').map(c => +c.dataset.id);
+  if (!ids.length) { toast('حدّد سجلاً واحداً على الأقل', true); return; }
+  if (!confirm(`حذف ${ids.length} سجل؟`)) return;
+  const d = await api('/api/leaves/delete', { method: 'POST', body: JSON.stringify({ ids }) });
+  if (d) { toast(`حُذف ${d.count}`); lvLoad(); }
+}
+function lvExport() { const p = lvParams(); p.set('format', 'csv'); window.location.href = '/api/leaves?' + p; }
+async function lvReport() {
+  const m = document.getElementById('lvMonth');
+  if (!m.value) m.value = lvToday().slice(0, 7);
+  const d = await api('/api/leaves/report?month=' + m.value);
+  if (!d) return;
+  const t = d.totals;
+  document.getElementById('lvTotals').textContent = `${d.rows.length} موظف · ${t.times} مرة خروج · ${t.minutes} دقيقة · تأخر ${t.late} · لم يعد ${t.not_returned} · طلبات ${t.requested} (مرفوضة ${t.rejected})`;
+  document.getElementById('lvRepTable').innerHTML = d.rows.map(a => `<tr>
+    <td><a href="#" onclick="openEmployeeCard(${a.employee_id});return false"><b>${mEsc(a.name || '')}</b></a></td><td>${mEsc(a.dept || '')}</td>
+    <td>${a.times}</td><td>${a.minutes}</td><td>${a.late ? '<b style="color:#e67e22">' + a.late + '</b>' : 0}</td><td>${a.late_minutes}</td>
+    <td>${a.not_returned ? '<b style="color:#c0392b">' + a.not_returned + '</b>' : 0}</td><td>${a.requested}</td><td>${a.rejected}</td></tr>`).join('')
+    || '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:14px">لا توجد مغادرات في هذا الشهر</td></tr>';
+}
+function lvReportExport() { window.location.href = '/api/leaves/report?format=csv&month=' + document.getElementById('lvMonth').value; }
+function lvBannerUpdate(n) {
+  const b = document.getElementById('lvBanner'), nb = document.getElementById('lvNavBadge');
+  b.classList.toggle('hide', !n); b.style.display = n ? 'flex' : 'none';
+  document.getElementById('lvBannerText').textContent = `طلبات إذن خروج بانتظار الموافقة: ${n}`;
+  nb.classList.toggle('hide', !n); nb.textContent = n;
+}
+async function lvPoll() {
+  if (typeof PERMS !== 'undefined' && !PERMS.can_manage_employees && CURRENT_ROLE !== 'admin') return;
+  try {
+    const r = await fetch('/api/leaves?status=pending', { credentials: 'same-origin' });
+    const d = await r.json();
+    if (d && d.ok) lvBannerUpdate(d.pending.length);
+  } catch (e) {}
+}
+document.addEventListener('DOMContentLoaded', () => { lvPoll(); setInterval(lvPoll, 120000); });

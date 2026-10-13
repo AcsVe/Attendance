@@ -60,6 +60,7 @@
       <button class="nav-item" data-tab="upload" onclick="showTab('upload')"><i class="fas fa-file-upload" aria-hidden="true"></i> رفع البيانات والتحليل</button>
       <button class="nav-item" data-tab="manual" onclick="showTab('manual')"><i class="fas fa-edit" aria-hidden="true"></i> الإدخال اليدوي</button>
       <button class="nav-item" data-tab="permissions" onclick="showTab('permissions')"><i class="fas fa-user-clock" aria-hidden="true"></i> أذونات التأخير والمغادرة</button>
+      <button class="nav-item" data-tab="leaves" onclick="showTab('leaves')"><i class="fas fa-person-walking-arrow-right" aria-hidden="true"></i> الخروج المؤقت <span class="nav-badge hide" id="lvNavBadge"></span></button>
       <button class="nav-item" data-tab="absence-reasons" onclick="showTab('absence-reasons')"><i class="fas fa-comment-medical" aria-hidden="true"></i> أسباب الغياب</button>
       <button class="nav-item" data-tab="exceptions" onclick="showTab('exceptions')"><i class="fas fa-user-slash" aria-hidden="true"></i> استثناءات التواريخ</button>
       <button class="nav-item" data-tab="holidays" onclick="showTab('holidays')"><i class="fas fa-umbrella-beach" aria-hidden="true"></i> العطل الرسمية</button>
@@ -111,6 +112,11 @@
             <button class="btn btn-outline btn-sm" onclick="refreshCurrentTab()"><i class="fas fa-sync" aria-hidden="true"></i> تحديث</button>
       <span style="font-size:.85rem;color:var(--muted)" id="clockEl"></span>
     </div>
+  </div>
+  <div id="lvBanner" class="hide" role="status" style="margin:12px 24px 0;background:#eef4fb;border:1px solid #c9dcef;border-radius:12px;padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <i class="fas fa-person-walking-arrow-right" aria-hidden="true" style="color:var(--primary)"></i>
+    <b id="lvBannerText" style="flex:1"></b>
+    <button class="btn btn-primary btn-sm" onclick="showTab('leaves')">عرض الطلبات</button>
   </div>
   <div id="rrBanner" class="hide" role="status" style="margin:12px 24px 0;background:#fff4e5;border:1px solid #f0d9b5;border-radius:12px;padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
     <i class="fas fa-key" aria-hidden="true" style="color:#b45309"></i>

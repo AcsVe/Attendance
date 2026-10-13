@@ -146,6 +146,7 @@ def _tick():
     try:
         import mobile
         mobile.presence_sweep()
+        mobile.leave_sweep()
     except Exception:   # noqa: BLE001 — لا يعطّل بقية المهام
         logger.exception('presence sweep failed')
     settings = db.get_all_settings()

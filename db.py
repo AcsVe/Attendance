@@ -341,6 +341,22 @@ def init_db():
         open INTEGER NOT NULL DEFAULT 1
     )''')
     cur.execute("CREATE INDEX IF NOT EXISTS ix_presence_events_date ON presence_events(date)")
+    # ===== الخروج المؤقت: طلبات (من–إلى) + موافقة اختيارية + متابعة العودة =====
+    cur.execute('''CREATE TABLE IF NOT EXISTS leave_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id INTEGER NOT NULL,
+        name TEXT, dept TEXT,
+        date TEXT NOT NULL,
+        from_time TEXT NOT NULL,          -- HH:MM
+        to_time TEXT NOT NULL,            -- HH:MM (العودة المتوقعة)
+        reason TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        -- pending / approved / rejected / cancelled / expired / active / overdue / returned / returned_late / not_returned
+        out_time TEXT, back_time TEXT,
+        requested_at TEXT, decided_by TEXT, decided_at TEXT, decision_note TEXT,
+        source TEXT NOT NULL DEFAULT 'request'   -- request (بطلب) / direct (عند الضغط على «خروج مؤقت»)
+    )''')
+    cur.execute("CREATE INDEX IF NOT EXISTS ix_leave_requests_date ON leave_requests(date, status)")
     cur.execute('''CREATE TABLE IF NOT EXISTS push_subscriptions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         employee_id INTEGER NOT NULL,
@@ -560,6 +576,10 @@ def get_all_settings():
         'mobile_require_geofence': '1',   # منع التسجيل خارج مواقع العمل
         'mobile_leave_deduct': '1',       # الخروج المؤقت يُخصم من ساعات العمل
         'mobile_require_app': '0',        # التسجيل من تطبيق الموظف (APK) فقط — لا من المتصفح
+        'leave_max_minutes': '60',        # أقصى مدة للخروج المؤقت (0 = بلا حد)
+        'leave_grace_min': '10',          # مهلة بعد وقت العودة قبل اعتباره متأخراً
+        'leave_approval': '0',            # 1 = الخروج المؤقت يتطلب طلباً وموافقة مسبقة
+        'leave_unreturned_early': '1',    # من لم يعد حتى نهاية الدوام يُحتسب خروجه مغادرة مبكرة
         'presence_enabled': '0',          # مراقبة الحضور أثناء الدوام (تشغيل/إيقاف عام)
         'presence_scope': 'selected',     # all = كل موظفي التطبيق، selected = المحددون فقط (أقسام و/أو موظفون)
         'presence_depts_json': '[]',      # الأقسام المشمولة بالمراقبة عند «المحددون»

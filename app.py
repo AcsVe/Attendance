@@ -210,6 +210,9 @@ PERMISSION_REQUIRED_ENDPOINTS = {
 
     # تطبيق الموظفين على الهاتف (mobile.py)
     'mobile.api_accounts': 'can_manage_employees',
+    'mobile.api_leaves_decide': 'can_manage_employees',
+    'mobile.api_leaves_delete': 'can_manage_employees',
+    'mobile.api_presence_events_delete': 'can_manage_employees',
     'mobile.api_accounts_bulk': 'can_manage_employees',
     'mobile.api_employees_bulk_dept': 'can_manage_employees',
     'mobile.api_sites': 'can_edit_org_settings',

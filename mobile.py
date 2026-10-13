@@ -603,6 +603,7 @@ def _me_json(fn):
 @bp.route('/me/api/status')
 @_me_json
 def me_status(conn, acc, emp, cfg):
+    leave_sweep(conn)
     now = now_local()
     d = now.strftime('%Y-%m-%d')
     moves = today_moves(conn, emp['id'], d)
@@ -628,6 +629,7 @@ def me_status(conn, acc, emp, cfg):
         'notifications': notes, 'unread': sum(1 for n in notes if not n['read_at']),
         'biometric': cfg.get('mobile_biometric', 'off'), 'bio_enrolled': creds > 0, 'webauthn': _webauthn_ready(),
         'presence': presence_state(conn, emp, acc, cfg), 'presence_check': presence_check_for(conn, emp, acc, cfg),
+        'leave': _leave_info(conn, emp, cfg, now),
         'ok': True, 'now': now.strftime('%Y-%m-%d %H:%M:%S'), 'date': d,
         'name': emp['name'], 'dept': emp['dept'] or '',
         'enabled': cfg.get('mobile_enabled', '1') == '1',
@@ -646,6 +648,329 @@ def me_status(conn, acc, emp, cfg):
             'hours': round(sum(float(x['working_hours'] or 0) for x in days), 1),
         },
     })
+
+
+# =====================================================
+#   الخروج المؤقت: من–إلى، حدّ أقصى، موافقة اختيارية، متابعة العودة
+# =====================================================
+LEAVE_STATUS = {
+    'pending': 'بانتظار الموافقة', 'approved': 'معتمد', 'rejected': 'مرفوض', 'cancelled': 'ألغاه الموظف',
+    'expired': 'انتهى دون استخدام', 'active': 'خارج الآن', 'overdue': 'تأخر عن العودة',
+    'returned': 'عاد في الوقت', 'returned_late': 'عاد متأخراً', 'not_returned': 'لم يعد (مغادرة مبكرة)',
+}
+
+
+def _lcfg(cfg):
+    def num(k, d, lo, hi):
+        try:
+            return max(lo, min(hi, int(float(cfg.get(k) or d))))
+        except (TypeError, ValueError):
+            return d
+    return {'max': num('leave_max_minutes', 60, 0, 600), 'grace': num('leave_grace_min', 10, 0, 120),
+            'approval': cfg.get('leave_approval', '0') == '1', 'early': cfg.get('leave_unreturned_early', '1') == '1'}
+
+
+def _hm(t):
+    """HH:MM أو HH:MM:SS ← دقائق منذ منتصف الليل (أو None)"""
+    try:
+        h, m = [int(x) for x in str(t).split(':')[:2]]
+        return h * 60 + m if 0 <= h < 24 and 0 <= m < 60 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _fmt(mins):
+    mins = max(0, min(23 * 60 + 59, int(mins)))
+    return f'{mins // 60:02d}:{mins % 60:02d}'
+
+
+def _active_leave(conn, emp_id, date):
+    return conn.execute("SELECT * FROM leave_requests WHERE employee_id = ? AND date = ? AND status IN ('active', 'overdue') "
+                        "ORDER BY id DESC LIMIT 1", (emp_id, date)).fetchone()
+
+
+def _leave_check_out(conn, emp, cfg, now, data):
+    """قبل تسجيل «خروج مؤقت»: يرجع (رسالة رفض أو '', صف الطلب المعتمد أو None، وقت العودة HH:MM)"""
+    lc = _lcfg(cfg)
+    date, cur = now.strftime('%Y-%m-%d'), now.hour * 60 + now.minute
+    if lc['approval']:
+        rows = conn.execute("SELECT * FROM leave_requests WHERE employee_id = ? AND date = ? AND status = 'approved' ORDER BY from_time",
+                            (emp['id'], date)).fetchall()
+        for r in rows:
+            f, t = _hm(r['from_time']), _hm(r['to_time'])
+            if f is not None and t is not None and f - 15 <= cur <= t:
+                return '', r, r['to_time']
+        return 'لا يوجد إذن خروج معتمد لهذا الوقت — اطلب الإذن من «طلب إذن خروج» وانتظر الموافقة', None, None
+    to = _hm(data.get('leave_to'))
+    if to is None:
+        to = cur + (lc['max'] or 60)
+    if to <= cur:
+        return 'وقت العودة يجب أن يكون بعد الوقت الحالي', None, None
+    if lc['max'] and to - cur > lc['max']:
+        return f'أقصى مدة للخروج المؤقت {lc["max"]} دقيقة — اختر وقت عودة أقرب', None, None
+    return '', None, _fmt(to)
+
+
+def _leave_after_punch(conn, emp, kind, now, data, req, to_time):
+    """بعد قبول الحركة: تحديث سجل الخروج المؤقت"""
+    date, t = now.strftime('%Y-%m-%d'), now.strftime('%H:%M')
+    ts = now.strftime('%Y-%m-%d %H:%M:%S')
+    if kind == 'leave_out':
+        if req is not None:
+            conn.execute("UPDATE leave_requests SET status = 'active', out_time = ? WHERE id = ?", (t, req['id']))
+        else:
+            conn.execute("INSERT INTO leave_requests (employee_id, name, dept, date, from_time, to_time, reason, status, out_time, requested_at, source) "
+                         "VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, 'direct')",
+                         (emp['id'], emp['name'], emp['dept'] or '', date, t, to_time, (data.get('leave_reason') or '').strip()[:300], t, ts))
+    elif kind in ('leave_back', 'out'):
+        lv = _active_leave(conn, emp['id'], date)
+        if lv:
+            late = (_hm(t) or 0) > (_hm(lv['to_time']) or 0) + _lcfg(settings())['grace']
+            conn.execute("UPDATE leave_requests SET status = ?, back_time = ? WHERE id = ?",
+                         ('returned_late' if late or lv['status'] == 'overdue' else 'returned', t, lv['id']))
+
+
+def leave_sweep(conn=None):
+    """كل دقيقة: انتهاء الطلبات غير المستخدمة، التأخر عن العودة، ومن لم يعد حتى نهاية الدوام"""
+    own = conn is None
+    conn = conn or db.get_db()
+    try:
+        cfg = settings()
+        lc = _lcfg(cfg)
+        now = now_local()
+        today, cur = now.strftime('%Y-%m-%d'), now.hour * 60 + now.minute
+        # طلبات معتمدة/معلّقة فات وقتها
+        for r in conn.execute("SELECT id, date, to_time FROM leave_requests WHERE status IN ('pending', 'approved')").fetchall():
+            if r['date'] < today or (r['date'] == today and (_hm(r['to_time']) or 0) < cur):
+                conn.execute("UPDATE leave_requests SET status = 'expired' WHERE id = ?", (r['id'],))
+        for lv in conn.execute("SELECT * FROM leave_requests WHERE status IN ('active', 'overdue')").fetchall():
+            emp = conn.execute("SELECT * FROM employees WHERE id = ?", (lv['employee_id'],)).fetchone()
+            if not emp:
+                continue
+            end = _work_end(conn, emp, cfg, now)
+            end_m = end.hour * 60 + end.minute
+            day_over = lv['date'] < today or cur > end_m
+            if day_over:
+                # لم يعد حتى نهاية الدوام: وقت خروجه يُحتسب انصرافاً (مغادرة مبكرة)
+                conn.execute("UPDATE leave_requests SET status = 'not_returned' WHERE id = ?", (lv['id'],))
+                if lc['early'] and lv['out_time']:
+                    has_out = conn.execute("SELECT 1 FROM mobile_punches WHERE employee_id = ? AND date = ? AND kind = 'out' AND status = 'accepted' "
+                                           "AND time >= ?", (emp['id'], lv['date'], lv['out_time'])).fetchone()
+                    if not has_out:
+                        t = lv['out_time'] + ':00'
+                        conn.execute("INSERT INTO mobile_punches (employee_id, name, dept, kind, date, time, status, flags, source) "
+                                     "VALUES (?, ?, ?, 'out', ?, ?, 'accepted', ?, 'system')",
+                                     (emp['id'], emp['name'], emp['dept'] or '', lv['date'], t, 'انصراف محسوب: لم يعد من الخروج المؤقت'))
+                        _merge_punch(conn, emp, lv['date'], t, 'out')
+                conn.execute("INSERT INTO presence_events (employee_id, name, dept, date, kind, start_ts, end_ts, minutes, details, open) "
+                             "VALUES (?, ?, ?, ?, 'leave_not_returned', ?, ?, 0, ?, 0)",
+                             (emp['id'], emp['name'], emp['dept'] or '', lv['date'], f"{lv['date']} {lv['out_time'] or lv['from_time']}:00",
+                              f"{lv['date']} {_fmt(end_m)}:00", f"خرج {lv['out_time']} وكان يُفترض أن يعود {lv['to_time']}"))
+                schedule_analysis(2)
+            elif lv['status'] == 'active' and cur > (_hm(lv['to_time']) or 0) + lc['grace']:
+                conn.execute("UPDATE leave_requests SET status = 'overdue' WHERE id = ?", (lv['id'],))
+                conn.execute("INSERT INTO presence_events (employee_id, name, dept, date, kind, start_ts, end_ts, minutes, details, open) "
+                             "VALUES (?, ?, ?, ?, 'leave_overdue', ?, ?, 0, ?, 0)",
+                             (emp['id'], emp['name'], emp['dept'] or '', lv['date'], f"{lv['date']} {lv['to_time']}:00",
+                              now.strftime('%Y-%m-%d %H:%M:%S'), f"خرج {lv['out_time']} وكان يُفترض أن يعود {lv['to_time']}"))
+                conn.execute("INSERT INTO employee_notifications (employee_id, title, body, created_by, created_at) VALUES (?, ?, ?, ?, ?)",
+                             (emp['id'], 'تجاوزت وقت العودة', f"كان وقت عودتك من الخروج المؤقت {lv['to_time']} — سجّل «عودة من الخروج» فور وصولك",
+                              'النظام', now.strftime('%Y-%m-%d %H:%M:%S')))
+                try:
+                    push_to_employee(conn, emp['id'], 'تجاوزت وقت العودة', f"كان وقت عودتك {lv['to_time']} — سجّل «عودة من الخروج» فور وصولك")
+                except Exception:   # noqa: BLE001
+                    pass
+        conn.commit()
+    finally:
+        if own:
+            conn.close()
+
+
+def _leave_info(conn, emp, cfg, now):
+    lc = _lcfg(cfg)
+    date = now.strftime('%Y-%m-%d')
+    rows = [dict(r, status_label=LEAVE_STATUS.get(r['status'], r['status'])) for r in conn.execute(
+        "SELECT * FROM leave_requests WHERE employee_id = ? AND date >= ? ORDER BY date, from_time LIMIT 30", (emp['id'], date))]
+    active = next((r for r in rows if r['status'] in ('active', 'overdue') and r['date'] == date), None)
+    return {'max': lc['max'], 'grace': lc['grace'], 'approval': lc['approval'], 'requests': rows, 'active': active}
+
+
+@bp.route('/me/api/leave/request', methods=['POST'])
+@_me_json
+def me_leave_request(conn, acc, emp, cfg):
+    """طلب إذن خروج (عند تفعيل الموافقة المسبقة)"""
+    lc = _lcfg(cfg)
+    d = request.get_json(silent=True) or {}
+    now = now_local()
+    date = (d.get('date') or now.strftime('%Y-%m-%d'))[:10]
+    f, t = _hm(d.get('from')), _hm(d.get('to'))
+    reason = (d.get('reason') or '').strip()[:300]
+    if f is None or t is None or t <= f:
+        return jsonify({'ok': False, 'error': 'حدّد وقت الخروج ووقت العودة (العودة بعد الخروج)'}), 400
+    if date < now.strftime('%Y-%m-%d') or (date == now.strftime('%Y-%m-%d') and t <= now.hour * 60 + now.minute):
+        return jsonify({'ok': False, 'error': 'الوقت المطلوب انقضى'}), 400
+    if lc['max'] and t - f > lc['max']:
+        return jsonify({'ok': False, 'error': f'أقصى مدة للخروج المؤقت {lc["max"]} دقيقة'}), 400
+    if not reason:
+        return jsonify({'ok': False, 'error': 'اكتب سبب الخروج'}), 400
+    conn.execute("INSERT INTO leave_requests (employee_id, name, dept, date, from_time, to_time, reason, status, requested_at, source) "
+                 "VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, 'request')",
+                 (emp['id'], emp['name'], emp['dept'] or '', date, _fmt(f), _fmt(t), reason, now.strftime('%Y-%m-%d %H:%M:%S')))
+    conn.commit()
+    return jsonify({'ok': True, 'message': 'أُرسل الطلب — يصلك إشعار عند الموافقة'})
+
+
+@bp.route('/me/api/leave/cancel', methods=['POST'])
+@_me_json
+def me_leave_cancel(conn, acc, emp, cfg):
+    rid = (request.get_json(silent=True) or {}).get('id')
+    n = conn.execute("UPDATE leave_requests SET status = 'cancelled' WHERE id = ? AND employee_id = ? AND status IN ('pending', 'approved')",
+                     (rid, emp['id'])).rowcount
+    conn.commit()
+    return jsonify({'ok': bool(n), 'error': '' if n else 'لا يمكن إلغاء هذا الطلب'})
+
+
+# ----- الإدارة: طلبات الخروج، السجل، التقرير الشهري -----
+def _leave_query(args):
+    today = now_local().strftime('%Y-%m-%d')
+    d_from, d_to = (args.get('from') or today)[:10], (args.get('to') or today)[:10]
+    where, params = ["date >= ?", "date <= ?"], [d_from, d_to]
+    if args.get('status'):
+        where.append("status = ?"); params.append(args['status'])
+    return ' AND '.join(where), params, d_from, d_to
+
+
+@bp.route('/api/leaves')
+@admin_required
+def api_leaves():
+    leave_sweep()
+    where, params, d_from, d_to = _leave_query(request.args)
+    conn = db.get_db()
+    try:
+        rows = [dict(r, status_label=LEAVE_STATUS.get(r['status'], r['status'])) for r in conn.execute(
+            f"SELECT * FROM leave_requests WHERE {where} ORDER BY date DESC, from_time DESC, id DESC LIMIT 5000", params)]
+        rows = [r for r in rows if _employee_scope_ok(r['dept'])]
+        bw, bp_, _f, _t = _leave_query({k: v for k, v in request.args.items() if k != 'status'})
+        counts = {r['status']: r['n'] for r in conn.execute(f"SELECT status, COUNT(*) AS n FROM leave_requests WHERE {bw} GROUP BY status", bp_)}
+        pending = [dict(r) for r in conn.execute(
+            "SELECT * FROM leave_requests WHERE status = 'pending' ORDER BY date, from_time").fetchall() if _employee_scope_ok(r['dept'])]
+        for r in rows:
+            if r['out_time'] and r['back_time']:
+                r['minutes'] = max(0, (_hm(r['back_time']) or 0) - (_hm(r['out_time']) or 0))
+            r['late_min'] = max(0, (_hm(r['back_time']) or 0) - (_hm(r['to_time']) or 0)) if r['back_time'] else None
+        if request.args.get('format') == 'csv':
+            import csv
+            import io
+            L = _admin().L
+            buf = io.StringIO()
+            w = csv.writer(buf)
+            w.writerow([L(x) for x in ['التاريخ', 'الموظف', 'القسم', 'من', 'إلى', 'خرج', 'عاد', 'المدة (دقيقة)', 'التأخر (دقيقة)', 'الحالة', 'السبب', 'قرار', 'بواسطة']])
+            for r in rows:
+                w.writerow([r['date'], r['name'], r['dept'], r['from_time'], r['to_time'], r['out_time'] or '', r['back_time'] or '',
+                            r.get('minutes') or '', r['late_min'] or '', L(r['status_label']), r['reason'] or '', r['decision_note'] or '', r['decided_by'] or ''])
+            return Response('\ufeff' + buf.getvalue(), content_type='text/csv; charset=utf-8',
+                            headers={'Content-Disposition': f'attachment; filename=leaves-{d_from}_{d_to}.csv'})
+        return jsonify({'ok': True, 'rows': rows, 'counts': counts, 'total': sum(counts.values()), 'statuses': LEAVE_STATUS,
+                        'pending': pending})
+    finally:
+        conn.close()
+
+
+@bp.route('/api/leaves/decide', methods=['POST'])
+@admin_required
+def api_leaves_decide():
+    d = request.get_json(silent=True) or {}
+    ids = [int(i) for i in (d.get('ids') or []) if str(i).isdigit()]
+    action, note = d.get('action'), (d.get('note') or '').strip()[:300]
+    if not ids or action not in ('approve', 'reject'):
+        return jsonify({'ok': False, 'error': 'حدّد طلباً واحداً على الأقل'}), 400
+    conn = db.get_db()
+    try:
+        now = now_local().strftime('%Y-%m-%d %H:%M:%S')
+        n = 0
+        for r in conn.execute(f"SELECT * FROM leave_requests WHERE id IN ({','.join('?' * len(ids))}) AND status = 'pending'", ids).fetchall():
+            if not _employee_scope_ok(r['dept']):
+                continue
+            st = 'approved' if action == 'approve' else 'rejected'
+            conn.execute("UPDATE leave_requests SET status = ?, decided_by = ?, decided_at = ?, decision_note = ? WHERE id = ?",
+                         (st, session.get('username', ''), now, note, r['id']))
+            title = 'تمت الموافقة على إذن الخروج' if st == 'approved' else 'رُفض طلب إذن الخروج'
+            body = f"{r['date']} من {r['from_time']} إلى {r['to_time']}" + (f"\nملاحظة: {note}" if note else '')
+            conn.execute("INSERT INTO employee_notifications (employee_id, title, body, created_by, created_at) VALUES (?, ?, ?, ?, ?)",
+                         (r['employee_id'], title, body, session.get('username', ''), now))
+            try:
+                push_to_employee(conn, r['employee_id'], title, body)
+            except Exception:   # noqa: BLE001
+                pass
+            _audit_emp(conn, f'leave_{action}', 'leave_requests', r['name'], f"{r['date']} {r['from_time']}–{r['to_time']}")
+            n += 1
+        conn.commit()
+        return jsonify({'ok': True, 'count': n})
+    finally:
+        conn.close()
+
+
+@bp.route('/api/leaves/delete', methods=['POST'])
+@admin_required
+def api_leaves_delete():
+    ids = [int(i) for i in ((request.get_json(silent=True) or {}).get('ids') or []) if str(i).isdigit()]
+    if not ids:
+        return jsonify({'ok': False, 'error': 'حدّد سجلاً واحداً على الأقل'}), 400
+    conn = db.get_db()
+    try:
+        n = conn.execute(f"DELETE FROM leave_requests WHERE id IN ({','.join('?' * len(ids))})", ids).rowcount
+        _audit(conn, 'leave_delete', 'leave_requests', str(n))
+        conn.commit()
+        return jsonify({'ok': True, 'count': n})
+    finally:
+        conn.close()
+
+
+@bp.route('/api/leaves/report')
+@admin_required
+def api_leaves_report():
+    """تقرير شهري لكل موظف: عدد مرات الخروج، المدة، التأخر عن العودة، عدم العودة، الطلبات المرفوضة"""
+    month = (request.args.get('month') or now_local().strftime('%Y-%m'))[:7]
+    conn = db.get_db()
+    try:
+        rows = [dict(r) for r in conn.execute("SELECT * FROM leave_requests WHERE date LIKE ?", (month + '%',))]
+        rows = [r for r in rows if _employee_scope_ok(r['dept'])]
+        agg = {}
+        for r in rows:
+            a = agg.setdefault(r['employee_id'], {'employee_id': r['employee_id'], 'name': r['name'], 'dept': r['dept'], 'times': 0, 'minutes': 0,
+                                                   'late': 0, 'late_minutes': 0, 'not_returned': 0, 'requested': 0, 'rejected': 0, 'direct': 0})
+            if r['source'] == 'request':
+                a['requested'] += 1
+            if r['status'] == 'rejected':
+                a['rejected'] += 1
+            if r['out_time']:
+                a['times'] += 1
+                if r['source'] == 'direct':
+                    a['direct'] += 1
+                if r['back_time']:
+                    a['minutes'] += max(0, (_hm(r['back_time']) or 0) - (_hm(r['out_time']) or 0))
+                if r['status'] in ('returned_late', 'overdue'):
+                    a['late'] += 1
+                    if r['back_time']:
+                        a['late_minutes'] += max(0, (_hm(r['back_time']) or 0) - (_hm(r['to_time']) or 0))
+                if r['status'] == 'not_returned':
+                    a['not_returned'] += 1
+        out = sorted(agg.values(), key=lambda x: (-x['times'], x['name'] or ''))
+        if request.args.get('format') == 'csv':
+            import csv
+            import io
+            L = _admin().L
+            buf = io.StringIO()
+            w = csv.writer(buf)
+            w.writerow([L(x) for x in ['الموظف', 'القسم', 'مرات الخروج', 'المدة (دقيقة)', 'تأخر عن العودة', 'دقائق التأخر', 'لم يعد', 'طلبات', 'مرفوضة']])
+            for a in out:
+                w.writerow([a['name'], a['dept'], a['times'], a['minutes'], a['late'], a['late_minutes'], a['not_returned'], a['requested'], a['rejected']])
+            return Response('\ufeff' + buf.getvalue(), content_type='text/csv; charset=utf-8',
+                            headers={'Content-Disposition': f'attachment; filename=leave-report-{month}.csv'})
+        return jsonify({'ok': True, 'month': month, 'rows': out,
+                        'totals': {k: sum(a[k] for a in out) for k in ('times', 'minutes', 'late', 'not_returned', 'requested', 'rejected')}})
+    finally:
+        conn.close()
 
 
 @bp.route('/me/api/punch', methods=['POST'])
@@ -711,6 +1036,11 @@ def me_punch(conn, acc, emp, cfg):
         ok, reason = False, f'لا يمكن تسجيل «{KINDS[kind]}» الآن — آخر حركة: {KINDS.get(last, "لا شيء")}'
     if ok and recent:
         ok, reason = False, 'سُجّلت حركة قبل لحظات — انتظر نصف دقيقة'
+    leave_req, leave_to = None, None
+    if ok and kind == 'leave_out':
+        lerr, leave_req, leave_to = _leave_check_out(conn, emp, cfg, now, data)
+        if lerr:
+            ok, reason = False, lerr
     conn.execute(
         "INSERT INTO mobile_punches (employee_id, name, dept, kind, date, time, lat, lng, accuracy, site_id, site_name, "
         "distance_m, status, reason, device_label, ip, flags, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -719,6 +1049,8 @@ def me_punch(conn, acc, emp, cfg):
          'accepted' if ok else 'rejected', reason or None, acc['device_label'] or _device_label(), _ip(),
          '؛ '.join(flags) or None, source))
     if ok:
+        if kind in ('leave_out', 'leave_back', 'out'):
+            _leave_after_punch(conn, emp, kind, now, data, leave_req, leave_to)
         if kind in ('in', 'out'):
             _merge_punch(conn, emp, d, t, kind)
         if kind in ('leave_back', 'out') and cfg.get('mobile_leave_deduct', '1') == '1':
@@ -733,6 +1065,8 @@ def me_punch(conn, acc, emp, cfg):
         where = ' — باستثناء موقع' + (f' ({dist / 1000:.1f} كم عن «{site["name"]}»)' if site and dist is not None else '')
     else:
         where = f' — {site["name"]}' if site else ''
+    if kind == 'leave_out' and leave_to:
+        where += f' — وقت العودة المتوقع {leave_to}'
     return jsonify({'ok': True, 'message': f'تم تسجيل {KINDS[kind]} الساعة {t[:5]}' + where + clock_note,
                     'time': t[:5]})
 
@@ -992,7 +1326,8 @@ def api_mobile_settings():
     keys = ('mobile_enabled', 'mobile_bind_device', 'mobile_max_accuracy', 'mobile_require_geofence', 'mobile_leave_deduct',
             'mobile_require_app', 'mobile_suspicious', 'mobile_biometric',
             'presence_enabled', 'presence_scope', 'presence_interval_min', 'presence_grace_min',
-            'presence_checks_per_day', 'presence_check_window_min', 'presence_depts_json')
+            'presence_checks_per_day', 'presence_check_window_min', 'presence_depts_json',
+            'leave_max_minutes', 'leave_grace_min', 'leave_approval', 'leave_unreturned_early')
     if request.method == 'POST':
         data = request.get_json(silent=True) or {}
         old, changed = settings(), []
@@ -1007,9 +1342,10 @@ def api_mobile_settings():
                     v = 'all' if v == 'all' else 'selected'
                 elif k == 'presence_depts_json':
                     v = json.dumps([str(x) for x in (v if isinstance(v, list) else [])][:200], ensure_ascii=False)
-                elif k in ('presence_interval_min', 'presence_grace_min', 'presence_checks_per_day', 'presence_check_window_min'):
+                elif k in ('presence_interval_min', 'presence_grace_min', 'presence_checks_per_day', 'presence_check_window_min',
+                           'leave_max_minutes', 'leave_grace_min'):
                     try:
-                        v = str(max(0, min(240, int(float(v)))))
+                        v = str(max(0, min(600, int(float(v)))))
                     except (TypeError, ValueError):
                         continue
                 elif k == 'mobile_max_accuracy':
@@ -1841,6 +2177,7 @@ PRESENCE_KINDS = {
     'outside': 'خارج نطاق العمل أثناء الدوام', 'no_location': 'الموقع مطفأ أو وهمي أثناء الدوام',
     'no_signal': 'انقطاع إشارة الهاتف أثناء الدوام', 'missed_check': 'لم يردّ على فحص الحضور',
     'failed_check': 'ردّ على فحص الحضور من خارج النطاق',
+    'leave_overdue': 'تأخر عن العودة من الخروج المؤقت', 'leave_not_returned': 'لم يعد من الخروج المؤقت',
 }
 
 
@@ -1913,7 +2250,9 @@ def _exempt(conn, emp, acc, cfg, now):
     if active_override(conn, emp['id']):
         return 'استثناء موقع ساري'
     if _duty(conn, emp, now)[0] == 'leave':
-        return 'خروج مؤقت مسجّل'
+        lv = _active_leave(conn, emp['id'], now.strftime('%Y-%m-%d'))
+        if not lv or lv['status'] != 'overdue':      # تجاوز وقت العودة ينهي الإعفاء
+            return 'خروج مؤقت مسجّل'
     return ''
 
 

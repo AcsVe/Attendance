@@ -154,6 +154,64 @@
 </div>
 
 <!-- ============ حركات الهاتف والمتابعة ============ -->
+<!-- ============ الخروج المؤقت ============ -->
+<div class="tab-panel" id="tab-leaves">
+  <div class="card">
+    <div class="card-title"><i class="fas fa-sliders" aria-hidden="true"></i> إعدادات الخروج المؤقت</div>
+    <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:center;margin-bottom:12px">
+      <label style="display:flex;gap:10px;align-items:center;font-weight:700"><span class="sw"><input type="checkbox" id="lvApproval"><span></span></span> يتطلب طلباً وموافقة مسبقة</label>
+      <label style="display:flex;gap:10px;align-items:center;font-weight:700"><span class="sw"><input type="checkbox" id="lvEarly"><span></span></span> من لم يعد حتى نهاية الدوام يُحتسب خروجه مغادرة مبكرة</label>
+    </div>
+    <div class="form-grid trio">
+      <div class="form-group"><label>أقصى مدة للخروج (دقيقة، 0 = بلا حد)</label><input type="number" id="lvMax" min="0" max="600"></div>
+      <div class="form-group"><label>مهلة بعد وقت العودة قبل التنبيه (دقيقة)</label><input type="number" id="lvGrace" min="0" max="120"></div>
+      <div class="form-group" style="align-self:end"><button class="btn btn-primary" onclick="lvSave()"><i class="fas fa-save" aria-hidden="true"></i> حفظ</button></div>
+    </div>
+    <p style="font-size:.84rem;color:var(--muted);line-height:1.8;margin:0">يختار الموظف <b>وقت العودة</b> عند الضغط على «خروج مؤقت» (أو يحدد «من–إلى» في طلبه عند تفعيل الموافقة).
+      إذا تجاوز وقت العودة مع المهلة يُسجَّل تنبيه ويُبلَّغ الموظف، وينتهي إعفاؤه من التحقق من التواجد.
+      ويبقى إدخال أذونات المغادرة يدوياً متاحاً من تبويب «أذونات التأخير والمغادرة».</p>
+  </div>
+
+  <div class="card" id="lvPendingCard">
+    <div class="card-title"><i class="fas fa-inbox" aria-hidden="true"></i> طلبات بانتظار الموافقة <span id="lvPendingN" class="nav-badge" style="margin-inline-start:8px"></span></div>
+    <div class="m-bulk" style="position:static">
+      <input type="text" id="lvNote" class="search-input" placeholder="ملاحظة للموظف (اختيارية)">
+      <button class="btn btn-primary btn-sm" onclick="lvDecide('approve')"><i class="fas fa-check" aria-hidden="true"></i> موافقة على المحدد</button>
+      <button class="btn btn-red btn-sm" onclick="lvDecide('reject')"><i class="fas fa-xmark" aria-hidden="true"></i> رفض المحدد</button>
+      <span id="lvPendSel" style="font-size:.85rem;color:var(--muted)"></span>
+    </div>
+    <div class="table-wrap" style="max-height:340px"><table>
+      <thead><tr><th class="no-filter"><input type="checkbox" aria-label="تحديد الكل" onchange="toggleSelectAll('lvPendTable', this.checked); lvPendCount()"></th><th>الموظف</th><th>القسم</th><th>التاريخ</th><th>من</th><th>إلى</th><th>المدة</th><th>السبب</th><th>وقت الطلب</th></tr></thead>
+      <tbody id="lvPendTable"></tbody></table></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><i class="fas fa-list" aria-hidden="true"></i> سجل الخروج المؤقت</div>
+    <div class="m-bulk" style="position:static">
+      <input type="date" id="lvFrom" class="search-input" onchange="lvLoad()"><input type="date" id="lvTo" class="search-input" onchange="lvLoad()">
+      <input type="search" id="lvSearch" class="search-input" placeholder="بحث فوري…" oninput="lvRender()">
+      <button class="btn btn-outline btn-sm" onclick="lvExport()"><i class="fas fa-file-csv" aria-hidden="true"></i> CSV</button>
+      <button class="btn btn-red btn-sm" onclick="lvDelete()"><i class="fas fa-trash" aria-hidden="true"></i> حذف المحدد <span id="lvSel"></span></button>
+    </div>
+    <div class="m-chips" id="lvChips"></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th class="no-filter"><input type="checkbox" aria-label="تحديد الكل" onchange="toggleSelectAll('lvTable', this.checked); lvCount()"></th><th>التاريخ</th><th>الموظف</th><th>القسم</th><th>من</th><th>إلى</th><th>خرج</th><th>عاد</th><th>المدة</th><th>التأخر</th><th>الحالة</th><th>السبب</th></tr></thead>
+      <tbody id="lvTable"></tbody></table></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><i class="fas fa-chart-column" aria-hidden="true"></i> تقرير المغادرات الشهري</div>
+    <div class="m-bulk" style="position:static">
+      <input type="month" id="lvMonth" class="search-input" onchange="lvReport()">
+      <button class="btn btn-outline btn-sm" onclick="lvReportExport()"><i class="fas fa-file-csv" aria-hidden="true"></i> CSV</button>
+      <span id="lvTotals" style="font-size:.86rem;color:var(--muted)"></span>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>الموظف</th><th>القسم</th><th>مرات الخروج</th><th>المدة (دقيقة)</th><th>تأخر عن العودة</th><th>دقائق التأخر</th><th>لم يعد</th><th>طلبات</th><th>مرفوضة</th></tr></thead>
+      <tbody id="lvRepTable"></tbody></table></div>
+  </div>
+</div>
+
 <!-- ============ التحقق من التواجد أثناء الدوام ============ -->
 <div class="tab-panel" id="tab-presence">
   <div class="card">

@@ -27,7 +27,7 @@
     table{width:100%;border-collapse:collapse;font-size:.85rem}th,td{padding:8px 4px;border-bottom:1px solid #eef2f3;text-align:right}th{color:var(--m);font-weight:700}
     .tw{overflow:auto;max-height:62vh;-webkit-overflow-scrolling:touch}.tw thead th{position:sticky;top:0;background:#fff;z-index:2;box-shadow:inset 0 -1px 0 #e3eaec;cursor:pointer;user-select:none;white-space:nowrap}.tw th .ar{font-size:.7em;margin-inline-start:3px}
     .toast{position:fixed;left:14px;right:14px;bottom:calc(18px + env(safe-area-inset-bottom));max-width:490px;margin:0 auto;border-radius:14px;padding:14px 16px;font-weight:800;color:#fff;z-index:9;box-shadow:0 8px 24px rgba(0,0,0,.2);display:none}
-    .hide{display:none}
+    .hide{display:none}#leaveSheet:not(.hide){display:flex}
   </style>
 </head>
 <body>
@@ -48,6 +48,7 @@
     <p style="margin:6px 0 10px">أكّد وجودك في موقع العمل خلال <b id="checkLeft">--:--</b></p>
     <button class="btn btn-p" id="checkBtn" style="width:100%;padding:16px;font-size:1.1rem"><i class="fas fa-location-dot" aria-hidden="true"></i> تأكيد وجودي</button>
   </div>
+  <div class="card hide" id="leaveBanner" role="status" style="text-align:center;font-weight:700"></div>
   <div class="card hide" id="presenceInfo" style="background:#eef4f7;font-size:.85rem;line-height:1.7"></div>
   <div class="card hide" id="pushCard" style="font-size:.88rem;line-height:1.7">
     <b style="color:var(--pd)"><i class="fas fa-bell" aria-hidden="true"></i> تنبيهات فحص الحضور</b><br>
@@ -82,6 +83,14 @@
       <div class="muted" style="margin-bottom:6px">ساعات العمل هذا الشهر: <b id="k-hours">0</b></div>
       <div class="tw"><table id="monthTable"><thead><tr><th>التاريخ</th><th>حضور</th><th>انصراف</th><th>الحالة</th><th>ساعات</th></tr></thead><tbody id="days"></tbody></table></div>
     </div>
+    <div class="card hide" id="leaveReqCard">
+      <b style="color:var(--pd)"><i class="fas fa-person-walking-arrow-right" aria-hidden="true"></i> طلب إذن خروج</b>
+      <p class="muted" style="margin:4px 0 8px;font-size:.85rem" id="leaveReqHint"></p>
+      <div style="display:flex;gap:8px"><label style="flex:1">من<input type="time" id="lrFrom"></label><label style="flex:1">إلى<input type="time" id="lrTo"></label></div>
+      <label for="lrReason">السبب</label><input id="lrReason" maxlength="300" placeholder="مثال: مراجعة طبية">
+      <button class="btn btn-p" id="lrSend" style="width:100%;margin-top:10px">إرسال الطلب</button>
+      <ul class="tl" id="lrList" style="margin-top:10px"></ul>
+    </div>
     <div class="card"><b style="color:var(--pd)">آخر الحركات من الهاتف</b><ul class="tl" id="recent" style="margin-top:6px"></ul></div>
   </div>
 
@@ -115,6 +124,15 @@
   </div>
 </div>
 <div class="toast" id="toast"></div>
+<div id="leaveSheet" class="hide" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:20;align-items:flex-end;justify-content:center">
+  <div class="card" style="width:100%;max-width:520px;margin:0;border-radius:18px 18px 0 0;padding-bottom:calc(18px + env(safe-area-inset-bottom))">
+    <b style="font-size:1.1rem;color:var(--pd)">خروج مؤقت</b>
+    <p class="muted" id="lsHint" style="margin:4px 0 10px;font-size:.88rem"></p>
+    <label for="lsTo">وقت العودة المتوقع</label><input type="time" id="lsTo">
+    <label for="lsReason">السبب (اختياري)</label><input id="lsReason" maxlength="300">
+    <div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-p" id="lsGo" style="flex:2">تسجيل الخروج المؤقت</button><button class="btn btn-l" id="lsCancel" style="flex:1">إلغاء</button></div>
+  </div>
+</div>
 <script>
 (function () {
   var NATIVE = window.AttNative || null;   // داخل تطبيق الموظف (APK): موقع أندرويد مع كشف الموقع الوهمي
@@ -196,6 +214,7 @@
       if (d.override) ob.innerHTML = '<i class="fas fa-unlock" aria-hidden="true"></i> استثناء من الإدارة: يمكنك التسجيل من خارج موقع العمل حتى ' + esc(d.override.until) + (d.override.no_location ? ' (حتى بدون تحديد الموقع)' : '') + '<br><span class="muted">' + esc(d.override.reason) + '</span>';
       renderBio();
       presenceSync();
+      leaveSync();
       $('k-days').textContent = d.summary.days; $('k-late').textContent = d.summary.late_days; $('k-min').textContent = d.summary.late_minutes; $('k-abs').textContent = d.summary.absent; $('k-hours').textContent = d.summary.hours;
       render();
     });
@@ -334,19 +353,76 @@
       var k = b.dataset.k;
       var noLoc = S && S.override && S.override.no_location && !POS;
       if ((!POS && !noLoc) || busy) return;
+      if (k === 'leave_out' && S.leave && !S.leave.approval) { openLeaveSheet(); return; }
       if (!confirm('تسجيل «' + LABEL[k] + '» الآن؟')) return;
+      doPunch(k, {});
+    });
+  });
+  function doPunch(k, extra) {
       busy = true; render();
       bioStep().then(function (bio) {
         var lat = POS ? POS.coords.latitude.toFixed(7) : null, lng = POS ? POS.coords.longitude.toFixed(7) : null, hdr = {};
         if (NATIVE) { var ts = String(Date.now()); hdr = { 'X-App': 'android', 'X-App-Ts': ts, 'X-App-Sig': NATIVE.sign(k + '|' + lat + '|' + lng + '|' + ts + '|' + (bio.bio ? 1 : 0)) }; }
-        return api('/me/api/punch', { method: 'POST', headers: hdr, body: JSON.stringify({ kind: k, lat: lat, lng: lng, accuracy: POS ? POS.coords.accuracy : null, mock: !!(POS && POS.mock),
+        return api('/me/api/punch', { method: 'POST', headers: hdr, body: JSON.stringify(Object.assign({ kind: k, lat: lat, lng: lng, accuracy: POS ? POS.coords.accuracy : null, mock: !!(POS && POS.mock),
           rooted: NATIVE ? !!NATIVE.isRooted() : false, samples: SAMPLES, bio: !!bio.bio, webauthn: bio.webauthn || null,
-          client_ts: Date.now(), auto_time: NATIVE && NATIVE.autoTime ? !!NATIVE.autoTime() : null, dev_opts: NATIVE && NATIVE.devOptions ? !!NATIVE.devOptions() : null }) })
+          client_ts: Date.now(), auto_time: NATIVE && NATIVE.autoTime ? !!NATIVE.autoTime() : null, dev_opts: NATIVE && NATIVE.devOptions ? !!NATIVE.devOptions() : null }, extra || {})) })
           .then(function (d) { toast(d.ok ? d.message : d.error, d.ok); });
       }, function (msg) { toast(msg); })
         .catch(function () { toast('تعذّر الاتصال بالخادم — تحقق من الإنترنت'); })
         .then(function () { busy = false; return load(); });
-    });
+  }
+
+  /* ===== الخروج المؤقت: وقت العودة (من–إلى)، طلب الإذن، والعدّ التنازلي ===== */
+  function hhmm(d) { return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
+  function nowSrv() { return new Date(Date.now() + offset); }
+  function openLeaveSheet() {
+    var L = S.leave, n = nowSrv(), def = new Date(n.getTime() + Math.min(30, L.max || 30) * 60000);
+    $('lsTo').value = hhmm(def);
+    $('lsTo').min = hhmm(n);
+    if (L.max) $('lsTo').max = hhmm(new Date(n.getTime() + L.max * 60000));
+    $('lsHint').textContent = (L.max ? 'أقصى مدة: ' + L.max + ' دقيقة. ' : '') + 'إذا تجاوزت وقت العودة تُبلَّغ الإدارة، وإن لم تعد حتى نهاية الدوام يُحتسب خروجك مغادرة مبكرة.';
+    $('lsReason').value = '';
+    $('leaveSheet').classList.remove('hide');
+  }
+  $('lsCancel').addEventListener('click', function () { $('leaveSheet').classList.add('hide'); });
+  $('lsGo').addEventListener('click', function () {
+    if (!$('lsTo').value) { toast('اختر وقت العودة'); return; }
+    $('leaveSheet').classList.add('hide');
+    doPunch('leave_out', { leave_to: $('lsTo').value, leave_reason: $('lsReason').value });
+  });
+  var leaveTimer = null;
+  function leaveSync() {
+    var L = S.leave || {}, b = $('leaveBanner'), a = L.active;
+    clearInterval(leaveTimer);
+    b.classList.toggle('hide', !a);
+    if (a) {
+      var upd = function () {
+        var n = nowSrv(), p = a.to_time.split(':'), to = new Date(n); to.setHours(+p[0], +p[1], 0, 0);
+        var left = Math.round((to - n) / 60000), over = left < 0;
+        b.style.background = over ? '#fdecea' : '#eef4fb'; b.style.color = over ? '#a61b1b' : 'var(--pd)';
+        b.innerHTML = '<i class="fas fa-person-walking-arrow-right" aria-hidden="true"></i> خروج مؤقت منذ ' + esc(a.out_time || a.from_time) + ' — العودة المتوقعة ' + esc(a.to_time)
+          + '<br>' + (over ? 'تجاوزت وقت العودة بـ ' + (-left) + ' دقيقة — سجّل «عودة من الخروج» فور وصولك' : 'متبقٍ ' + left + ' دقيقة');
+      };
+      upd(); leaveTimer = setInterval(upd, 30000);
+    }
+    var card = $('leaveReqCard');
+    card.classList.toggle('hide', !L.approval);
+    if (L.approval) {
+      $('leaveReqHint').textContent = 'الخروج المؤقت يتطلب موافقة مسبقة' + (L.max ? ' — أقصى مدة ' + L.max + ' دقيقة' : '') + '. بعد الموافقة اضغط «خروج مؤقت» في الوقت المحدد.';
+      if (!$('lrFrom').value) { var n = nowSrv(); $('lrFrom').value = hhmm(n); $('lrTo').value = hhmm(new Date(n.getTime() + Math.min(30, L.max || 30) * 60000)); }
+      $('lrList').innerHTML = (L.requests || []).filter(function (r) { return r.source === 'request'; }).map(function (r) {
+        var cancel = (r.status === 'pending' || r.status === 'approved') ? ' <a href="#" onclick="cancelLeave(' + r.id + ');return false">إلغاء</a>' : '';
+        return '<li><span>' + esc(r.date.slice(5)) + ' <b dir="ltr">' + esc(r.from_time) + '–' + esc(r.to_time) + '</b> <span class="muted">' + esc(r.reason || '') + '</span></span><span>' + esc(r.status_label) + cancel + '</span></li>';
+      }).join('') || '<li class="muted">لا توجد طلبات</li>';
+    }
+  }
+  window.cancelLeave = function (id) {
+    if (!confirm('إلغاء هذا الطلب؟')) return;
+    api('/me/api/leave/cancel', { method: 'POST', body: JSON.stringify({ id: id }) }).then(function (d) { toast(d.ok ? 'أُلغي الطلب' : d.error, d.ok); load(); });
+  };
+  $('lrSend').addEventListener('click', function () {
+    api('/me/api/leave/request', { method: 'POST', body: JSON.stringify({ from: $('lrFrom').value, to: $('lrTo').value, reason: $('lrReason').value }) })
+      .then(function (d) { toast(d.ok ? d.message : d.error, d.ok); if (d.ok) { $('lrReason').value = ''; load(); } });
   });
   document.querySelectorAll('.tabs button').forEach(function (b) {
     b.addEventListener('click', function () {
