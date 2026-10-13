@@ -24,8 +24,8 @@
 <body>
   <div class="login-wrap">
     <div class="login-card">
-      {% if settings and settings.org_logo_filename %}
-        <img src="{{ url_for('static', filename='uploads/' + settings.org_logo_filename) }}" alt="شعار {{ settings.org_name or 'المؤسسة' }}" style="max-height:64px;max-width:220px;margin-bottom:8px">
+      {% if logo_url %}
+        <img src="{{ logo_url }}" alt="شعار {{ settings.org_name or 'المؤسسة' }}" style="max-height:64px;max-width:220px;margin-bottom:8px">
       {% else %}
         <i class="fas fa-fingerprint logo-icon" aria-hidden="true"></i>
       {% endif %}

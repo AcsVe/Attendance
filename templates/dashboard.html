@@ -28,8 +28,8 @@
 <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
 <nav class="sidebar" id="sidebar">
   <div class="sidebar-logo">
-    {% if settings.org_logo_filename %}
-      <div class="sidebar-logo-chip"><img src="{{ url_for('static', filename='uploads/' + settings.org_logo_filename) }}" alt="شعار {{ settings.org_name or 'المؤسسة' }}" style="max-height:32px;max-width:150px;vertical-align:middle"></div>
+    {% if logo_url %}
+      <div class="sidebar-logo-chip"><img src="{{ logo_url }}" alt="شعار {{ settings.org_name or 'المؤسسة' }}" style="max-height:32px;max-width:150px;vertical-align:middle"></div>
     {% else %}
       <div class="sidebar-logo-chip"><i class="fas fa-fingerprint" aria-hidden="true"></i>&nbsp;<span class="sidebar-logo-title">نظام الحضور</span></div>
     {% endif %}
@@ -952,8 +952,9 @@
             يظهر بالشريط الجانبي، صفحة تسجيل الدخول، ترويسة تقارير PDF، ورأس رسائل البريد المُرسَلة. الصيغ المدعومة: PNG/JPG/GIF/WEBP، بحد أقصى 3 ميجابايت.
           </p>
           <div id="logoPreviewBox" style="margin-bottom:8px"></div>
+          <p style="color:var(--muted);font-size:.8rem;margin:0 0 8px">يُرفع الشعار فور اختيار الملف ويظهر مباشرة في جميع الصفحات. الصيغ: PNG أو JPG أو WEBP (يُفضَّل PNG بخلفية شفافة)، حتى 15 ميجابايت.</p>
           <div class="filter-bar">
-            <input type="file" id="logoFileInput" accept=".png,.jpg,.jpeg,.gif,.webp">
+            <input type="file" id="logoFileInput" accept="image/*" onchange="uploadLogo()">
             <button class="btn btn-outline btn-sm" onclick="uploadLogo()"><i class="fas fa-upload" aria-hidden="true"></i> رفع الشعار</button>
             <button class="btn btn-red btn-sm" onclick="removeLogo()"><i class="fas fa-trash" aria-hidden="true"></i> إزالة الشعار</button>
           </div>

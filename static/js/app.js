@@ -2192,6 +2192,30 @@ function renderLogoPreview(filename) {
     : '<p style="color:var(--muted);font-size:.85rem">لا يوجد شعار محفوظ حالياً</p>';
 }
 
+/* تحديث الشعار في الشريط الجانبي والشريط العلوي فوراً دون إعادة تحميل الصفحة */
+function applyLogoEverywhere(url) {
+  const chip = document.querySelector('.sidebar-logo-chip');
+  if (chip) {
+    if (url) {
+      chip.innerHTML = '';
+      const img = document.createElement('img');
+      img.src = url; img.alt = 'شعار المؤسسة';
+      img.style.cssText = 'max-height:32px;max-width:150px;vertical-align:middle';
+      chip.appendChild(img);
+    } else {
+      chip.innerHTML = '<i class="fas fa-fingerprint" aria-hidden="true"></i>&nbsp;<span class="sidebar-logo-title">نظام الحضور</span>';
+    }
+  }
+  let top = document.querySelector('.topbar-logo');
+  if (url) {
+    if (!top) {
+      const h = document.getElementById('pageTitle');
+      if (h) { top = document.createElement('img'); top.className = 'topbar-logo'; top.alt = 'شعار المؤسسة'; h.before(top); }
+    }
+    if (top) top.src = url;
+  } else if (top) top.remove();
+}
+
 async function uploadLogo() {
   const input = document.getElementById('logoFileInput');
   const file = input.files[0];
@@ -2204,6 +2228,7 @@ async function uploadLogo() {
     if (!data.ok) { toast(data.error || 'فشل رفع الشعار', true); return; }
     toast('تم رفع الشعار');
     input.value = '';
+    applyLogoEverywhere(data.logo_url);
     loadSettings();
   } catch (e) {
     toast('فشل رفع الشعار', true);
@@ -2215,6 +2240,7 @@ async function removeLogo() {
   try {
     await api('/api/settings/logo', { method: 'DELETE' });
     toast('تمت إزالة الشعار');
+    applyLogoEverywhere('');
     loadSettings();
   } catch (e) {}
 }

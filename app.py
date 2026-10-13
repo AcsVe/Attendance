@@ -95,8 +95,8 @@ _shield(app)
 # حتى تُعرف صيغته عند العرض/التضمين بالتقارير والبريد =====
 LOGO_UPLOAD_DIR = os.path.join(app.static_folder, 'uploads')
 os.makedirs(LOGO_UPLOAD_DIR, exist_ok=True)
-_ALLOWED_LOGO_EXT = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
-_MAX_LOGO_BYTES = 3 * 1024 * 1024  # 3MB كحد أقصى - كافٍ جداً لشعار
+_ALLOWED_LOGO_EXT = {'png', 'jpg', 'jpeg', 'jfif', 'gif', 'webp', 'bmp'}
+_MAX_LOGO_BYTES = 15 * 1024 * 1024  # يُقبل حتى 15MB ثم يُصغَّر تلقائياً إلى 1024px
 
 
 def get_logo_path(settings=None):
@@ -345,7 +345,7 @@ def _inject_lang():
     org = (st.get('org_name_en') if lang == 'en' else '') or st.get('org_name') or ''
     logo, ver = _logo_file(st)
     return {'ui_lang': lang, 'ui_dir': 'ltr' if lang == 'en' else 'rtl', 'org_display': org,
-            'logo_url': url_for('static', filename='uploads/' + logo) + f'?v={ver}' if logo else '', 'icon_ver': ver}
+            'logo_url': url_for('static', filename='uploads/' + logo, v=ver) if logo else '', 'icon_ver': ver}
 
 
 def _logo_file(st=None):
@@ -356,6 +356,21 @@ def _logo_file(st=None):
     if name and os.path.isfile(path):
         return name, int(os.path.getmtime(path))
     return '', 0
+
+
+
+
+@app.url_defaults
+def _static_version(endpoint, values):
+    """رقم إصدار لكل ملف ثابت (?v=وقت التعديل) حتى لا يعرض المتصفح أو Cloudflare نسخة قديمة بعد التحديث"""
+    if endpoint != 'static' or 'v' in values or not values.get('filename'):
+        return
+    fn = values['filename']
+    try:
+        path = os.path.join(app.static_folder, fn)
+        values['v'] = int(os.path.getmtime(path))
+    except OSError:
+        pass
 
 
 _ICON_SIZES = {16, 32, 180, 192, 512}
@@ -2174,7 +2189,18 @@ def api_settings_logo():
     size = file.tell()
     file.seek(0)
     if size > _MAX_LOGO_BYTES:
-        return jsonify({'ok': False, 'error': 'حجم الملف كبير جداً (الحد الأقصى 3 ميجابايت)'}), 400
+        return jsonify({'ok': False, 'error': 'حجم الملف كبير جداً (الحد الأقصى 15 ميجابايت)'}), 400
+
+    # التحقق من أن الملف صورة فعلاً، وتصغيره وحفظه بصيغة PNG موحّدة
+    # (يحل مشكلة الصور الكبيرة وصيغ الهاتف، ويحافظ على الشفافية)
+    try:
+        from PIL import Image, ImageOps
+        img = Image.open(file.stream)
+        img = ImageOps.exif_transpose(img)
+        img = img.convert('RGBA')
+        img.thumbnail((1024, 1024))
+    except Exception:
+        return jsonify({'ok': False, 'error': 'تعذّرت قراءة الصورة — استخدم ملف PNG أو JPG سليماً'}), 400
 
     # نحذف أي ملف شعار قديم (بأي امتداد) قبل حفظ الجديد
     if old_filename:
@@ -2182,10 +2208,11 @@ def api_settings_logo():
         if os.path.isfile(old_path):
             os.remove(old_path)
 
-    new_filename = secure_filename(f'org_logo.{ext}')
-    file.save(os.path.join(LOGO_UPLOAD_DIR, new_filename))
+    new_filename = 'org_logo.png'
+    img.save(os.path.join(LOGO_UPLOAD_DIR, new_filename), 'PNG', optimize=True)
     db.set_setting('org_logo_filename', new_filename)
-    return jsonify({'ok': True, 'logo_url': url_for('static', filename=f'uploads/{new_filename}')})
+    logo, ver = _logo_file()
+    return jsonify({'ok': True, 'logo_url': url_for('static', filename='uploads/' + logo, v=ver)})
 
 
 # ============================================================
