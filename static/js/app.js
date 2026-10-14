@@ -1708,7 +1708,43 @@ function showDeviceSubtab(name) {
   document.querySelectorAll('#tab-devices .subtab-btn').forEach(b => b.classList.toggle('active', b.dataset.subtab === name));
 }
 
+/* ===== أجهزة ترسل البصمات عبر الإنترنت (ADMS) ===== */
+async function loadAdms() {
+  const d = await api('/api/adms/devices').catch(() => null);
+  if (!d) return;
+  document.getElementById('admsHost').textContent = d.host;
+  document.getElementById('admsCount').textContent = d.rows.length;
+  document.getElementById('admsTotal').textContent = d.rows.length;
+  document.getElementById('admsAll').checked = false;
+  document.getElementById('admsTable').innerHTML = d.rows.map(r => `<tr>
+    <td><input type="checkbox" class="adms-check" data-sn="${escapeHtml(r.sn)}" onchange="admsSelCount()"></td>
+    <td><a href="#" onclick="admsRename('${escapeHtml(r.sn)}', this.textContent);return false" title="تعديل الاسم">${escapeHtml(r.name || r.sn)}</a></td>
+    <td dir="ltr" data-notr>${escapeHtml(r.sn)}</td>
+    <td>${r.approved ? '<span style="color:#1e8e5a;font-weight:700">مقبول</span>' : '<span style="color:#b45309;font-weight:700">بانتظار الموافقة</span>'}</td>
+    <td dir="ltr">${escapeHtml(r.last_seen || '—')}</td><td>${r.today}</td><td>${r.punches}</td>
+    <td>${r.unmatched ? `<span style="color:#c0392b">${r.unmatched}</span>` : '0'}</td></tr>`).join('')
+    || '<tr><td colspan="8" style="color:var(--muted)">لم يتصل أي جهاز بعد</td></tr>';
+  admsSelCount();
+}
+function admsChecked() { return [...document.querySelectorAll('.adms-check:checked')].map(c => c.dataset.sn); }
+function admsSelCount() { document.getElementById('admsSel').textContent = admsChecked().length; }
+function admsCheckAll(on) { document.querySelectorAll('.adms-check').forEach(c => { c.checked = on; }); admsSelCount(); }
+async function admsBulk(action) {
+  const sns = admsChecked();
+  if (!sns.length) { toast('حدّد جهازاً واحداً على الأقل', true); return; }
+  if (action === 'delete' && !confirm(`حذف ${sns.length} جهاز من القائمة؟ (إن اتصل مجدداً يظهر بانتظار الموافقة)`)) return;
+  await api('/api/adms/devices/bulk', { method: 'POST', body: JSON.stringify({ sns, action }) });
+  toast('تم'); loadAdms();
+}
+async function admsRename(sn, cur) {
+  const name = prompt('اسم الجهاز:', cur || '');
+  if (!name) return;
+  await api('/api/adms/devices/bulk', { method: 'POST', body: JSON.stringify({ sns: [sn], action: 'rename', name }) });
+  loadAdms();
+}
+
 async function loadDevices() {
+  loadAdms();
   const data = await api('/api/devices');
   if (!data) return;
   devicesCache = data.rows;

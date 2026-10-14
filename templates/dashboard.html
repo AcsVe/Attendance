@@ -748,6 +748,27 @@
             </table>
           </div>
         </div>
+        <div class="card" id="admsCard">
+          <div class="card-title"><i class="fas fa-cloud-arrow-up" aria-hidden="true"></i> استقبال البصمات من الأجهزة عبر الإنترنت (ADMS / Cloud Server) — الأجهزة (<span id="admsCount">0</span>)</div>
+          <p style="font-size:.85rem;color:var(--muted);margin-bottom:8px">يرسل الجهاز كل بصمة فور حدوثها إلى الموقع، فلا يحتاج الخادم إلى الوصول لشبكة الأجهزة (يعمل حتى عند تشغيل الموقع من الهاتف الاحتياطي).
+            في الجهاز: <b>القائمة ← الاتصال ← Cloud Server Setting</b> (أو ADMS)، ثم:
+            عنوان الخادم <b dir="ltr" id="admsHost">—</b> والمنفذ <b dir="ltr">80</b> (أو 443 إن كان الجهاز يدعم HTTPS).
+            أي جهاز يتصل يظهر هنا «بانتظار الموافقة»، ولا تُقبل بصماته حتى توافق عليه — والجهاز يحتفظ بها ويعيد إرسالها بعد الموافقة.</p>
+          <div class="filter-bar" style="margin-bottom:8px">
+            <button class="btn btn-primary btn-sm" onclick="admsBulk('approve')"><i class="fas fa-check" aria-hidden="true"></i> موافقة</button>
+            <button class="btn btn-outline btn-sm" onclick="admsBulk('block')"><i class="fas fa-ban" aria-hidden="true"></i> إيقاف</button>
+            <button class="btn btn-outline btn-sm" onclick="admsBulk('resend')" title="يطلب من الجهاز إعادة إرسال كل سجلاته عند الاتصال القادم"><i class="fas fa-rotate" aria-hidden="true"></i> إعادة إرسال الكل</button>
+            <button class="btn btn-red btn-sm" onclick="admsBulk('delete')"><i class="fas fa-trash" aria-hidden="true"></i> حذف</button>
+            <span style="font-size:.85rem;color:var(--muted)">المحدد: <b id="admsSel">0</b> من <b id="admsTotal">0</b></span>
+            <button class="btn btn-outline btn-sm" onclick="loadAdms()" style="margin-inline-start:auto"><i class="fas fa-sync" aria-hidden="true"></i> تحديث</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th><input type="checkbox" id="admsAll" onchange="admsCheckAll(this.checked)" aria-label="تحديد الكل"></th><th>الاسم</th><th>الرقم التسلسلي</th><th>الحالة</th><th>آخر اتصال</th><th>بصمات اليوم</th><th>الإجمالي</th><th>أرقام غير مطابقة</th></tr></thead>
+              <tbody id="admsTable"><tr><td colspan="8" style="color:var(--muted)">لم يتصل أي جهاز بعد</td></tr></tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <!-- ===== استيراد att.mdb ===== -->

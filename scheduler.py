@@ -149,6 +149,11 @@ def _tick():
         mobile.leave_sweep()
     except Exception:   # noqa: BLE001 — لا يعطّل بقية المهام
         logger.exception('presence sweep failed')
+    try:
+        import adms
+        adms.flush()      # تحليل ما وصل من الأجهزة عبر الإنترنت ولم يُحلَّل بعد
+    except Exception:   # noqa: BLE001
+        logger.exception('adms flush failed')
     settings = db.get_all_settings()
     if settings.get('schedule_enabled') != '1':
         return

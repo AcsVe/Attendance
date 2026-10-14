@@ -86,6 +86,15 @@ def mask_secrets(d):
 # تطبيق الموظفين على الهاتف (تسجيل الحركات + Geofence + ربط الهاتف) — انظر mobile.py
 from mobile import bp as _mobile_bp  # noqa: E402
 app.register_blueprint(_mobile_bp)
+import adms as _adms  # noqa: E402 — استقبال البصمات من الأجهزة عبر الإنترنت (ADMS / Cloud Server)
+app.register_blueprint(_adms.bp)
+try:
+    _c = db.get_db()
+    _adms.init_tables(_c)
+    _c.commit()
+    _c.close()
+except Exception:
+    pass
 
 # حماية مصدر الصفحات (تشفير + منع الزر الأيمن والاختصارات) — انظر utils/page_shield.py
 from utils.page_shield import install as _shield  # noqa: E402
