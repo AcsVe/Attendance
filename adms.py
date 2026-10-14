@@ -92,7 +92,7 @@ def iclock_cdata():
             stamp = dev['att_stamp'] if dev['approved'] else '0'
             body = (f"GET OPTION FROM: {dev['sn']}\nATTLOGStamp={stamp or 0}\nOPERLOGStamp=9999\nATTPHOTOStamp=9999\n"
                     "ErrorDelay=60\nDelay=10\nTransTimes=00:00;12:00\nTransInterval=1\n"
-                    "TransFlag=TransData AttLog\nTimeZone=3\nRealtime=1\nEncrypt=None\n")
+                    "TransFlag=TransData AttLog\nRealtime=1\nEncrypt=None\n")
             return _text(body)
         table = (request.args.get('table') or '').upper()
         raw = request.get_data(as_text=True) or ''
