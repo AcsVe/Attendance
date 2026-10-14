@@ -1713,6 +1713,16 @@ def _resolve_import_file(forced_ext=None):
                                            'تأكد أن المسار صحيح وأن النظام (وليس المتصفح) يقدر يوصله فعلياً '
                                            '(نفس الجهاز أو تخزين متصل به).'}
         filename = os.path.basename(local_path)
+        # ملفات قواعد البيانات (مثل att.mdb لبرنامج ZKTime) تُقرأ من نسخة مؤقتة لا من الأصل،
+        # حتى لا يتعارض النظام مع البرنامج إن كان مفتوحاً، ولا يُترك أي قفل أو أثر على الملف الأصلي
+        if os.path.splitext(local_path)[1].lower() in ('.mdb', '.accdb', '.db', '.sqlite', '.sqlite3'):
+            import shutil
+            tmp_path = os.path.join(tempfile.gettempdir(), f'copy_{uuid.uuid4().hex}{os.path.splitext(local_path)[1]}')
+            try:
+                shutil.copy2(local_path, tmp_path)
+            except OSError as e:
+                return {'ok': False, 'error': f'تعذّر نسخ الملف للقراءة: {e}'}
+            return {'ok': True, 'path': tmp_path, 'filename': filename, 'is_temp': True}
         return {'ok': True, 'path': local_path, 'filename': filename, 'is_temp': False}
 
     return {'ok': False, 'error': 'يرجى اختيار ملف أو إدخال رابط الملف (Google Drive / OneDrive / '

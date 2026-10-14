@@ -54,7 +54,8 @@ def import_from_mdb(path, date_from=None, date_to=None, uid_to_employee=None):
                                        f'برامج التشغيل المتاحة حالياً: {drivers_list}'}
 
     uid_to_employee = uid_to_employee or {}
-    conn_str = rf"Driver={{{driver}}};DBQ={path};"
+    # قراءة فقط ودون حجز حصري — لا يكتب السائق أي شيء في الملف
+    conn_str = rf"Driver={{{driver}}};DBQ={path};ReadOnly=1;Exclusive=0;"
 
     # ملاحظة مهمة: تمرير التاريخ كنص خام ("2026-01-01") لسائق Access قد يُقارَن
     # بشكل خاطئ مع عمود CHECKTIME (نوعه datetime) - أحياناً يرجع صفر سجلاً
@@ -73,7 +74,7 @@ def import_from_mdb(path, date_from=None, date_to=None, uid_to_employee=None):
             return {'ok': False, 'error': f'صيغة التاريخ غير صحيحة: {date_from} / {date_to}'}
 
     try:
-        conn = pyodbc.connect(conn_str)
+        conn = pyodbc.connect(conn_str, readonly=True)
         cursor = conn.cursor()
         query = ("SELECT c.USERID, c.CHECKTIME, c.CHECKTYPE, u.NAME "
                  "FROM CHECKINOUT c LEFT JOIN USERINFO u ON c.USERID = u.USERID") + where_clause
