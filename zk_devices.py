@@ -20,7 +20,7 @@ from zk.exception import ZKNetworkError, ZKErrorConnection, ZKErrorResponse
 
 import db
 
-CONNECT_TIMEOUT = 8
+CONNECT_TIMEOUT = 15   # شبكات موجّهة بين أكثر من نطاق (Wi-Fi ← شبكة الأجهزة) قد تتأخر في الرد
 
 
 def set_user_overwrite(conn, uid, name, privilege=0, password='', group_id='', user_id='', card=0):
