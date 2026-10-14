@@ -143,6 +143,12 @@
   if (!DEV) { var m = document.cookie.match(/(?:^|; )att_dev=([0-9a-f]{64})/); DEV = m ? m[1] : ''; }
   var S = null, POS = null, busy = false, offset = 0, SAMPLES = [];
   function addSample(p) { SAMPLES.push({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, t: Date.now() }); if (SAMPLES.length > 10) SAMPLES.shift(); }
+  // أفضل قراءة خلال آخر 20 ثانية (الأدق) — يمنع تذبذب «داخل/خارج» بسبب قراءات الشبكة الضعيفة أو قفزات GPS داخل المباني
+  function bestPos(latest) {
+    var now = Date.now(), b = null;
+    SAMPLES.forEach(function (x) { if (now - x.t <= 20000 && (!b || x.acc < b.acc)) b = x; });
+    return b ? { coords: { latitude: b.lat, longitude: b.lng, accuracy: b.acc }, mock: !!(latest && latest.mock) } : latest;
+  }
   var LABEL = { 'in': 'حضور', 'out': 'انصراف', 'leave_out': 'خروج مؤقت', 'leave_back': 'عودة من الخروج' };
   var STATE = { '': 'لم تسجّل حضورك اليوم بعد', 'in': 'أنت في الدوام', 'leave_out': 'أنت في خروج مؤقت', 'leave_back': 'أنت في الدوام (عدت من الخروج)', 'out': 'انتهى دوامك اليوم' };
   function $(id) { return document.getElementById(id); }
@@ -193,15 +199,15 @@
   }
   window.attNativeLocation = function (d) {   // يستدعيها تطبيق أندرويد مع كل قراءة
     if (d.error) { var g = $('gps'); g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-location-crosshairs" aria-hidden="true"></i><span>' + esc(d.error) + '</span>'; return; }
-    POS = { coords: { latitude: d.lat, longitude: d.lng, accuracy: d.accuracy }, mock: !!d.mock };
-    addSample(POS); render();
+    var p = { coords: { latitude: d.lat, longitude: d.lng, accuracy: d.accuracy }, mock: !!d.mock };
+    addSample(p); POS = bestPos(p); render();
   };
   if (NATIVE) {
     try { NATIVE.startLocation(); } catch (e) {}
   } else if ('geolocation' in navigator) {
-    navigator.geolocation.watchPosition(function (p) { POS = p; addSample(p); render(); },
+    navigator.geolocation.watchPosition(function (p) { addSample(p); POS = bestPos(p); render(); },
       function (e) { var g = $('gps'); g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-location-crosshairs" aria-hidden="true"></i><span>' + (e.code === 1 ? 'اسمح للمتصفح باستخدام موقعك (من إعدادات الموقع) ثم أعد فتح الصفحة' : 'تعذّر تحديد الموقع — شغّل GPS') + '</span>'; },
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 });
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
   } else { $('gps').innerHTML = '<span>هذا المتصفح لا يدعم تحديد الموقع</span>'; }
 
   // ===== البيانات =====

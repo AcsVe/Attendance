@@ -286,14 +286,23 @@ function siteEdit(id) {
 
 function siteMyLocation() {
   if (!navigator.geolocation) { toast('المتصفح لا يدعم تحديد الموقع', true); return; }
-  toast('جارٍ تحديد موقعك…');
-  navigator.geolocation.getCurrentPosition(p => {
-    document.getElementById('siteLat').value = p.coords.latitude.toFixed(6);
-    document.getElementById('siteLng').value = p.coords.longitude.toFixed(6);
+  // نجمع القراءات 15 ثانية ونأخذ الأدق — قراءة واحدة (خاصة من الكمبيوتر) قد تبعد مئات الأمتار
+  toast('جارٍ تحديد موقعك بدقة… (15 ثانية)');
+  let best = null;
+  const id = navigator.geolocation.watchPosition(p => {
+    if (!best || p.coords.accuracy < best.coords.accuracy) best = p;
+  }, () => {}, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
+  setTimeout(() => {
+    navigator.geolocation.clearWatch(id);
+    if (!best) { toast('تعذّر تحديد الموقع — اسمح للمتصفح باستخدامه', true); return; }
+    const acc = Math.round(best.coords.accuracy);
+    document.getElementById('siteLat').value = best.coords.latitude.toFixed(6);
+    document.getElementById('siteLng').value = best.coords.longitude.toFixed(6);
     siteDraw();
-    if (siteMap) siteMap.setView([p.coords.latitude, p.coords.longitude], 17);
-    toast(`تم — دقة ${Math.round(p.coords.accuracy)} م`);
-  }, () => toast('تعذّر تحديد الموقع — اسمح للمتصفح باستخدامه', true), { enableHighAccuracy: true, timeout: 20000 });
+    if (siteMap) siteMap.setView([best.coords.latitude, best.coords.longitude], 18);
+    if (acc > 30) alert(`دقة الموقع ${acc} م — غير كافية لتحديد موقع العمل.\n\nالكمبيوتر يقدّر موقعه من الشبكة وقد يبعد مئات الأمتار. الأفضل:\n• انقر على مكان المبنى مباشرة في الخريطة، أو\n• افتح هذه الصفحة من الهاتف وأنت داخل المبنى (GPS مفعّل) ثم اضغط «موقعي الحالي».`);
+    else toast(`تم — دقة ${acc} م`);
+  }, 15000);
 }
 
 async function siteSave() {
@@ -306,7 +315,7 @@ async function siteSave() {
   };
   const d = await api(id ? '/api/mobile/sites/' + id : '/api/mobile/sites', { method: id ? 'PUT' : 'POST', body: JSON.stringify(body) });
   if (!d) return;
-  toast('حُفظ الموقع');
+  toast('حُفظ الموقع — يُطبَّق فوراً على حالة الموظفين، ويتحدّث في هواتفهم خلال دقيقة' + (d.recomputed ? ` (أُعيد حساب ${d.recomputed} قراءة)` : ''));
   siteReset();
   loadSites();
 }

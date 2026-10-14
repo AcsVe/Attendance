@@ -1304,8 +1304,9 @@ def api_sites():
             conn.execute("INSERT INTO work_sites (name, lat, lng, radius_m, depts_json, active, ips, ip_required) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                          (p['name'], p['lat'], p['lng'], p['radius_m'], p['depts_json'], p['active'], p['ips'], p['ip_required']))
             _audit(conn, 'site_add', 'work_site', p['name'])
+            fixed = recompute_presence_today(conn)
             conn.commit()
-            return jsonify({'ok': True})
+            return jsonify({'ok': True, 'recomputed': fixed})
         depts = sorted({r['dept'] for r in conn.execute("SELECT DISTINCT dept FROM employees WHERE dept IS NOT NULL AND dept != ''")})
         counts = {}
         for r in conn.execute("SELECT site_id, COUNT(*) AS n FROM mobile_punches WHERE status = 'accepted' GROUP BY site_id"):
@@ -1337,8 +1338,9 @@ def api_site_edit(site_id):
                 conn.execute("UPDATE work_sites SET name = ?, lat = ?, lng = ?, radius_m = ?, depts_json = ?, active = ?, ips = ?, ip_required = ? WHERE id = ?",
                              (p['name'], p['lat'], p['lng'], p['radius_m'], p['depts_json'], p['active'], p['ips'], p['ip_required'], site_id))
             _audit(conn, 'site_edit', 'work_site', str(site_id))
+        fixed = recompute_presence_today(conn)
         conn.commit()
-        return jsonify({'ok': True})
+        return jsonify({'ok': True, 'recomputed': fixed})
     finally:
         conn.close()
 
@@ -2295,6 +2297,37 @@ def _inside(conn, emp, lat, lng, accuracy):
     if best is None:
         return None, None, None
     return (1 if best[0] <= 0 else 0), best[1], best[2]
+
+
+def recompute_presence_today(conn):
+    """بعد تعديل مواقع العمل: إعادة حساب «داخل/خارج» لقراءات اليوم بالمواقع الجديدة،
+    وحذف تنبيهات «خارج الموقع» التي لم تعد صحيحة (حتى لا يبقى الموظف خارجاً حتى القراءة التالية)"""
+    date = now_local().strftime('%Y-%m-%d')
+    emps = {}
+    changed = 0
+    for r in conn.execute("SELECT id, employee_id, lat, lng, accuracy, inside FROM presence_pings "
+                          "WHERE date = ? AND status = 'ok' AND lat IS NOT NULL AND lng IS NOT NULL", (date,)).fetchall():
+        emp = emps.get(r['employee_id'])
+        if emp is None:
+            emp = emps[r['employee_id']] = conn.execute("SELECT * FROM employees WHERE id = ?", (r['employee_id'],)).fetchone() or False
+        if not emp:
+            continue
+        inside, dist, _s = _inside(conn, emp, r['lat'], r['lng'], r['accuracy'])
+        if inside != r['inside']:
+            changed += 1
+        conn.execute("UPDATE presence_pings SET inside = ?, distance_m = ? WHERE id = ?",
+                     (inside, round(dist, 1) if dist is not None else None, r['id']))
+    for ev in conn.execute("SELECT id, employee_id, start_ts, end_ts, open FROM presence_events WHERE date = ? AND kind = 'outside'", (date,)).fetchall():
+        still = conn.execute("SELECT COUNT(*) FROM presence_pings WHERE employee_id = ? AND date = ? AND ts BETWEEN ? AND ? "
+                             "AND status = 'ok' AND inside = 0", (ev['employee_id'], date, ev['start_ts'], ev['end_ts'])).fetchone()[0]
+        if not still:
+            conn.execute("DELETE FROM presence_events WHERE id = ?", (ev['id'],))
+        elif ev['open']:
+            last = conn.execute("SELECT inside FROM presence_pings WHERE employee_id = ? AND date = ? AND status = 'ok' "
+                                "ORDER BY ts DESC, id DESC LIMIT 1", (ev['employee_id'], date)).fetchone()
+            if last and last['inside'] == 1:
+                conn.execute("UPDATE presence_events SET open = 0 WHERE id = ?", (ev['id'],))
+    return changed
 
 
 def _event_upsert(conn, emp, date, kind, start_ts, end_ts, details=''):
