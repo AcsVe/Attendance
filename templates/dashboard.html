@@ -218,7 +218,7 @@
         </div>
         <div class="filter-bar">
           <select id="repDept" class="search-input" onchange="loadReports(1)"><option value="">كل الأقسام</option></select>
-          <select id="repEmployee" class="search-input" multiple size="4" style="min-width:180px" onchange="loadReports(1)" title="اضغطي Ctrl (أو Cmd على ماك) واختاري لتحديد أكثر من موظف معاً - اتركيها بدون تحديد = كل الموظفين"></select>
+          <select id="repEmployee" class="search-input" multiple size="4" style="min-width:180px" onchange="loadReports(1)" title="اضغط Ctrl (أو Cmd على ماك) واختر لتحديد أكثر من موظف معاً — اتركها دون تحديد لعرض كل الموظفين"></select>
           <button type="button" class="btn btn-outline btn-sm" onclick="selectAllFilteredEmployees('repDept','repEmployee')" title="تحديد كل موظفي القسم المختار حالياً (أو الجميع إن لم يُحدَّد قسم)"><i class="fas fa-check-double" aria-hidden="true"></i> تحديد كل موظفي القسم</button>
           <input type="date" id="repFrom" class="search-input" onchange="loadReports(1)" style="min-width:140px">
           <input type="date" id="repTo" class="search-input" onchange="loadReports(1)" style="min-width:140px">
@@ -1139,7 +1139,7 @@
         <div class="card-title"><i class="fab fa-google-drive" aria-hidden="true"></i> نسخة احتياطية على Google Drive</div>
         <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">
           بديل عن OneDrive أعلاه - لا يحتاج صلاحية "Global Admin" على أي مستأجر، لكنه يتطلب حساب Google Cloud
-          (مجاني) لإنشاء "Service Account" وتنزيل ملف JSON صغير منه، ومشاركة مجلد على Drive معه. ضعي مسار
+          (مجاني) لإنشاء "Service Account" وتنزيل ملف JSON صغير منه، ومشاركة مجلد على Drive معه. ضع مسار
           ملف الـJSON على جهاز الخادم مباشرة (لا يُرفَع عبر المتصفح لأنه سرّي).
         </p>
         <div class="form-grid quad">

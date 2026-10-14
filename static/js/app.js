@@ -330,7 +330,7 @@ async function loadLastImportNotice() {
           <b>آخر عملية سحب/استيراد بصمات:</b> ${escapeHtml(data.label)} — ${escapeHtml(data.timestamp)}
           ${data.username ? ' بواسطة ' + escapeHtml(data.username) : ''}
           ${data.detail ? `<br><span style="font-size:.85rem">${escapeHtml(data.detail)}</span>` : ''}
-          <br><span style="font-size:.8rem">تأكدي من هذا قبل تكرار نفس عملية السحب/الاستيراد لتفادي الانتظار غير الضروري (خصوصاً لملفات كبيرة).</span>
+          <br><span style="font-size:.8rem">تأكّد من هذا قبل تكرار نفس عملية السحب/الاستيراد لتفادي الانتظار غير الضروري (خصوصاً لملفات كبيرة).</span>
         </div>
         <button class="btn btn-outline btn-sm" style="white-space:nowrap" onclick="dismissLastImportNotice()" aria-label="إغلاق" title="إغلاق"><i class="fas fa-times" aria-hidden="true"></i></button>
       </div>`;

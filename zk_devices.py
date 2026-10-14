@@ -48,15 +48,97 @@ def set_user_overwrite(conn, uid, name, privilege=0, password='', group_id='', u
             raise first_error  # نفس رسالة الخطأ الأصلية أوضح للمستخدم من خطأ إعادة المحاولة
 
 
-def _connect(device_row):
+_DEV_LOCKS = {}            # قفل لكل جهاز: أجهزة ZKTeco تقبل اتصالاً واحداً فقط في الوقت نفسه
+_DEV_LOCKS_GUARD = threading.Lock()
+_LIVE_DEVICES = set()      # أجهزة تشغلها المراقبة الحية باتصال دائم
+
+
+def _dev_key(device_row):
+    return (str(device_row['ip']).strip(), int(device_row['port'] or 4370))
+
+
+def _friendly(e, device_row):
+    """رسالة عربية واضحة بدل نص الاستثناء التقني"""
+    t = str(e)
+    ip, port = _dev_key(device_row)
+    if 'Unauthenticated' in t:
+        return 'كلمة مرور الاتصال (Comm Key) غير صحيحة — طابقها مع إعداد الجهاز: القائمة ← الاتصال ← كلمة المرور'
+    if '10061' in t or 'refused' in t.lower() or 'errno 111' in t.lower():
+        return f'الجهاز {ip} يرفض الاتصال على المنفذ {port} — تحقق من رقم المنفذ (الافتراضي 4370)'
+    if 'timed out' in t.lower() or '10060' in t or 'timeout' in t.lower():
+        return f'لا يوجد رد من {ip}:{port} — تأكد أن الجهاز يعمل ومتصل بنفس الشبكة، وأن عنوان IP صحيح'
+    if '10065' in t or '10051' in t or 'unreachable' in t.lower() or 'errno 113' in t.lower() or 'errno 101' in t.lower():
+        return f'لا يوجد طريق للوصول إلى {ip} من هذا الكمبيوتر — الجهاز على شبكة مختلفة'
+    return t
+
+
+def _connect(device_row, live=False):
+    """اتصال موثوق بالجهاز:
+    • بلا فحص ping مسبق (كثير من الشبكات تحجب ping فيفشل الاتصال رغم صحة البيانات)
+    • TCP أولاً ثم UDP (أجهزة قديمة)، مع إعادة محاولة عند انشغال الجهاز
+    • قفل لكل جهاز حتى لا تتزاحم السحب التلقائي والاختبار اليدوي على اتصال الجهاز الوحيد"""
+    import time as _t
     pwd = device_row['password'] or '0'
     try:
         pwd = int(pwd)
     except (TypeError, ValueError):
         pwd = 0
-    zk = ZK(device_row['ip'], port=int(device_row['port'] or 4370), timeout=CONNECT_TIMEOUT,
-            password=pwd, force_udp=False, ommit_ping=False)
-    return zk.connect()
+    key = _dev_key(device_row)
+    if not live and key in _LIVE_DEVICES:
+        raise ZKErrorConnection('المراقبة الحية تشغل الاتصال بهذا الجهاز — أوقفها أولاً ثم أعد المحاولة')
+    lock = None
+    if not live:
+        with _DEV_LOCKS_GUARD:
+            lock = _DEV_LOCKS.setdefault(key, threading.Lock())
+        if not lock.acquire(timeout=45):
+            raise ZKErrorConnection('الجهاز مشغول بعملية أخرى (سحب أو مزامنة) — أعد المحاولة بعد دقيقة')
+    last = None
+    try:
+        # فحص منفذ TCP مباشرة — يعطي سبباً واضحاً (رفض / لا رد / شبكة أخرى)
+        import socket as _so
+        tcp_err = None
+        try:
+            _so.create_connection(key, timeout=CONNECT_TIMEOUT).close()
+        except OSError as e:
+            tcp_err = e
+        modes = (False,) if tcp_err is None else (True,)   # المنفذ مغلق عبر TCP: نجرّب UDP (أجهزة قديمة)
+        for udp in modes:
+            for attempt in range(1 if udp else 2):
+                try:
+                    conn = ZK(key[0], port=key[1], timeout=CONNECT_TIMEOUT, password=pwd,
+                              force_udp=udp, ommit_ping=True).connect()
+                    if lock:
+                        orig = conn.disconnect
+
+                        def _disc(_orig=orig, _lock=lock):
+                            try:
+                                return _orig()
+                            finally:
+                                if _lock.locked():
+                                    try:
+                                        _lock.release()
+                                    except RuntimeError:
+                                        pass
+                        conn.disconnect = _disc
+                    return conn
+                except ZKErrorResponse as e:
+                    if 'Unauthenticated' in str(e):
+                        raise ZKErrorResponse(_friendly(e, device_row))
+                    last = e
+                except Exception as e:
+                    last = e
+                _t.sleep(1.5)
+        if tcp_err is not None:
+            raise ZKNetworkError(_friendly(tcp_err, device_row))
+        raise ZKNetworkError('الجهاز يستقبل الاتصال لكنه لم يستجب لبروتوكول ZKTeco — قد يكون مشغولاً باتصال آخر '
+                             '(برنامج ZKTime أو الهاتف الاحتياطي)، أو أن المنفذ لجهاز آخر' + (f' ({last})' if last else ''))
+    except Exception:
+        if lock and lock.locked():
+            try:
+                lock.release()
+            except RuntimeError:
+                pass
+        raise
 
 
 def test_connection(device_row):
@@ -361,8 +443,10 @@ def _record_live_punch_and_analyze(name, date_str, time_str):
 
 
 def _live_worker(device_row, uid_to_employee):
+    key = _dev_key(device_row)
     try:
-        conn = _connect(device_row)
+        conn = _connect(device_row, live=True)
+        _LIVE_DEVICES.add(key)
     except Exception as e:
         with _live_state['lock']:
             _live_state['events'].append({
@@ -406,6 +490,7 @@ def _live_worker(device_row, uid_to_employee):
             })
             _live_state['next_id'] += 1
     finally:
+        _LIVE_DEVICES.discard(key)
         try:
             conn.disconnect()
         except Exception:
