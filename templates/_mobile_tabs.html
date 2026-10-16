@@ -86,7 +86,12 @@
       <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="msGeo"> منع التسجيل من خارج مواقع العمل</label>
       <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="msLeave"> خصم الخروج المؤقت من ساعات العمل</label>
       <div class="form-group"><label>أقصى خطأ مقبول في دقة الموقع (متر)</label><input type="number" id="msAcc" min="10" max="1000"></div>
-      <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="msApp"> التسجيل من تطبيق الموظف (APK) فقط — يكشف تطبيقات الموقع الوهمي</label>
+      <div class="form-group"><label>التسجيل من تطبيق الموظف (يكشف تطبيقات الموقع الوهمي)</label>
+        <select id="msApp" class="search-input">
+          <option value="0">مسموح من التطبيق أو صفحة الويب للجميع</option>
+          <option value="android">هواتف أندرويد من التطبيق فقط — الآيفون من صفحة الويب</option>
+          <option value="1">الجميع من تطبيق أندرويد فقط (يمنع الآيفون)</option>
+        </select></div>
       <div class="form-group"><label>بصمة الوجه / الإصبع قبل كل حركة</label>
         <select id="msBio" class="search-input"><option value="off">إيقاف</option><option value="optional">اختيارية (لمن يفعّلها)</option><option value="required">إلزامية لكل الموظفين</option></select></div>
             <div class="form-group"><label>الحركة المشبوهة (موقع ثابت تماماً، قفزة غير منطقية، خارج شبكة العمل)</label>

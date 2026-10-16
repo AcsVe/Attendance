@@ -207,6 +207,18 @@ def _ip_in(ip, ips_text):
     return False
 
 
+def is_android_browser():
+    """هاتف أندرويد يفتح صفحة الموظف من المتصفح (لا من تطبيق RAS Check-in)"""
+    ua = request.headers.get('User-Agent', '')
+    return 'Android' in ua and 'AttendanceApp' not in ua and not request.headers.get('X-App')
+
+
+def require_app(cfg):
+    """هل يلزم هذا الطلب أن يأتي من تطبيق أندرويد؟ (الكل، أو هواتف أندرويد فقط — الآيفون يبقى من الصفحة)"""
+    v = cfg.get('mobile_require_app', '0')
+    return v == '1' or (v == 'android' and is_android_browser())
+
+
 def check_integrity(conn, emp, kind, data, lat, lng, accuracy, site, cfg):
     """حماية من تطبيقات الموقع الوهمي (Fake GPS).
     يرجع (سبب الرفض أو '', [علامات اشتباه], المصدر app/browser)."""
@@ -232,8 +244,8 @@ def check_integrity(conn, emp, kind, data, lat, lng, accuracy, site, cfg):
         return 'تم اكتشاف تطبيق موقع وهمي (Fake GPS) على هاتفك — أغلقه وألغِ «تطبيق الموقع الوهمي» من خيارات المطوّر ثم أعد المحاولة', flags, source
     if source == 'app' and data.get('rooted'):
         flags.append('الهاتف معدّل (root)')
-    if cfg.get('mobile_require_app', '0') == '1' and source != 'app':
-        return 'التسجيل متاح من تطبيق الموظف فقط — نزّله من صفحة التطبيق ثم سجّل منه', flags, source
+    if source != 'app' and require_app(cfg):
+        return 'على هواتف أندرويد يتم التسجيل من تطبيق RAS Check-in فقط — نزّله من صفحة التطبيقات ثم سجّل منه', flags, source
     # 2) شبكة العمل: الموقع قد يشترط الاتصال بشبكة Wi-Fi المؤسسة (لا يزوّرها تطبيق الموقع الوهمي)
     if site and (site.get('ips') or '').strip():
         if not _ip_in(_ip(), site['ips']):
@@ -661,7 +673,7 @@ def me_status(conn, acc, emp, cfg):
         'last': last, 'allowed': NEXT.get(last, ['in']),
         'anywhere': bool(acc['anywhere']) or cfg.get('mobile_require_geofence', '1') != '1',
         'max_accuracy': float(cfg.get('mobile_max_accuracy') or 150),
-        'require_app': cfg.get('mobile_require_app', '0') == '1',
+        'require_app': require_app(cfg),
         'sites': [{'name': s['name'], 'lat': s['lat'], 'lng': s['lng'], 'radius': s['radius_m']} for s in sites],
         'month': days, 'recent': recent,
         'summary': {
@@ -1362,6 +1374,8 @@ def api_mobile_settings():
                 v = data[k]
                 if k == 'mobile_suspicious':
                     v = 'reject' if v == 'reject' else 'flag'
+                elif k == 'mobile_require_app':   # 0 = الكل من أي مكان، android = هواتف أندرويد من التطبيق فقط، 1 = الجميع من التطبيق فقط
+                    v = 'android' if v == 'android' else '1' if v in (True, 1, '1', 'true', 'on', 'all') else '0'
                 elif k == 'mobile_biometric':
                     v = v if v in ('off', 'optional', 'required') else 'off'
                 elif k == 'presence_scope':
@@ -1379,7 +1393,7 @@ def api_mobile_settings():
                         v = str(max(10, min(1000, int(float(v)))))
                     except (TypeError, ValueError):
                         continue
-                elif k not in ('mobile_suspicious', 'mobile_biometric', 'presence_scope', 'presence_depts_json'):
+                elif k not in ('mobile_suspicious', 'mobile_require_app', 'mobile_biometric', 'presence_scope', 'presence_depts_json'):
                     v = '1' if v in (True, 1, '1', 'true', 'on') else '0'
                 if str(old.get(k, '')) != str(v):
                     changed.append(f"{k}: {old.get(k, '')} → {v}")

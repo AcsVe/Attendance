@@ -182,7 +182,7 @@ async function loadMobileSettings() {
   document.getElementById('msGeo').checked = s.mobile_require_geofence === '1';
   document.getElementById('msLeave').checked = s.mobile_leave_deduct === '1';
   document.getElementById('msAcc').value = s.mobile_max_accuracy;
-  document.getElementById('msApp').checked = s.mobile_require_app === '1';
+  document.getElementById('msApp').value = ['0', 'android', '1'].includes(s.mobile_require_app) ? s.mobile_require_app : '0';
   document.getElementById('msSusp').value = s.mobile_suspicious || 'flag';
   document.getElementById('msBio').value = s.mobile_biometric || 'off';
   if (!PERMS.can_edit_org_settings) document.querySelectorAll('#mobileSettingsCard input, #mobileSettingsCard button').forEach(e => { e.disabled = true; });
@@ -193,7 +193,7 @@ async function msSave() {
     mobile_enabled: document.getElementById('msEnabled').checked, mobile_bind_device: document.getElementById('msBind').checked,
     mobile_require_geofence: document.getElementById('msGeo').checked, mobile_leave_deduct: document.getElementById('msLeave').checked,
     mobile_max_accuracy: document.getElementById('msAcc').value,
-    mobile_require_app: document.getElementById('msApp').checked, mobile_suspicious: document.getElementById('msSusp').value,
+    mobile_require_app: document.getElementById('msApp').value, mobile_suspicious: document.getElementById('msSusp').value,
     mobile_biometric: document.getElementById('msBio').value,
   }) });
   toast('حُفظت إعدادات التطبيق');

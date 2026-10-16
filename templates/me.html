@@ -192,7 +192,7 @@
     (S && S.sites || []).forEach(function (s) { var d = dist(POS.coords.latitude, POS.coords.longitude, s.lat, s.lng); if (bd === null || d - s.radius < bd - best.radius) { best = s; bd = d; } });
     var inside = S && (S.anywhere || S.override || (best && bd - Math.min(acc, 30) <= best.radius));
     var accOk = !S || acc <= S.max_accuracy;
-    if (S && S.require_app && !NATIVE) { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-mobile-screen" aria-hidden="true"></i><span>التسجيل متاح من تطبيق الموظف فقط — <a href="/app">نزّل التطبيق</a></span>'; return { ok: false }; }
+    if (S && S.require_app && !NATIVE) { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-mobile-screen" aria-hidden="true"></i><span>على هذا الهاتف يتم التسجيل من تطبيق RAS Check-in فقط — <a href="/app">نزّل التطبيق</a></span>'; return { ok: false }; }
     if (POS.mock) { g.className = 'gps bad'; g.innerHTML = '<i class="fas fa-ban" aria-hidden="true"></i><span>تم اكتشاف تطبيق موقع وهمي على هاتفك — أغلقه للتمكن من التسجيل</span>'; return { ok: false }; }
     if (!accOk && acc >= 1000) {   // «الموقع التقريبي» يعطي دقة بالكيلومترات — يلزم الموقع الدقيق
       g.className = 'gps bad';
