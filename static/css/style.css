@@ -359,3 +359,7 @@ html.modal-lock .modal, html.modal-lock .sidebar { touch-action: pan-y; }
 .sync-roles label input[type=radio] { width: 18px !important; height: 18px; padding: 0 !important; margin: 0 0 4px; align-self: flex-start; accent-color: var(--primary); box-shadow: none !important; border: none !important; }
 .sync-roles label small { color: var(--muted); font-size: .78rem; }
 .sync-roles label.on { border-color: var(--primary); background: #eef6f9; }
+
+/* الخرائط (Leaflet) تستخدم طبقات z-index عالية (400–1000) فكانت تظهر فوق القائمة الجانبية والشريط السفلي والنوافذ المنبثقة —
+   نحصرها داخل حاوية الخريطة نفسها */
+.leaflet-container { position: relative; z-index: 0; isolation: isolate; }

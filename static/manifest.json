@@ -1,6 +1,6 @@
 {
-  "name": "RAS Attendance Admin",
-  "short_name": "RAS Admin",
+  "name": "Att Dashboard",
+  "short_name": "Att Dashboard",
   "description": "نظام ويب لتحليل سجلات الحضور والانصراف وربط أجهزة البصمة",
   "start_url": "/dashboard",
   "id": "/dashboard",

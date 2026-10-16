@@ -23,7 +23,7 @@
     <div class="app">
       <div class="ic" style="background:linear-gradient(135deg,#1e8e5a,#2fb37a)"><i class="fas fa-fingerprint" aria-hidden="true"></i></div>
       <div style="flex:1">
-        <h2>تطبيق الموظف — <span dir="ltr">RAS Check-in</span></h2>
+        <h2>تطبيق الموظف — <span dir="ltr">Check-in</span></h2>
         <p class="muted">حضور، انصراف، خروج مؤقت من داخل موقع العمل. يكشف تطبيقات الموقع الوهمي.</p>
         {% if files.employee %}<a class="btn btn-p" style="margin-top:10px;width:100%" href="{{ files.employee.url }}" download><i class="fab fa-android" aria-hidden="true"></i> تنزيل للأندرويد ({{ files.employee.size }} MB)</a>
         {% else %}<div class="na" style="margin-top:10px">ملف التطبيق غير متوفر بعد على الخادم</div>{% endif %}
@@ -36,7 +36,7 @@
     <div class="app">
       <div class="ic" style="background:linear-gradient(135deg,#1B6E8C,#2E4E7A)"><i class="fas fa-user-shield" aria-hidden="true"></i></div>
       <div style="flex:1">
-        <h2>تطبيق الإدارة — <span dir="ltr">RAS Admin</span></h2>
+        <h2>تطبيق الإدارة — <span dir="ltr">Att Dashboard</span></h2>
         <p class="muted">التقارير، المتابعة المباشرة، الموظفون، الأجهزة — بصلاحيات حسابك. يُثبَّت بجانب تطبيق الموظف على نفس الهاتف.</p>
         {% if files.admin %}<a class="btn btn-p" style="margin-top:10px;width:100%" href="{{ files.admin.url }}" download><i class="fab fa-android" aria-hidden="true"></i> تنزيل للأندرويد ({{ files.admin.size }} MB)</a>
         {% else %}<div class="na" style="margin-top:10px">ملف التطبيق غير متوفر بعد على الخادم</div>{% endif %}

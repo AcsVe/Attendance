@@ -40,14 +40,14 @@ android {
         employee {
             dimension 'audience'
             applicationIdSuffix '.employee'
-            resValue 'string', 'app_name', 'RAS Check-in'
+            resValue 'string', 'app_name', 'Check-in'
             buildConfigField 'String', 'START_PATH', '"/me"'
             buildConfigField 'boolean', 'EMPLOYEE', 'true'
         }
         admin {
             dimension 'audience'
             applicationIdSuffix '.admin'
-            resValue 'string', 'app_name', 'RAS Admin'
+            resValue 'string', 'app_name', 'Att Dashboard'
             buildConfigField 'String', 'START_PATH', '"/dashboard"'
             buildConfigField 'boolean', 'EMPLOYEE', 'false'
         }

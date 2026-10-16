@@ -82,8 +82,8 @@ self.addEventListener('fetch', (event) => {
 /* ===== إشعارات فحص الحضور (Web Push) ===== */
 self.addEventListener('push', (event) => {
   let d = {};
-  try { d = event.data ? event.data.json() : {}; } catch (e) { d = { title: 'RAS Check-in', body: event.data ? event.data.text() : '' }; }
-  event.waitUntil(self.registration.showNotification(d.title || 'RAS Check-in', {
+  try { d = event.data ? event.data.json() : {}; } catch (e) { d = { title: 'Check-in', body: event.data ? event.data.text() : '' }; }
+  event.waitUntil(self.registration.showNotification(d.title || 'Check-in', {
     body: d.body || '', icon: '/static/icons/icon-192.png', badge: '/static/icons/favicon-32.png',
     data: { url: d.url || '/me' }, requireInteraction: true, tag: 'presence-check',
   }));

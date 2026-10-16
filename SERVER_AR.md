@@ -71,6 +71,6 @@ cd ~ && curl -sL -H "Authorization: Bearer $(cat ~/.iaj_github_token)" \
 ## التطبيقات (APK) والتثبيت
 
 - تُبنى تلقائياً على GitHub (Actions ← Android APKs) عند أي تعديل في `android/`، وتُرفع إلى `static/apk/` فتصل للكمبيوتر مع `update.bat`.
-- صفحة التنزيل: `https://3.iajaward.org/app` — «RAS Check-in» للموظفين، و«RAS Admin» لمستخدمي النظام (يُثبَّتان معاً على الهاتف نفسه).
+- صفحة التنزيل: `https://3.iajaward.org/app` — «Check-in» للموظفين، و«Att Dashboard» لمستخدمي النظام (يُثبَّتان معاً على الهاتف نفسه).
 - Windows: افتح النظام في Edge/Chrome ← زر «تثبيت على هذا الجهاز» أعلى الصفحة.
 - مفتاح توقيع APK في `android/keystore` (المستودع خاص). لاستبداله بأسرار GitHub: `ANDROID_KEYSTORE_B64` و`ANDROID_KEYSTORE_PASSWORD` و`ANDROID_KEY_ALIAS`.

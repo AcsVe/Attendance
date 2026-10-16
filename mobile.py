@@ -208,7 +208,7 @@ def _ip_in(ip, ips_text):
 
 
 def is_android_browser():
-    """هاتف أندرويد يفتح صفحة الموظف من المتصفح (لا من تطبيق RAS Check-in)"""
+    """هاتف أندرويد يفتح صفحة الموظف من المتصفح (لا من تطبيق Check-in)"""
     ua = request.headers.get('User-Agent', '')
     return 'Android' in ua and 'AttendanceApp' not in ua and not request.headers.get('X-App')
 
@@ -245,7 +245,7 @@ def check_integrity(conn, emp, kind, data, lat, lng, accuracy, site, cfg):
     if source == 'app' and data.get('rooted'):
         flags.append('الهاتف معدّل (root)')
     if source != 'app' and require_app(cfg):
-        return 'على هواتف أندرويد يتم التسجيل من تطبيق RAS Check-in فقط — نزّله من صفحة التطبيقات ثم سجّل منه', flags, source
+        return 'على هواتف أندرويد يتم التسجيل من تطبيق Check-in فقط — نزّله من صفحة التطبيقات ثم سجّل منه', flags, source
     # 2) شبكة العمل: الموقع قد يشترط الاتصال بشبكة Wi-Fi المؤسسة (لا يزوّرها تطبيق الموقع الوهمي)
     if site and (site.get('ips') or '').strip():
         if not _ip_in(_ip(), site['ips']):
@@ -1578,7 +1578,7 @@ def api_myip():
 def me_app_info():
     """للتطبيق: هل التسجيل يتطلب التطبيق؟ (بدون بيانات حساسة)"""
     cfg = settings()
-    return jsonify({'ok': True, 'require_app': cfg.get('mobile_require_app', '0') == '1'})
+    return jsonify({'ok': True, 'require_app': require_app(cfg)})
 
 
 

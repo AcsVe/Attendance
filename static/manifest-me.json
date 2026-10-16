@@ -1,6 +1,6 @@
 {
-  "name": "RAS Check-in",
-  "short_name": "RAS Check-in",
+  "name": "Check-in",
+  "short_name": "Check-in",
   "description": "تسجيل الحضور والانصراف والخروج المؤقت من الهاتف ضمن مواقع العمل",
   "start_url": "/me",
   "id": "/me",

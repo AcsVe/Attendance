@@ -200,11 +200,11 @@ public class MainActivity extends Activity {
                 geoCallback = null;
             }
             if (ok && !hasFineLocation() && BuildConfig.EMPLOYEE) {
-                sendLocationError("اخترتَ «الموقع التقريبي» ولا يكفي لتسجيل الدوام — افتح إعدادات الهاتف ← التطبيقات ← RAS Check-in ← الأذونات ← الموقع، وفعّل «استخدام الموقع الدقيق»");
+                sendLocationError("اخترتَ «الموقع التقريبي» ولا يكفي لتسجيل الدوام — افتح إعدادات الهاتف ← التطبيقات ← Check-in ← الأذونات ← الموقع، وفعّل «استخدام الموقع الدقيق»");
                 return;
             }
             if (ok && wantLocation) startNativeLocation();
-            if (!ok && BuildConfig.EMPLOYEE) sendLocationError("اسمح للتطبيق باستخدام الموقع من إعدادات الهاتف ← التطبيقات ← RAS Check-in ← الأذونات");
+            if (!ok && BuildConfig.EMPLOYEE) sendLocationError("اسمح للتطبيق باستخدام الموقع من إعدادات الهاتف ← التطبيقات ← Check-in ← الأذونات");
         }
     }
 
@@ -251,8 +251,8 @@ public class MainActivity extends Activity {
         if (!hasFineLocation()) {
             if (askedFine) {   // سبق السؤال في هذه الجلسة — لا نكرر نافذة الإذن بلا نهاية
                 sendLocationError(hasLocation()
-                        ? "اخترتَ «الموقع التقريبي» ولا يكفي لتسجيل الدوام — افتح إعدادات الهاتف ← التطبيقات ← RAS Check-in ← الأذونات ← الموقع، وفعّل «استخدام الموقع الدقيق»"
-                        : "اسمح للتطبيق باستخدام الموقع من إعدادات الهاتف ← التطبيقات ← RAS Check-in ← الأذونات");
+                        ? "اخترتَ «الموقع التقريبي» ولا يكفي لتسجيل الدوام — افتح إعدادات الهاتف ← التطبيقات ← Check-in ← الأذونات ← الموقع، وفعّل «استخدام الموقع الدقيق»"
+                        : "اسمح للتطبيق باستخدام الموقع من إعدادات الهاتف ← التطبيقات ← Check-in ← الأذونات");
                 return;
             }
             askedFine = true;

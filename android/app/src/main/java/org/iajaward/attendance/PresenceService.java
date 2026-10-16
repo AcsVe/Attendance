@@ -96,7 +96,7 @@ public class PresenceService extends Service implements LocationListener {
             nm.createNotificationChannel(new NotificationChannel(CHANNEL_ALERT, "فحص الحضور", NotificationManager.IMPORTANCE_HIGH));
         }
         Notification n = builder(CHANNEL)
-                .setContentTitle("RAS Check-in")
+                .setContentTitle("Check-in")
                 .setContentText("يرسل التطبيق موقعك إلى النظام الآن (التحقق من التواجد أو مشاركة الموقع)")
                 .setSmallIcon(android.R.drawable.ic_menu_mylocation)
                 .setOngoing(true)

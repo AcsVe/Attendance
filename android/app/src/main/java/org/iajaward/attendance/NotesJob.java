@@ -128,7 +128,7 @@ public class NotesJob extends JobService {
         for (int i = 0; i < notes.length(); i++) {
             JSONObject x = notes.optJSONObject(i);
             if (x == null) continue;
-            String title = x.optString("title", BuildConfig.EMPLOYEE ? "RAS Check-in" : "RAS Admin"), body = x.optString("body", "");
+            String title = x.optString("title", BuildConfig.EMPLOYEE ? "Check-in" : "Att Dashboard"), body = x.optString("body", "");
             Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(ctx, CHANNEL_NOTES) : new Notification.Builder(ctx);
             Notification nt = b.setContentTitle(title)
                     .setContentText(body)
