@@ -954,3 +954,23 @@ async function lvPoll() {
   } catch (e) {}
 }
 document.addEventListener('DOMContentLoaded', () => { lvPoll(); setInterval(lvPoll, 120000); });
+
+
+/* ===== شريط تنبيهات التواجد: من هو خارج موقع العمل أو انقطع هاتفه الآن (يتحدّث كل دقيقة) ===== */
+const PR_KIND_TEXT = { outside: 'خارج الموقع', no_location: 'الموقع متوقف', no_signal: 'انقطاع الهاتف', missed_check: 'لم يردّ على الفحص', failed_check: 'فحص فاشل', leave_overdue: 'تجاوز وقت العودة' };
+async function prAlertPoll() {
+  if (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE !== 'admin') return;
+  try {
+    const r = await fetch('/api/mobile/presence/alerts', { credentials: 'same-origin' });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (!d || !d.ok) return;
+    const b = document.getElementById('prBanner'), nb = document.getElementById('prNavBadge');
+    if (!b) return;
+    b.classList.toggle('hide', !d.count); b.style.display = d.count ? 'flex' : 'none';
+    const parts = Object.entries(d.by_kind).map(([k, n]) => `${PR_KIND_TEXT[k] || k}: ${n}`).join(' · ');
+    document.getElementById('prBannerText').textContent = `تنبيهات التواجد الآن — ${d.count} موظف (${parts})`;
+    if (nb) { nb.classList.toggle('hide', !d.count); nb.textContent = d.count; }
+  } catch (e) {}
+}
+document.addEventListener('DOMContentLoaded', () => { prAlertPoll(); setInterval(prAlertPoll, 60000); });

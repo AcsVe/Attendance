@@ -2250,6 +2250,11 @@ def _duty(conn, emp, now):
     """('on' | 'leave' | 'off', وقت الحضور) حسب حركات اليوم (التطبيق وجهاز المدخل)"""
     moves = today_moves(conn, emp['id'], now.strftime('%Y-%m-%d'))
     if not moves:
+        # بصم على جهاز البصمة فقط (يصل مباشرة عبر الإنترنت أو بعد السحب): يُعدّ في الدوام حتى نهايته
+        r = conn.execute("SELECT MIN(time_in) AS t FROM punches WHERE name = ? AND date = ? AND time_in IS NOT NULL AND time_in != '' "
+                         "AND COALESCE(batch_id, '') NOT IN ('mobile', 'kiosk')", (emp['name'], now.strftime('%Y-%m-%d'))).fetchone()
+        if r and r['t']:
+            return 'on', r['t']
         return 'off', None
     first_in = next((m['time'] for m in moves if m['kind'] == 'in'), None)
     last = moves[-1]['kind']
@@ -2337,9 +2342,31 @@ def _event_upsert(conn, emp, date, kind, start_ts, end_ts, details=''):
     if ev:
         conn.execute("UPDATE presence_events SET end_ts = ?, minutes = ?, details = COALESCE(NULLIF(?, ''), details) WHERE id = ?",
                      (end_ts, max(mins, 0), details, ev['id']))
-    else:
-        conn.execute("INSERT INTO presence_events (employee_id, name, dept, date, kind, start_ts, end_ts, minutes, details, open) "
-                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)", (emp['id'], emp['name'], emp['dept'] or '', date, kind, start_ts, end_ts, max(mins, 0), details))
+        return False
+    conn.execute("INSERT INTO presence_events (employee_id, name, dept, date, kind, start_ts, end_ts, minutes, details, open) "
+                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)", (emp['id'], emp['name'], emp['dept'] or '', date, kind, start_ts, end_ts, max(mins, 0), details))
+    return True
+
+
+_ALERT_TEXT = {
+    'outside': ('أنت خارج موقع العمل', 'رصد النظام أنك خارج موقع العمل منذ {m} دقيقة أثناء الدوام. عُد إلى موقع العمل، أو سجّل «خروج مؤقت» إن كان خروجك بإذن.'),
+    'no_location': ('خدمة الموقع متوقفة', 'تعذّر التحقق من وجودك في موقع العمل منذ {m} دقيقة لأن خدمة الموقع (GPS) متوقفة أو غير مسموح بها. شغّلها من إعدادات الهاتف.'),
+    'no_signal': ('انقطع اتصال هاتفك بالنظام', 'لم تصل قراءات من هاتفك منذ {m} دقيقة أثناء الدوام. افتح تطبيق الحضور وتأكد من اتصال الإنترنت وتشغيل الموقع.'),
+}
+
+
+def _alert_employee(conn, emp, kind, minutes, now):
+    """إشعار الموظف عند فتح تنبيه تواجد جديد (داخل التطبيق + إشعار الهاتف إن كان مفعّلاً)"""
+    if kind not in _ALERT_TEXT:
+        return
+    title, body = _ALERT_TEXT[kind]
+    body = body.format(m=max(int(minutes or 0), 1))
+    conn.execute("INSERT INTO employee_notifications (employee_id, title, body, created_by, created_at) VALUES (?, ?, ?, ?, ?)",
+                 (emp['id'], title, body, 'النظام', now.strftime('%Y-%m-%d %H:%M:%S')))
+    try:
+        push_to_employee(conn, emp['id'], title, body)
+    except Exception:   # noqa: BLE001
+        pass
 
 
 def _close_events(conn, emp, date, kinds):
@@ -2390,7 +2417,8 @@ def record_ping(conn, emp, acc, cfg, lat, lng, accuracy, status, now=None, sourc
         start = r['ts']
     if (now - datetime.strptime(start, '%Y-%m-%d %H:%M:%S')).total_seconds() / 60 >= p['grace']:
         det = f'آخر مسافة عن موقع العمل: {int(dist)} م' if (bad == 'outside' and dist is not None) else ('موقع وهمي' if status == 'mock' else 'خدمة الموقع مطفأة')
-        _event_upsert(conn, emp, date, bad, start, ts, det)
+        if _event_upsert(conn, emp, date, bad, start, ts, det):
+            _alert_employee(conn, emp, bad, (now - datetime.strptime(start, '%Y-%m-%d %H:%M:%S')).total_seconds() / 60, now)
     return inside, dist
 
 
@@ -2564,7 +2592,27 @@ def presence_sweep(conn=None):
                 continue
             gap = (now - datetime.strptime(last_ts, '%Y-%m-%d %H:%M:%S')).total_seconds() / 60
             if gap >= max(p['grace'], p['interval'] * 3) and not _exempt(conn, emp, acc, cfg, now):
-                _event_upsert(conn, emp, date, 'no_signal', last_ts, ts, 'لم تصل قراءات من الهاتف (مطفأ، بلا إنترنت، أو أُغلق التطبيق)')
+                if _event_upsert(conn, emp, date, 'no_signal', last_ts, ts, 'لم تصل قراءات من الهاتف (مطفأ، بلا إنترنت، أو أُغلق التطبيق)'):
+                    _alert_employee(conn, emp, 'no_signal', gap, now)
+        # في الدوام ولم يصل من هاتفه أي قراءة إطلاقاً اليوم (التطبيق لم يُفتح بعد الحضور، أو بصم على الجهاز فقط)
+        cand = {r['employee_id'] for r in conn.execute("SELECT DISTINCT employee_id FROM mobile_punches WHERE date = ? AND status = 'accepted'", (date,))}
+        cand |= {r['id'] for r in conn.execute("SELECT DISTINCT e.id FROM employees e JOIN punches p ON p.name = e.name "
+                                               "WHERE p.date = ? AND COALESCE(p.batch_id, '') NOT IN ('mobile', 'kiosk')", (date,))}
+        for emp_id in cand - set(last):
+            emp = conn.execute("SELECT * FROM employees WHERE id = ?", (emp_id,)).fetchone()
+            acc = conn.execute("SELECT * FROM employee_accounts WHERE employee_id = ?", (emp_id,)).fetchone()
+            if not emp or not acc or not presence_state(conn, emp, acc, cfg, now)['active'] or _exempt(conn, emp, acc, cfg, now):
+                continue
+            first_in = _duty(conn, emp, now)[1]
+            try:
+                since = datetime.strptime(f"{date} {str(first_in)[:8]}", '%Y-%m-%d %H:%M:%S')
+            except (TypeError, ValueError):
+                continue
+            gap = (now - since).total_seconds() / 60
+            if gap >= max(p['grace'], p['interval'] * 3):
+                if _event_upsert(conn, emp, date, 'no_signal', since.strftime('%Y-%m-%d %H:%M:%S'), ts,
+                                 'لم تصل أي قراءة من هاتفه منذ الحضور (لم يُفتح التطبيق، أو الموقع غير مسموح)'):
+                    _alert_employee(conn, emp, 'no_signal', gap, now)
         conn.commit()
     finally:
         if own:
@@ -2662,6 +2710,25 @@ def _presence_live(conn, cfg, now):
     for emp_id, n in counts.items():
         out.setdefault(emp_id, {'events': n, 'open': open_ev.get(emp_id, [])})
     return out
+
+
+@bp.route('/api/mobile/presence/alerts')
+@admin_required
+def api_presence_alerts():
+    """تنبيهات التواجد المفتوحة الآن (لشريط التنبيه في لوحة التحكم)"""
+    conn = db.get_db()
+    try:
+        presence_sweep(conn)
+        date = now_local().strftime('%Y-%m-%d')
+        rows = [dict(r) for r in conn.execute("SELECT employee_id, name, dept, kind, start_ts, minutes FROM presence_events "
+                                               "WHERE date = ? AND open = 1 ORDER BY start_ts", (date,))]
+        rows = [r for r in rows if _employee_scope_ok(r['dept'])]
+        by_kind = {}
+        for r in rows:
+            by_kind[r['kind']] = by_kind.get(r['kind'], 0) + 1
+        return jsonify({'ok': True, 'count': len({r['employee_id'] for r in rows}), 'by_kind': by_kind, 'rows': rows[:50]})
+    finally:
+        conn.close()
 
 
 @bp.route('/api/mobile/presence/live')
