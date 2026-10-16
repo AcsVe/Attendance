@@ -66,7 +66,16 @@ public class NotesJob extends JobService {
 
     private static void pull(Context ctx) throws Exception {
         JSONObject o = new JSONObject();
-        o.put("device", deviceId(ctx));
+        String path;
+        if (BuildConfig.EMPLOYEE) {
+            o.put("device", deviceId(ctx));
+            path = "/me/api/notes/pull";
+        } else {   // تطبيق الإدارة: رمز يسلّمه له موقع لوحة التحكم بعد تسجيل الدخول
+            String tok = ctx.getSharedPreferences("notes", Context.MODE_PRIVATE).getString("token", "");
+            if (tok.isEmpty()) return;
+            o.put("token", tok);
+            path = "/api/admin/notes/pull";
+        }
         byte[] raw = o.toString().getBytes(StandardCharsets.UTF_8);
         String ts = String.valueOf(System.currentTimeMillis());
         Mac mac = Mac.getInstance("HmacSHA256");
@@ -74,7 +83,7 @@ public class NotesJob extends JobService {
         mac.update(raw);
         mac.update(("|" + ts).getBytes(StandardCharsets.UTF_8));
         String sig = hex(mac.doFinal());
-        HttpURLConnection c = (HttpURLConnection) new URL(BuildConfig.BASE_URL + "/me/api/notes/pull").openConnection();
+        HttpURLConnection c = (HttpURLConnection) new URL(BuildConfig.BASE_URL + path).openConnection();
         try {
             c.setConnectTimeout(15000);
             c.setReadTimeout(20000);
@@ -87,7 +96,12 @@ public class NotesJob extends JobService {
             OutputStream os = c.getOutputStream();
             os.write(raw);
             os.close();
-            if (c.getResponseCode() != 200) return;
+            int code = c.getResponseCode();
+            if (code == 401 && !BuildConfig.EMPLOYEE) {   // الرمز أُلغي (حُذف المستخدم): نتوقف حتى يُفتح التطبيق مجدداً
+                ctx.getSharedPreferences("notes", Context.MODE_PRIVATE).edit().remove("token").apply();
+                return;
+            }
+            if (code != 200) return;
             InputStream is = c.getInputStream();
             StringBuilder sb = new StringBuilder();
             byte[] buf = new byte[4096];
@@ -114,7 +128,7 @@ public class NotesJob extends JobService {
         for (int i = 0; i < notes.length(); i++) {
             JSONObject x = notes.optJSONObject(i);
             if (x == null) continue;
-            String title = x.optString("title", "RAS Check-in"), body = x.optString("body", "");
+            String title = x.optString("title", BuildConfig.EMPLOYEE ? "RAS Check-in" : "RAS Admin"), body = x.optString("body", "");
             Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(ctx, CHANNEL_NOTES) : new Notification.Builder(ctx);
             Notification nt = b.setContentTitle(title)
                     .setContentText(body)

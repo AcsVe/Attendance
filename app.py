@@ -88,9 +88,12 @@ from mobile import bp as _mobile_bp  # noqa: E402
 app.register_blueprint(_mobile_bp)
 import adms as _adms  # noqa: E402 — استقبال البصمات من الأجهزة عبر الإنترنت (ADMS / Cloud Server)
 app.register_blueprint(_adms.bp)
+import admin_notes as _admin_notes  # noqa: E402 — إشعارات أندرويد لتطبيق الإدارة
+app.register_blueprint(_admin_notes.bp)
 try:
     _c = db.get_db()
     _adms.init_tables(_c)
+    _admin_notes.init_tables(_c)
     _c.commit()
     _c.close()
 except Exception:
@@ -234,7 +237,7 @@ PERMISSION_REQUIRED_ENDPOINTS = {
 }
 
 # دور «اطّلاع فقط» (viewer): لا يعدّل شيئاً — مسموح له فقط بهذه الطلبات غير GET (حسابات وتقارير بلا حفظ)
-VIEWER_ALLOWED_WRITES = {'api_overtime', 'api_overtime_export_csv', 'api_change_password', 'login', 'logout'}
+VIEWER_ALLOWED_WRITES = {'api_overtime', 'api_overtime_export_csv', 'api_change_password', 'login', 'logout', 'api_my_favorites', 'admin_notes.api_notify_token'}
 
 # مسارات admin فقط بغض النظر عن أي صلاحية دقيقة - إدارة المستخدمين حصراً
 # (تبويب "المستخدمون" بالكامل مخفي عن غير admin بالواجهة أيضاً، مطابقةً

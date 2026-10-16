@@ -2806,3 +2806,20 @@ function syncKeyGen() {
   k.value = Array.from(a, b => b.toString(16).padStart(2, '0')).join(''); k.type = 'text'; k.select();
   toast('تم توليد كلمة سر — احفظ الإعدادات ثم انسخها إلى النسخة الأخرى');
 }
+
+
+/* ===== تطبيق الإدارة على أندرويد: إشعارات في شريط الهاتف (تنبيهات التواجد، طلبات الخروج، …) ===== */
+(function () {
+  const N = window.AttNative;
+  if (!N || typeof N.setNotifyToken !== 'function') return;
+  try {
+    if (!N.hasNotifyToken()) {
+      fetch('/api/my/notify-token', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } })
+        .then(r => r.json()).then(d => { if (d && d.ok && d.token) N.setNotifyToken(d.token); }).catch(() => {});
+    }
+  } catch (e) {}
+  document.addEventListener('click', e => {
+    const a = e.target.closest && e.target.closest('a[href$="/logout"]');
+    if (a && typeof N.clearNotifyToken === 'function') { try { N.clearNotifyToken(); } catch (x) {} }
+  }, true);
+})();

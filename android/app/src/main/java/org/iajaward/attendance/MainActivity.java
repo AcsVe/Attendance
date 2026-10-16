@@ -395,6 +395,31 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String version() { return BuildConfig.VERSION_NAME; }
 
+        /** تطبيق الإدارة: هل حُفظ رمز الإشعارات؟ */
+        @JavascriptInterface
+        public boolean hasNotifyToken() {
+            return !getSharedPreferences("notes", MODE_PRIVATE).getString("token", "").isEmpty();
+        }
+
+        /** تطبيق الإدارة: إيقاف الإشعارات عند تسجيل الخروج */
+        @JavascriptInterface
+        public void clearNotifyToken() {
+            getSharedPreferences("notes", MODE_PRIVATE).edit().remove("token").apply();
+        }
+
+        /** تطبيق الإدارة: حفظ رمز الإشعارات وتشغيل التحقق الدوري في الخلفية */
+        @JavascriptInterface
+        public void setNotifyToken(String token) {
+            if (token == null || token.length() < 32) return;
+            getSharedPreferences("notes", MODE_PRIVATE).edit().putString("token", token).apply();
+            runOnUiThread(() -> {
+                NotesJob.schedule(MainActivity.this);
+                if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED) {
+                    requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, REQ_NOTIF);
+                }
+            });
+        }
+
         /** هل يدعم الهاتف التحقق الحيوي (بصمة/وجه/رمز القفل)؟ */
         @JavascriptInterface
         public boolean canAuthenticate() { return canBio(); }
