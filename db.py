@@ -401,6 +401,8 @@ def init_db():
         created_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
     )''')
+    if 'device_shown_at' not in {r['name'] for r in cur.execute("PRAGMA table_info(employee_notifications)").fetchall()}:
+        cur.execute("ALTER TABLE employee_notifications ADD COLUMN device_shown_at TEXT")   # عُرض كإشعار أندرويد
     cur.execute('''CREATE TABLE IF NOT EXISTS webauthn_credentials (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         employee_id INTEGER NOT NULL,

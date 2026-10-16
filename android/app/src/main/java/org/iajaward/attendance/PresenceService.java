@@ -225,6 +225,7 @@ public class PresenceService extends Service implements LocationListener {
             if (rem > 0) stopAtElapsed = SystemClock.elapsedRealtime() + rem;
             JSONObject chk = r.optJSONObject("check");
             if (chk != null) notifyCheck(chk.optLong("id", 0));
+            NotesJob.show(this, r.optJSONArray("notes"));
         } catch (Exception ignored) {
             // بلا إنترنت: يرصد الخادم الفجوة عند عودة الاتصال (انقطاع الإشارة)
         } finally {

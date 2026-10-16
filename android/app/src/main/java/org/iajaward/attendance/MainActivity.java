@@ -106,6 +106,13 @@ public class MainActivity extends Activity {
         } else {
             web.loadUrl(BuildConfig.BASE_URL + BuildConfig.START_PATH);
         }
+        if (BuildConfig.EMPLOYEE) {
+            NotesJob.schedule(this);   // إشعارات النظام في شريط الإشعارات حتى والتطبيق مغلق
+            if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED
+                    && hasFineLocation()) {
+                requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, REQ_NOTIF);
+            }
+        }
         if (BuildConfig.EMPLOYEE && !hasFineLocation()) {
             askedFine = true;
             requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_LOCATION);

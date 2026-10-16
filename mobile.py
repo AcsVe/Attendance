@@ -2480,6 +2480,53 @@ def presence_check_for(conn, emp, acc, cfg, now=None):
     return {'id': c['id'], 'expires_at': c['expires_at'], 'seconds_left': max(left, 0)}
 
 
+def _device_notes(conn, emp_id):
+    """إشعارات لم تُعرض بعد على الهاتف كإشعارات أندرويد (آخر يومين)، وتُعلَّم كمعروضة"""
+    rows = conn.execute("SELECT id, title, body FROM employee_notifications WHERE employee_id = ? AND device_shown_at IS NULL "
+                        "AND read_at IS NULL AND created_at >= datetime('now', '-2 days') ORDER BY id LIMIT 10", (emp_id,)).fetchall()
+    if rows:
+        conn.execute(f"UPDATE employee_notifications SET device_shown_at = datetime('now') WHERE id IN ({','.join('?' * len(rows))})",
+                     [r['id'] for r in rows])
+    return [{'id': r['id'], 'title': r['title'], 'body': r['body'] or ''} for r in rows]
+
+
+def _app_signed():
+    """تحقق توقيع تطبيق أندرويد (بدون جلسة): يرجع البيانات أو None"""
+    import hashlib as _h
+    import hmac as _hm
+    raw = request.get_data() or b''
+    ts = request.headers.get('X-App-Ts', '')
+    good = _hm.new(APP_KEY.encode(), raw + b'|' + ts.encode(), _h.sha256).hexdigest()
+    try:
+        fresh = abs(time.time() * 1000 - float(ts)) < 600000
+    except ValueError:
+        fresh = False
+    if not (fresh and _hm.compare_digest(good, request.headers.get('X-App-Sig', ''))):
+        return None
+    try:
+        return json.loads(raw.decode('utf-8') or '{}')
+    except ValueError:
+        return None
+
+
+@bp.route('/me/api/notes/pull', methods=['POST'])
+def me_notes_pull():
+    """يستدعيها تطبيق أندرويد في الخلفية كل ربع ساعة تقريباً ليعرض الإشعارات الجديدة كإشعارات الهاتف"""
+    d = _app_signed()
+    if d is None:
+        return jsonify({'ok': False, 'error': 'توقيع غير صحيح'}), 403
+    conn = db.get_db()
+    try:
+        acc, emp, _t = _quick_account(conn, (d.get('device') or request.headers.get('X-Device') or '').strip())
+        if not acc:
+            return jsonify({'ok': False, 'stop': True}), 401
+        notes = _device_notes(conn, emp['id'])
+        conn.commit()
+        return jsonify({'ok': True, 'notes': notes})
+    finally:
+        conn.close()
+
+
 @bp.route('/me/api/presence/ping', methods=['POST'])
 def me_presence_ping():
     """قراءة موقع من خدمة الخلفية في تطبيق أندرويد (بدون جلسة: رمز الهاتف + توقيع التطبيق)"""
@@ -2509,9 +2556,10 @@ def me_presence_ping():
         status = 'mock' if d.get('mock') else 'location_off' if (d.get('location_off') or lat is None) else 'ok'
         record_ping(conn, emp, acc, cfg, lat, lng, accu, status, now)
         chk = presence_check_for(conn, emp, acc, cfg, now)
+        notes = _device_notes(conn, emp['id'])
         conn.commit()
         return jsonify({'ok': True, 'continue': True, 'interval_s': st['interval_s'], 'end_ms': st['end_ms'],
-                        'remaining_ms': max(0, st['end_ms'] - int(time.time() * 1000)), 'check': chk})
+                        'remaining_ms': max(0, st['end_ms'] - int(time.time() * 1000)), 'check': chk, 'notes': notes})
     finally:
         conn.close()
 
