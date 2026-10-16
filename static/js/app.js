@@ -2106,9 +2106,11 @@ async function saveDeptTime() {
   const dept = document.getElementById('dtDept').value.trim();
   const att = document.getElementById('dtAtt').value;
   const dep = document.getElementById('dtDep').value;
+  const open_hours = document.getElementById('dtOpen').checked;
   if (!dept) { toast('اسم القسم إجباري', true); return; }
   try {
-    await api('/api/dept-times', { method: 'POST', body: JSON.stringify({ dept, attendance_time: att, departure_time: dep }) });
+    await api('/api/dept-times', { method: 'POST', body: JSON.stringify({ dept, attendance_time: att, departure_time: dep, open_hours }) });
+    document.getElementById('dtOpen').checked = false; dtOpenUi();
     toast('تم الحفظ');
     document.getElementById('dtDept').value = '';
     document.getElementById('dtAtt').value = '';
@@ -2117,12 +2119,17 @@ async function saveDeptTime() {
   } catch (e) {}
 }
 
+function dtOpenUi() {
+  const on = document.getElementById('dtOpen').checked;
+  ['dtAtt', 'dtDep'].forEach(id => { const e = document.getElementById(id); e.disabled = on; if (on) e.value = ''; });
+}
+
 async function loadDeptTimes() {
   const data = await api('/api/dept-times');
   if (!data) return;
   const tbody = document.getElementById('deptTimesTable');
   tbody.innerHTML = data.rows.map(r => `
-    <tr><td><input type="checkbox" class="row-check" data-id="${encodeURIComponent(r.dept)}"></td><td>${escapeHtml(r.dept)}</td><td>${escapeHtml(r.attendance_time || '—')}</td><td>${escapeHtml(r.departure_time || '—')}</td>
+    <tr><td><input type="checkbox" class="row-check" data-id="${encodeURIComponent(r.dept)}"></td><td>${escapeHtml(r.dept)}</td>${r.open_hours ? '<td colspan="2"><b style="color:var(--primary)">دوام مفتوح على مدار اليوم</b></td>' : `<td>${escapeHtml(r.attendance_time || '—')}</td><td>${escapeHtml(r.departure_time || '—')}</td>`}
     <td><button class="btn btn-red btn-sm" onclick="deleteDeptTime('${encodeURIComponent(r.dept)}')" aria-label="حذف" title="حذف"><i class="fas fa-trash" aria-hidden="true"></i></button></td></tr>
   `).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">لا توجد أقسام مخصَّصة</td></tr>';
 }

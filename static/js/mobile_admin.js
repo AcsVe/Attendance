@@ -12,7 +12,7 @@ window.EXTRA_LOADERS = Object.assign(window.EXTRA_LOADERS || {}, {
   'mobile-sites': () => { loadSites(); loadKiosks(); },
   'mobile-moves': () => { loadLive(); loadMoves(); },
   presence: prLoad,
-  shares: shLoad,
+  shares: () => { trLoad(); shLoad(); },
   leaves: () => { lvSettings(); lvLoad(); lvReport(); },
 });
 
@@ -1004,9 +1004,9 @@ function shRender() {
   document.getElementById('shAll').checked = false;
   document.getElementById('shTable').innerHTML = rows.map(r => `<tr style="cursor:pointer" onclick="if(event.target.type!=='checkbox')shTrack(${r.id})">
     <td><input type="checkbox" class="sh-check" data-id="${r.id}" onchange="shSelCount()"></td>
-    <td><b>${mEsc(r.name)}</b>${r.flags ? ` <span title="${mEsc(r.flags)}" style="color:#c0392b;font-weight:700">⚠ مشبوه</span><div style="font-size:.75rem;color:#c0392b">${mEsc(r.flags)}</div>` : ''}${r.source === 'app' ? ' <small style="color:var(--muted)">(التطبيق)</small>' : r.source ? ' <small style="color:var(--muted)">(المتصفح)</small>' : ''}</td><td>${mEsc(r.dept || '—')}</td>
+    <td><b>${mEsc(r.name)}</b>${r.flags ? ` <span title="${mEsc(r.flags)}" style="color:#c0392b;font-weight:700">⚠ مشبوه</span><div style="font-size:.75rem;color:#c0392b">${mEsc(r.flags)}</div>` : ''}${r.source === 'admin' ? ' <small style="color:var(--primary)">(تتبع مستمر)</small>' : r.source === 'app' ? ' <small style="color:var(--muted)">(التطبيق)</small>' : r.source ? ' <small style="color:var(--muted)">(المتصفح)</small>' : ''}</td><td>${mEsc(r.dept || '—')}</td>
     <td>${r.kind === 'live' ? (r.live_now ? '<span style="color:#0a6640;font-weight:700">مباشر الآن</span>' : 'مباشر (انتهى)') : 'موقع حالي'}</td>
-    <td dir="ltr">${mEsc((r.started_at || '').slice(5, 16))}</td><td dir="ltr">${r.kind === 'live' ? mEsc((r.stopped_at || r.ends_at || '').slice(11, 16)) : '—'}</td>
+    <td dir="ltr">${mEsc((r.started_at || '').slice(5, 16))}</td><td dir="ltr">${r.kind === 'live' ? (r.stopped_at ? mEsc(r.stopped_at.slice(11, 16)) : (r.ends_at || '').startsWith('9999') ? '<span dir="rtl">بلا مدة</span>' : mEsc((r.ends_at || '').slice(11, 16))) : '—'}</td>
     <td dir="ltr">${mEsc((r.updated_at || '').slice(11, 19) || '—')}</td>
     <td>${r.site_dist == null ? '—' : (r.site_dist === 0 ? '<span style="color:#0a6640">داخل «' + mEsc(r.site_name) + '»</span>' : r.site_dist + ' م عن «' + mEsc(r.site_name) + '»')}</td>
     <td>${mEsc(r.note || '')}</td></tr>`).join('') || '<tr><td colspan="9" style="color:var(--muted)">لا توجد مواقع مشاركة</td></tr>';
@@ -1054,4 +1054,47 @@ async function shDelete() {
   if (!confirm(`حذف ${ids.length} سجل مشاركة مع مساراتها؟`)) return;
   await api('/api/shares/delete', { method: 'POST', body: JSON.stringify({ ids }) });
   toast('تم الحذف'); shLoad();
+}
+
+
+/* ===== التتبع المستمر بلا مدة (الأجهزة المتنقلة) ===== */
+let trRows = [], trFilter = 'all';
+async function trLoad() {
+  const d = await api('/api/shares/tracking').catch(() => null);
+  if (!d) return;
+  trRows = d.rows; trRender();
+}
+function trRender() {
+  const q = (document.getElementById('trSearch').value || '').trim().toLowerCase();
+  const on = trRows.filter(r => r.always_track).length;
+  document.getElementById('trOnCount').textContent = on;
+  document.getElementById('trChips').innerHTML = [['all', 'الكل', trRows.length], ['on', 'مفعّل', on], ['off', 'غير مفعّل', trRows.length - on]]
+    .map(([k, l, n]) => `<button class="${trFilter === k ? 'on' : ''}" onclick="trFilter='${k}';trRender()">${l} <b>${n}</b></button>`).join('');
+  const rows = trRows.filter(r => (trFilter === 'all' || (trFilter === 'on') === !!r.always_track)
+    && (!q || (r.name || '').toLowerCase().includes(q) || (r.dept || '').toLowerCase().includes(q)));
+  document.getElementById('trTotal').textContent = rows.length;
+  document.getElementById('trAll').checked = false;
+  document.getElementById('trTable').innerHTML = rows.map(r => `<tr>
+    <td><input type="checkbox" class="tr-check" data-id="${r.id}" onchange="trSelCount()"></td>
+    <td><b>${mEsc(r.name)}</b></td><td>${mEsc(r.dept || '—')}</td>
+    <td>${r.always_track ? '<span style="color:#0a6640;font-weight:700">مفعّل</span>' : '<span style="color:var(--muted)">غير مفعّل</span>'}</td>
+    <td dir="ltr">${mEsc(r.last_update || '—')}</td></tr>`).join('') || '<tr><td colspan="5" style="color:var(--muted)">لا يوجد موظفون بحسابات تطبيق</td></tr>';
+  trSelCount();
+}
+function trChecked() { return [...document.querySelectorAll('.tr-check:checked')].map(c => +c.dataset.id); }
+function trSelCount() { document.getElementById('trSel').textContent = trChecked().length; }
+function trCheckAll(on) { document.querySelectorAll('.tr-check').forEach(c => { c.checked = on; }); trSelCount(); }
+async function trSet(on) {
+  const ids = trChecked();
+  if (!ids.length) { toast('حدّد موظفاً أو جهازاً واحداً على الأقل', true); return; }
+  if (on && !confirm(`تشغيل التتبع المستمر بلا مدة لـ ${ids.length}؟ سيُرسل موقعهم كل دقيقة ولن يستطيعوا إيقافه من الهاتف.`)) return;
+  await api('/api/shares/tracking', { method: 'POST', body: JSON.stringify({ ids, on }) });
+  toast(on ? 'تم تشغيل التتبع المستمر' : 'تم إيقاف التتبع المستمر'); trLoad(); shLoad();
+}
+async function shStop() {
+  const ids = shChecked();
+  if (!ids.length) { toast('حدّد سجلاً واحداً على الأقل', true); return; }
+  if (!confirm(`إيقاف ${ids.length} مشاركة جارية؟`)) return;
+  const d = await api('/api/shares/stop', { method: 'POST', body: JSON.stringify({ ids }) });
+  toast(`أُوقفت ${d.stopped} مشاركة`); trLoad(); shLoad();
 }

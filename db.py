@@ -118,6 +118,8 @@ def init_db():
         departure_time TEXT
     )''')
 
+    if 'open_hours' not in {r['name'] for r in cur.execute("PRAGMA table_info(dept_attendance_settings)").fetchall()}:
+        cur.execute("ALTER TABLE dept_attendance_settings ADD COLUMN open_hours INTEGER NOT NULL DEFAULT 0")   # دوام مفتوح بلا أوقات
     cur.execute('''CREATE TABLE IF NOT EXISTS manual_time_entries (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
@@ -420,6 +422,8 @@ def init_db():
             cur.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
     # ===== أجهزة المداخل (QR): تابلت عند الباب يقرأ رمز الموظف المتغيّر =====
     acc_cols = {r['name'] for r in cur.execute("PRAGMA table_info(employee_accounts)").fetchall()}
+    if 'always_track' not in acc_cols:   # تتبع مستمر بلا مدة (للأجهزة المتنقلة) — تفعّله الإدارة
+        cur.execute("ALTER TABLE employee_accounts ADD COLUMN always_track INTEGER NOT NULL DEFAULT 0")
     if 'qr_secret' not in acc_cols:
         cur.execute("ALTER TABLE employee_accounts ADD COLUMN qr_secret TEXT")
     cur.execute('''CREATE TABLE IF NOT EXISTS qr_kiosks (

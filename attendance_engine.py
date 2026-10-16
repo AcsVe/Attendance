@@ -159,6 +159,7 @@ def analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
     sat_dep_time = parse_time_str(settings.get('sat_departure_time', '')) if (sat_enabled and settings.get('sat_departure_time')) else None
 
     excluded_depts = {d.strip() for d in settings.get('excluded_depts', '').split(',') if d.strip()}
+    open_depts = set(settings.get('_open_depts') or [])   # أقسام بدوام مفتوح (بلا وقت حضور): لا يُحتسب تأخير
 
     df['date_parsed'] = pd.to_datetime(df['date'], errors='coerce')
     df['time_in_parsed'] = df['time_in'].apply(parse_time_val)
@@ -214,7 +215,7 @@ def analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
 
     def calc_late(row):
         t = row.get('time_in_parsed')
-        if t is None or pd.isna(t):
+        if t is None or pd.isna(t) or row.get('dept') in open_depts:
             return 0
         perm = late_permissions.get((row['name'], row_date_str(row)))
         custom_att = perm.get('custom_attendance_time') if perm else None

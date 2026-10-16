@@ -960,6 +960,8 @@
           <div class="form-group"><label>وقت الحضور الخاص</label><input type="time" id="dtAtt"></div>
           <div class="form-group"><label>وقت الانصراف الخاص</label><input type="time" id="dtDep"></div>
         </div>
+        <label style="display:flex;gap:8px;align-items:center;font-weight:600;margin-bottom:10px"><input type="checkbox" id="dtOpen" onchange="dtOpenUi()">
+          دوام مفتوح على مدار اليوم (بلا وقت حضور أو انصراف) — مناسب للأجهزة المتنقلة ومن يعمل بلا أوقات محددة: لا يُحتسب تأخير</label>
         <button class="btn btn-primary" onclick="saveDeptTime()"><i class="fas fa-save" aria-hidden="true"></i> حفظ/تحديث</button>
       </div>
       <div class="card">

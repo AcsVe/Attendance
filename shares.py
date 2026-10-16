@@ -16,6 +16,7 @@ from mobile import (_me_json, admin_required, now_local, _employee_scope_ok, _au
 
 bp = Blueprint('shares', __name__)
 LIVE_CHOICES = {15, 30, 60, 120, 240}
+FOREVER = '9999-12-31 23:59:59'     # مشاركة بلا مدة (حتى الإيقاف)
 
 
 def init_tables(conn):
@@ -76,11 +77,22 @@ def _num(v):
 
 
 def active_share(conn, emp_id, now=None):
-    """المشاركة المباشرة السارية لهذا الموظف (أو None)"""
+    """المشاركة المباشرة السارية لهذا الموظف (أو None).
+    الحساب المفعّل له «التتبع المستمر» من الإدارة (الأجهزة المتنقلة) تُنشأ له مشاركة بلا مدة تلقائياً."""
     now_s = _ts(now)
     r = conn.execute("SELECT * FROM location_shares WHERE employee_id = ? AND kind = 'live' AND stopped_at IS NULL "
                      "AND ends_at > ? ORDER BY id DESC LIMIT 1", (emp_id, now_s)).fetchone()
-    return dict(r) if r else None
+    if r:
+        return dict(r)
+    acc = conn.execute("SELECT always_track, active FROM employee_accounts WHERE employee_id = ?", (emp_id,)).fetchone()
+    if acc and acc['always_track'] and acc['active']:
+        emp = conn.execute("SELECT name, dept FROM employees WHERE id = ?", (emp_id,)).fetchone()
+        if emp:
+            cur = conn.execute("INSERT INTO location_shares (employee_id, name, dept, kind, note, started_at, ends_at, source) "
+                               "VALUES (?, ?, ?, 'live', 'تتبع مستمر من الإدارة', ?, ?, 'admin')", (emp_id, emp['name'], emp['dept'] or '', now_s, FOREVER))
+            conn.commit()
+            return dict(conn.execute("SELECT * FROM location_shares WHERE id = ?", (cur.lastrowid,)).fetchone())
+    return None
 
 
 def add_point(conn, share, lat, lng, acc, now=None):
@@ -107,7 +119,9 @@ def share_info(conn, emp_id):
     s = active_share(conn, emp_id)
     if not s:
         return None
-    return {'id': s['id'], 'ends_at': s['ends_at'], 'ends': s['ends_at'][11:16], 'started': s['started_at'][11:16],
+    unlimited = s['ends_at'] >= FOREVER[:4]
+    return {'id': s['id'], 'ends_at': s['ends_at'], 'ends': '' if unlimited else s['ends_at'][11:16], 'started': s['started_at'][11:16],
+            'unlimited': unlimited, 'forced': s.get('source') == 'admin',
             'remaining_ms': max(0, int((datetime.strptime(s['ends_at'], '%Y-%m-%d %H:%M:%S') - now_local()).total_seconds() * 1000))}
 
 
@@ -144,7 +158,9 @@ def me_share_live_start(conn, acc, emp, cfg):
     if reason:
         return jsonify({'ok': False, 'error': reason}), 403
     mins = d.get('minutes')
-    if mins == 'shift':
+    if mins == 'unlimited':
+        end = None
+    elif mins == 'shift':
         end = _work_end(conn, emp, cfg, now)
         if end <= now:
             return jsonify({'ok': False, 'error': 'انتهى الدوام — اختر مدة محددة'}), 400
@@ -160,11 +176,11 @@ def me_share_live_start(conn, acc, emp, cfg):
     if old:
         conn.execute("UPDATE location_shares SET stopped_at = ? WHERE id = ?", (_ts(now), old['id']))
     cur = conn.execute("INSERT INTO location_shares (employee_id, name, dept, kind, note, started_at, ends_at, flags, source) VALUES (?, ?, ?, 'live', ?, ?, ?, ?, ?)",
-                       (emp['id'], emp['name'], emp['dept'] or '', (d.get('note') or '').strip()[:200], _ts(now), _ts(end), '؛ '.join(flags)[:500], source))
+                       (emp['id'], emp['name'], emp['dept'] or '', (d.get('note') or '').strip()[:200], _ts(now), _ts(end) if end else FOREVER, '؛ '.join(flags)[:500], source))
     share = dict(conn.execute("SELECT * FROM location_shares WHERE id = ?", (cur.lastrowid,)).fetchone())
     add_point(conn, share, d.get('lat'), d.get('lng'), d.get('accuracy'), now)
     conn.commit()
-    return jsonify({'ok': True, 'share': share_info(conn, emp['id']), 'message': f'بدأت مشاركة موقعك المباشر حتى {end.strftime("%H:%M")}'})
+    return jsonify({'ok': True, 'share': share_info(conn, emp['id']), 'message': (f'بدأت مشاركة موقعك المباشر حتى {end.strftime("%H:%M")}' if end else 'بدأت مشاركة موقعك المباشر بلا مدة — حتى تضغط «إيقاف»')})
 
 
 @bp.route('/me/api/share/live/point', methods=['POST'])
@@ -192,6 +208,9 @@ def stop_for_mock(conn, share):
 @_me_json
 def me_share_live_stop(conn, acc, emp, cfg):
     s = active_share(conn, emp['id'])
+    if s and s.get('source') == 'admin':
+        conn.commit()
+        return jsonify({'ok': False, 'error': 'التتبع المستمر مفعّل من الإدارة لهذا الحساب — لا يمكن إيقافه من الهاتف'}), 403
     if s:
         conn.execute("UPDATE location_shares SET stopped_at = ? WHERE id = ?", (_ts(), s['id']))
         conn.commit()
@@ -255,5 +274,60 @@ def api_shares_delete():
         _audit(conn, 'shares_delete', 'location_share', json.dumps(ids)[:300])
         conn.commit()
         return jsonify({'ok': True, 'deleted': len(ids)})
+    finally:
+        conn.close()
+
+
+@bp.route('/api/shares/tracking', methods=['GET', 'POST'])
+@admin_required
+def api_shares_tracking():
+    """التتبع المستمر بلا مدة (للأجهزة المتنقلة التي تُعامَل كموظف): عرض/تشغيل/إيقاف لموظف أو أكثر"""
+    conn = db.get_db()
+    try:
+        if request.method == 'POST':
+            d = request.get_json(silent=True) or {}
+            ids = [int(i) for i in (d.get('ids') or []) if str(i).isdigit()]
+            on = bool(d.get('on'))
+            if not ids:
+                return jsonify({'ok': False, 'error': 'لم يُحدَّد أحد'}), 400
+            q = ','.join('?' * len(ids))
+            n = conn.execute(f"UPDATE employee_accounts SET always_track = ? WHERE employee_id IN ({q})", [1 if on else 0] + ids).rowcount
+            if not on:     # إيقاف المشاركة الجارية التي أنشأتها الإدارة
+                conn.execute(f"UPDATE location_shares SET stopped_at = ? WHERE employee_id IN ({q}) AND source = 'admin' AND stopped_at IS NULL",
+                             [_ts()] + ids)
+            _audit(conn, 'tracking_on' if on else 'tracking_off', 'location_share', json.dumps(ids)[:300])
+            conn.commit()
+            return jsonify({'ok': True, 'updated': n})
+        rows = [dict(r) for r in conn.execute(
+            "SELECT e.id, e.name, e.dept, a.always_track, a.active AS acc_active, a.username FROM employees e "
+            "JOIN employee_accounts a ON a.employee_id = e.id WHERE e.active = 1 ORDER BY a.always_track DESC, e.dept, e.name")]
+        rows = [r for r in rows if _employee_scope_ok(r['dept'])]
+        now_s = _ts()
+        for r in rows:
+            s = conn.execute("SELECT updated_at, lat FROM location_shares WHERE employee_id = ? AND kind = 'live' AND stopped_at IS NULL "
+                             "AND ends_at > ? ORDER BY id DESC LIMIT 1", (r['id'], now_s)).fetchone()
+            r['last_update'] = s['updated_at'] if s else None
+        return jsonify({'ok': True, 'rows': rows})
+    finally:
+        conn.close()
+
+
+@bp.route('/api/shares/stop', methods=['POST'])
+@admin_required
+def api_shares_stop():
+    """إيقاف مشاركات مباشرة جارية (والتتبع المستمر لأصحابها إن كان مفعّلاً)"""
+    ids = [int(i) for i in ((request.get_json(silent=True) or {}).get('ids') or []) if str(i).isdigit()]
+    if not ids:
+        return jsonify({'ok': False, 'error': 'لم يُحدَّد شيء'}), 400
+    conn = db.get_db()
+    try:
+        q = ','.join('?' * len(ids))
+        emps = [r['employee_id'] for r in conn.execute(f"SELECT employee_id FROM location_shares WHERE id IN ({q}) AND source = 'admin'", ids)]
+        if emps:
+            conn.execute(f"UPDATE employee_accounts SET always_track = 0 WHERE employee_id IN ({','.join('?' * len(emps))})", emps)
+        n = conn.execute(f"UPDATE location_shares SET stopped_at = ? WHERE id IN ({q}) AND stopped_at IS NULL", [_ts()] + ids).rowcount
+        _audit(conn, 'shares_stop', 'location_share', json.dumps(ids)[:300])
+        conn.commit()
+        return jsonify({'ok': True, 'stopped': n})
     finally:
         conn.close()

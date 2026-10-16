@@ -2001,6 +2001,8 @@ def run_full_analysis(conn):
     if punches_df.empty:
         result = pd.DataFrame(columns=cache_cols)
     else:
+        settings = dict(settings)
+        settings['_open_depts'] = [r['dept'] for r in conn.execute("SELECT dept FROM dept_attendance_settings WHERE open_hours = 1")]
         result = analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
                           official_holidays, shift1_names, shift2_names,
                           late_permissions, departure_permissions)
@@ -2157,13 +2159,17 @@ def api_dept_times():
         dept = (data.get('dept') or '').strip()
         att = (data.get('attendance_time') or '').strip() or None
         dep = (data.get('departure_time') or '').strip() or None
+        open_hours = 1 if data.get('open_hours') else 0
+        if open_hours:      # دوام مفتوح على مدار اليوم (مثل الأجهزة المتنقلة): بلا تأخير، والتحقق والمشاركة حتى نهاية اليوم
+            att, dep = '00:00', '23:59'
         if not dept:
             conn.close()
             return jsonify({'ok': False, 'error': 'اسم القسم إجباري'}), 400
         conn.execute(
-            "INSERT INTO dept_attendance_settings (dept, attendance_time, departure_time) VALUES (?, ?, ?) "
-            "ON CONFLICT(dept) DO UPDATE SET attendance_time = excluded.attendance_time, departure_time = excluded.departure_time",
-            (dept, att, dep)
+            "INSERT INTO dept_attendance_settings (dept, attendance_time, departure_time, open_hours) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(dept) DO UPDATE SET attendance_time = excluded.attendance_time, departure_time = excluded.departure_time, "
+            "open_hours = excluded.open_hours",
+            (dept, att, dep, open_hours)
         )
         conn.commit()
         conn.close()

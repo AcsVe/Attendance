@@ -85,6 +85,7 @@
         <select id="shareMins" style="flex:1" aria-label="مدة مشاركة الموقع المباشر">
           <option value="15">15 دقيقة</option><option value="30">30 دقيقة</option><option value="60" selected>ساعة</option>
           <option value="120">ساعتان</option><option value="240">4 ساعات</option><option value="shift">حتى نهاية الدوام</option>
+          <option value="unlimited">بلا مدة (حتى الإيقاف)</option>
         </select>
         <button class="btn btn-p" id="shareLiveBtn" style="flex:1.4"><i class="fas fa-tower-broadcast" aria-hidden="true"></i> مشاركة مباشرة</button>
       </div>
@@ -260,7 +261,9 @@
     $('shareLiveBtn').disabled = false;
     clearInterval(shareTimer);
     if (!sh) return;
-    $('shareLiveText').textContent = 'تشارك موقعك المباشر مع الإدارة حتى ' + sh.ends;
+    $('shareLiveText').textContent = sh.forced ? 'التتبع المستمر مفعّل من الإدارة لهذا الحساب — يُرسل الموقع باستمرار'
+      : sh.unlimited ? 'تشارك موقعك المباشر مع الإدارة بلا مدة — حتى تضغط «إيقاف»' : 'تشارك موقعك المباشر مع الإدارة حتى ' + sh.ends;
+    $('shareStop').classList.toggle('hide', !!sh.forced);
     if (NATIVE && NATIVE.presenceStart) {
       var running = false; try { running = NATIVE.presenceRunning(); } catch (e) {}
       if (!running) { try { NATIVE.presenceStart(60, sh.remaining_ms); } catch (e) {} }

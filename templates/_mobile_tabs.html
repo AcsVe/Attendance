@@ -223,6 +223,24 @@
 <!-- ============ التحقق من التواجد أثناء الدوام ============ -->
 <div class="tab-panel" id="tab-shares">
   <div class="card">
+    <div class="card-title"><i class="fas fa-satellite" aria-hidden="true"></i> التتبع المستمر بلا مدة — الأجهزة المتنقلة (<span id="trOnCount">0</span> مفعّل)</div>
+    <p style="font-size:.84rem;color:var(--muted);margin-bottom:8px">لجهاز يعمل كموظف ويتنقّل (أو أكثر): أضفه موظفاً بحساب تطبيق، ويُستحسن وضعه في قسم بـ«دوام مفتوح» من «أوقات الأقسام»، ثم فعّل له التتبع هنا.
+      يرسل الجهاز موقعه كل دقيقة دون مدة ولا يستطيع إيقافه من الهاتف. على الجهاز: ثبّت تطبيق Check-in، وافتحه مرة بعد كل إعادة تشغيل، واضبط البطارية على «بدون قيود».</p>
+    <div class="filter-bar" style="margin-bottom:8px">
+      <input type="search" id="trSearch" class="search-input" placeholder="بحث بالاسم أو القسم…" oninput="trRender()">
+      <div class="m-chips" id="trChips"></div>
+      <button class="btn btn-primary btn-sm" onclick="trSet(true)"><i class="fas fa-play" aria-hidden="true"></i> تشغيل التتبع</button>
+      <button class="btn btn-outline btn-sm" onclick="trSet(false)"><i class="fas fa-stop" aria-hidden="true"></i> إيقاف التتبع</button>
+      <span style="font-size:.85rem;color:var(--muted)">المحدد: <b id="trSel">0</b> من <b id="trTotal">0</b></span>
+    </div>
+    <div class="table-wrap" style="max-height:260px">
+      <table>
+        <thead><tr><th><input type="checkbox" id="trAll" onchange="trCheckAll(this.checked)" aria-label="تحديد الكل"></th><th>الموظف / الجهاز</th><th>القسم</th><th>التتبع المستمر</th><th>آخر موقع</th></tr></thead>
+        <tbody id="trTable"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card">
     <div class="card-title"><i class="fas fa-map-location-dot" aria-hidden="true"></i> المواقع المشاركة من الموظفين — مباشر الآن: <span id="shLiveCount">0</span></div>
     <p style="font-size:.84rem;color:var(--muted);margin-bottom:8px">يرسلها الموظف من تطبيقه بنفسه: «موقعي الحالي» مرة واحدة، أو «مشاركة مباشرة» لمدة يختارها. اضغط صفاً لعرض مساره على الخريطة. تتحدّث الصفحة كل 30 ثانية.</p>
     <div class="filter-bar" style="margin-bottom:8px">
@@ -232,6 +250,7 @@
     </div>
     <div id="shMap" style="height:360px;border-radius:12px;margin-bottom:10px"></div>
     <div class="filter-bar" style="margin-bottom:6px">
+      <button class="btn btn-outline btn-sm" onclick="shStop()"><i class="fas fa-circle-stop" aria-hidden="true"></i> إيقاف المشاركة</button>
       <button class="btn btn-red btn-sm" onclick="shDelete()"><i class="fas fa-trash" aria-hidden="true"></i> حذف المحدد</button>
       <span style="font-size:.85rem;color:var(--muted)">المحدد: <b id="shSel">0</b> من <b id="shTotal">0</b></span>
     </div>
