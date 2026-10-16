@@ -2583,7 +2583,7 @@ def me_presence_ping():
             else:
                 shares.add_point(conn, share, lat, lng, accu, now)
         if share:
-            interval = 60
+            interval = shares.share_interval(conn, share)
             share_left = int((datetime.strptime(share['ends_at'], '%Y-%m-%d %H:%M:%S') - now).total_seconds() * 1000)
             remaining = max(remaining, share_left)
         elif not st['active']:

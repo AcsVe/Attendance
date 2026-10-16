@@ -424,6 +424,8 @@ def init_db():
     acc_cols = {r['name'] for r in cur.execute("PRAGMA table_info(employee_accounts)").fetchall()}
     if 'always_track' not in acc_cols:   # تتبع مستمر بلا مدة (للأجهزة المتنقلة) — تفعّله الإدارة
         cur.execute("ALTER TABLE employee_accounts ADD COLUMN always_track INTEGER NOT NULL DEFAULT 0")
+    if 'track_interval' not in acc_cols:   # فاصل إرسال التتبع المستمر بالثواني (15 / 30 / 60)
+        cur.execute("ALTER TABLE employee_accounts ADD COLUMN track_interval INTEGER NOT NULL DEFAULT 60")
     if 'qr_secret' not in acc_cols:
         cur.execute("ALTER TABLE employee_accounts ADD COLUMN qr_secret TEXT")
     cur.execute('''CREATE TABLE IF NOT EXISTS qr_kiosks (

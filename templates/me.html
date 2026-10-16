@@ -266,11 +266,11 @@
     $('shareStop').classList.toggle('hide', !!sh.forced);
     if (NATIVE && NATIVE.presenceStart) {
       var running = false; try { running = NATIVE.presenceRunning(); } catch (e) {}
-      if (!running) { try { NATIVE.presenceStart(60, sh.remaining_ms); } catch (e) {} }
+      if (!running) { try { NATIVE.presenceStart(sh.interval || 60, sh.remaining_ms); } catch (e) {} }
     }
     // والصفحة مفتوحة (آيفون/المتصفح، وأيضاً أندرويد للتحديث الفوري): نقطة كل 30 ثانية
     shareTimer = setInterval(function () {
-      if (!POS || Date.now() - sharePingAt < 30000) return;
+      if (!POS || Date.now() - sharePingAt < Math.min(30, sh.interval || 60) * 1000) return;
       sharePingAt = Date.now();
       api('/me/api/share/live/point', { method: 'POST', body: JSON.stringify({ lat: POS.coords.latitude, lng: POS.coords.longitude, accuracy: POS.coords.accuracy, mock: !!POS.mock }) })
         .then(function (d) { if (d && !d.active) { if (d.error) toast(d.error); load(); } }).catch(function () {});

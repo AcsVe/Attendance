@@ -229,13 +229,15 @@
     <div class="filter-bar" style="margin-bottom:8px">
       <input type="search" id="trSearch" class="search-input" placeholder="بحث بالاسم أو القسم…" oninput="trRender()">
       <div class="m-chips" id="trChips"></div>
-      <button class="btn btn-primary btn-sm" onclick="trSet(true)"><i class="fas fa-play" aria-hidden="true"></i> تشغيل التتبع</button>
+      <select id="trInterval" class="search-input" aria-label="فاصل الإرسال" title="فاصل إرسال الموقع">
+        <option value="15">كل 15 ثانية</option><option value="30">كل 30 ثانية</option><option value="60" selected>كل دقيقة</option></select>
+      <button class="btn btn-primary btn-sm" onclick="trSet(true)"><i class="fas fa-play" aria-hidden="true"></i> تشغيل / تحديث الفاصل</button>
       <button class="btn btn-outline btn-sm" onclick="trSet(false)"><i class="fas fa-stop" aria-hidden="true"></i> إيقاف التتبع</button>
       <span style="font-size:.85rem;color:var(--muted)">المحدد: <b id="trSel">0</b> من <b id="trTotal">0</b></span>
     </div>
     <div class="table-wrap" style="max-height:260px">
       <table>
-        <thead><tr><th><input type="checkbox" id="trAll" onchange="trCheckAll(this.checked)" aria-label="تحديد الكل"></th><th>الموظف / الجهاز</th><th>القسم</th><th>التتبع المستمر</th><th>آخر موقع</th></tr></thead>
+        <thead><tr><th><input type="checkbox" id="trAll" onchange="trCheckAll(this.checked)" aria-label="تحديد الكل"></th><th>الموظف / الجهاز</th><th>القسم</th><th>التتبع المستمر</th><th>فاصل الإرسال</th><th>الاتصال</th></tr></thead>
         <tbody id="trTable"></tbody>
       </table>
     </div>
@@ -247,6 +249,11 @@
       <input type="search" id="shSearch" class="search-input" placeholder="بحث بالاسم أو القسم…" oninput="shRender()">
       <select id="shDays" class="search-input" onchange="shLoad()"><option value="1">اليوم</option><option value="7" selected>آخر 7 أيام</option><option value="30">آخر 30 يوماً</option><option value="90">آخر 90 يوماً</option></select>
       <div class="m-chips" id="shChips"></div>
+    </div>
+    <div id="shFollowBar" class="hide" role="status" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#e8f5ee;border:1px solid #bfe3cf;border-radius:12px;padding:8px 12px;margin-bottom:8px">
+      <i class="fas fa-crosshairs fa-beat-fade" aria-hidden="true" style="color:#0a6640"></i>
+      <b id="shFollowText" style="flex:1"></b>
+      <button class="btn btn-outline btn-sm" onclick="shFollowStop()"><i class="fas fa-xmark" aria-hidden="true"></i> إيقاف التتبع</button>
     </div>
     <div id="shMap" style="height:360px;border-radius:12px;margin-bottom:10px"></div>
     <div class="filter-bar" style="margin-bottom:6px">

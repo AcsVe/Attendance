@@ -115,13 +115,32 @@ def add_point(conn, share, lat, lng, acc, now=None):
     return True
 
 
+def share_interval(conn, share):
+    """فاصل الإرسال بالثواني: التتبع المستمر حسب إعداد الجهاز (15/30/60)، وغيره كل دقيقة"""
+    if share and share.get('source') == 'admin':
+        r = conn.execute("SELECT track_interval FROM employee_accounts WHERE employee_id = ?", (share['employee_id'],)).fetchone()
+        v = int(r['track_interval'] or 60) if r else 60
+        return v if v in (15, 30, 60) else 60
+    return 60
+
+
+def _age(ts):
+    """كم ثانية مضت على آخر تحديث (لمؤشر «متصل الآن»)"""
+    if not ts:
+        return None
+    try:
+        return max(0, int((now_local() - datetime.strptime(ts[:19], '%Y-%m-%d %H:%M:%S')).total_seconds()))
+    except ValueError:
+        return None
+
+
 def share_info(conn, emp_id):
     s = active_share(conn, emp_id)
     if not s:
         return None
     unlimited = s['ends_at'] >= FOREVER[:4]
     return {'id': s['id'], 'ends_at': s['ends_at'], 'ends': '' if unlimited else s['ends_at'][11:16], 'started': s['started_at'][11:16],
-            'unlimited': unlimited, 'forced': s.get('source') == 'admin',
+            'unlimited': unlimited, 'forced': s.get('source') == 'admin', 'interval': share_interval(conn, s),
             'remaining_ms': max(0, int((datetime.strptime(s['ends_at'], '%Y-%m-%d %H:%M:%S') - now_local()).total_seconds() * 1000))}
 
 
@@ -232,6 +251,7 @@ def api_shares():
             if not _employee_scope_ok(x['dept']):
                 continue
             x['live_now'] = x['kind'] == 'live' and not x['stopped_at'] and (x['ends_at'] or '') > now_s
+            x['age_s'] = _age(x['updated_at'])
             emp = conn.execute("SELECT dept FROM employees WHERE id = ?", (x['employee_id'],)).fetchone()
             x['site_dist'] = None
             if x['lat'] is not None and emp is not None:
@@ -292,6 +312,12 @@ def api_shares_tracking():
                 return jsonify({'ok': False, 'error': 'لم يُحدَّد أحد'}), 400
             q = ','.join('?' * len(ids))
             n = conn.execute(f"UPDATE employee_accounts SET always_track = ? WHERE employee_id IN ({q})", [1 if on else 0] + ids).rowcount
+            try:
+                iv = int(d.get('interval') or 0)
+            except (TypeError, ValueError):
+                iv = 0
+            if iv in (15, 30, 60):
+                conn.execute(f"UPDATE employee_accounts SET track_interval = ? WHERE employee_id IN ({q})", [iv] + ids)
             if not on:     # إيقاف المشاركة الجارية التي أنشأتها الإدارة
                 conn.execute(f"UPDATE location_shares SET stopped_at = ? WHERE employee_id IN ({q}) AND source = 'admin' AND stopped_at IS NULL",
                              [_ts()] + ids)
@@ -299,7 +325,7 @@ def api_shares_tracking():
             conn.commit()
             return jsonify({'ok': True, 'updated': n})
         rows = [dict(r) for r in conn.execute(
-            "SELECT e.id, e.name, e.dept, a.always_track, a.active AS acc_active, a.username FROM employees e "
+            "SELECT e.id, e.name, e.dept, a.always_track, a.track_interval, a.active AS acc_active, a.username FROM employees e "
             "JOIN employee_accounts a ON a.employee_id = e.id WHERE e.active = 1 ORDER BY a.always_track DESC, e.dept, e.name")]
         rows = [r for r in rows if _employee_scope_ok(r['dept'])]
         now_s = _ts()
@@ -307,6 +333,7 @@ def api_shares_tracking():
             s = conn.execute("SELECT updated_at, lat FROM location_shares WHERE employee_id = ? AND kind = 'live' AND stopped_at IS NULL "
                              "AND ends_at > ? ORDER BY id DESC LIMIT 1", (r['id'], now_s)).fetchone()
             r['last_update'] = s['updated_at'] if s else None
+            r['age_s'] = _age(r['last_update'])
         return jsonify({'ok': True, 'rows': rows})
     finally:
         conn.close()
@@ -329,5 +356,24 @@ def api_shares_stop():
         _audit(conn, 'shares_stop', 'location_share', json.dumps(ids)[:300])
         conn.commit()
         return jsonify({'ok': True, 'stopped': n})
+    finally:
+        conn.close()
+
+
+@bp.route('/api/shares/<int:sid>/latest')
+@admin_required
+def api_share_latest(sid):
+    """آخر موقع لمشاركة (لوضع «تتبع هذا الجهاز» الذي يتحدّث كل 10 ثوانٍ)"""
+    conn = db.get_db()
+    try:
+        s = conn.execute("SELECT * FROM location_shares WHERE id = ?", (sid,)).fetchone()
+        if not s or not _employee_scope_ok(s['dept']):
+            return jsonify({'ok': False, 'error': 'غير موجود'}), 404
+        tail = [[r['lat'], r['lng']] for r in conn.execute(
+            "SELECT lat, lng FROM (SELECT lat, lng, ts FROM location_share_points WHERE share_id = ? ORDER BY ts DESC LIMIT 60) ORDER BY ts", (sid,))]
+        live = s['kind'] == 'live' and not s['stopped_at'] and (s['ends_at'] or '') > _ts()
+        return jsonify({'ok': True, 'name': s['name'], 'lat': s['lat'], 'lng': s['lng'], 'accuracy': s['accuracy'],
+                        'updated_at': s['updated_at'], 'age_s': _age(s['updated_at']), 'live': live, 'tail': tail,
+                        'interval': share_interval(conn, dict(s))})
     finally:
         conn.close()

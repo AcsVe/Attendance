@@ -978,6 +978,12 @@ document.addEventListener('DOMContentLoaded', () => { prAlertPoll(); setInterval
 
 
 /* ================= المواقع المشاركة من الموظفين ================= */
+function connLabel(age, live) {
+  if (age == null) return '<span style="color:var(--muted)">—</span>';
+  if (live && age <= 120) return '<span style="color:#0a6640;font-weight:700">🟢 متصل الآن</span>';
+  const t = age < 3600 ? Math.round(age / 60) + ' د' : age < 86400 ? Math.round(age / 3600) + ' س' : Math.round(age / 86400) + ' يوم';
+  return `<span style="color:var(--muted)">⚪ آخر اتصال قبل ${t}</span>`;
+}
 let shRows = [], shMap = null, shLayer = null, shFilter = 'all', shTimer = null;
 async function shLoad() {
   const d = await api('/api/shares?days=' + document.getElementById('shDays').value).catch(() => null);
@@ -1007,7 +1013,8 @@ function shRender() {
     <td><b>${mEsc(r.name)}</b>${r.flags ? ` <span title="${mEsc(r.flags)}" style="color:#c0392b;font-weight:700">⚠ مشبوه</span><div style="font-size:.75rem;color:#c0392b">${mEsc(r.flags)}</div>` : ''}${r.source === 'admin' ? ' <small style="color:var(--primary)">(تتبع مستمر)</small>' : r.source === 'app' ? ' <small style="color:var(--muted)">(التطبيق)</small>' : r.source ? ' <small style="color:var(--muted)">(المتصفح)</small>' : ''}</td><td>${mEsc(r.dept || '—')}</td>
     <td>${r.kind === 'live' ? (r.live_now ? '<span style="color:#0a6640;font-weight:700">مباشر الآن</span>' : 'مباشر (انتهى)') : 'موقع حالي'}</td>
     <td dir="ltr">${mEsc((r.started_at || '').slice(5, 16))}</td><td dir="ltr">${r.kind === 'live' ? (r.stopped_at ? mEsc(r.stopped_at.slice(11, 16)) : (r.ends_at || '').startsWith('9999') ? '<span dir="rtl">بلا مدة</span>' : mEsc((r.ends_at || '').slice(11, 16))) : '—'}</td>
-    <td dir="ltr">${mEsc((r.updated_at || '').slice(11, 19) || '—')}</td>
+    <td><span dir="ltr">${mEsc((r.updated_at || '').slice(11, 19) || '—')}</span>${r.kind === 'live' ? '<br><small>' + connLabel(r.age_s, r.live_now) + '</small>' : ''}
+      ${r.live_now ? `<br><button class="btn btn-primary btn-sm" style="margin-top:4px" onclick="event.stopPropagation();shFollow(${r.id})"><i class="fas fa-crosshairs" aria-hidden="true"></i> تتبع</button>` : ''}</td>
     <td>${r.site_dist == null ? '—' : (r.site_dist === 0 ? '<span style="color:#0a6640">داخل «' + mEsc(r.site_name) + '»</span>' : r.site_dist + ' م عن «' + mEsc(r.site_name) + '»')}</td>
     <td>${mEsc(r.note || '')}</td></tr>`).join('') || '<tr><td colspan="9" style="color:var(--muted)">لا توجد مواقع مشاركة</td></tr>';
   shSelCount();
@@ -1020,6 +1027,7 @@ function shEnsureMap() {
   shLayer = L.layerGroup().addTo(shMap);
 }
 function shDrawMarkers(rows) {
+  if (shFollowId) return;   // أثناء «تتبع هذا الجهاز» لا نغيّر الخريطة
   setTimeout(() => {
     shEnsureMap(); if (!shMap) return;
     shMap.invalidateSize(); shLayer.clearLayers();
@@ -1078,7 +1086,8 @@ function trRender() {
     <td><input type="checkbox" class="tr-check" data-id="${r.id}" onchange="trSelCount()"></td>
     <td><b>${mEsc(r.name)}</b></td><td>${mEsc(r.dept || '—')}</td>
     <td>${r.always_track ? '<span style="color:#0a6640;font-weight:700">مفعّل</span>' : '<span style="color:var(--muted)">غير مفعّل</span>'}</td>
-    <td dir="ltr">${mEsc(r.last_update || '—')}</td></tr>`).join('') || '<tr><td colspan="5" style="color:var(--muted)">لا يوجد موظفون بحسابات تطبيق</td></tr>';
+    <td>${r.track_interval == 15 ? 'كل 15 ثانية' : r.track_interval == 30 ? 'كل 30 ثانية' : 'كل دقيقة'}</td>
+    <td>${r.always_track ? connLabel(r.age_s, !!r.last_update) : '—'}</td></tr>`).join('') || '<tr><td colspan="6" style="color:var(--muted)">لا يوجد موظفون بحسابات تطبيق</td></tr>';
   trSelCount();
 }
 function trChecked() { return [...document.querySelectorAll('.tr-check:checked')].map(c => +c.dataset.id); }
@@ -1088,7 +1097,7 @@ async function trSet(on) {
   const ids = trChecked();
   if (!ids.length) { toast('حدّد موظفاً أو جهازاً واحداً على الأقل', true); return; }
   if (on && !confirm(`تشغيل التتبع المستمر بلا مدة لـ ${ids.length}؟ سيُرسل موقعهم كل دقيقة ولن يستطيعوا إيقافه من الهاتف.`)) return;
-  await api('/api/shares/tracking', { method: 'POST', body: JSON.stringify({ ids, on }) });
+  await api('/api/shares/tracking', { method: 'POST', body: JSON.stringify({ ids, on, interval: on ? +document.getElementById('trInterval').value : 0 }) });
   toast(on ? 'تم تشغيل التتبع المستمر' : 'تم إيقاف التتبع المستمر'); trLoad(); shLoad();
 }
 async function shStop() {
@@ -1097,4 +1106,44 @@ async function shStop() {
   if (!confirm(`إيقاف ${ids.length} مشاركة جارية؟`)) return;
   const d = await api('/api/shares/stop', { method: 'POST', body: JSON.stringify({ ids }) });
   toast(`أُوقفت ${d.stopped} مشاركة`); trLoad(); shLoad();
+}
+
+
+/* ===== وضع «تتبع هذا الجهاز»: الخريطة تتحرك معه وتتحدّث كل 10 ثوانٍ ===== */
+let shFollowId = null, shFollowTimer = null, shFollowLayer = null;
+async function shFollow(id) {
+  shFollowStop(true);
+  shFollowId = id;
+  shEnsureMap(); if (!shMap) return;
+  shLayer.clearLayers();
+  shFollowLayer = L.layerGroup().addTo(shMap);
+  document.getElementById('shFollowBar').classList.remove('hide');
+  document.getElementById('shFollowBar').style.display = 'flex';
+  document.getElementById('shMap').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  await shFollowTick(true);
+  shFollowTimer = setInterval(() => {
+    if (typeof currentTab !== 'undefined' && currentTab !== 'shares') { shFollowStop(); return; }
+    shFollowTick(false);
+  }, 10000);
+}
+async function shFollowTick(first) {
+  if (!shFollowId) return;
+  const d = await api('/api/shares/' + shFollowId + '/latest').catch(() => null);
+  if (!d || d.lat == null || !shFollowLayer) return;
+  shFollowLayer.clearLayers();
+  if (d.tail.length > 1) L.polyline(d.tail, { color: '#d9822b', weight: 4, opacity: .8 }).addTo(shFollowLayer);
+  if (d.accuracy) L.circle([d.lat, d.lng], { radius: d.accuracy, color: '#0a6640', weight: 1, fillOpacity: .1 }).addTo(shFollowLayer);
+  L.circleMarker([d.lat, d.lng], { radius: 10, color: '#0a6640', fillColor: '#2ecc71', fillOpacity: .95, weight: 3 })
+    .bindTooltip(mEsc(d.name), { permanent: true, direction: 'top', offset: [0, -10] }).addTo(shFollowLayer);
+  if (first) shMap.setView([d.lat, d.lng], 17); else shMap.panTo([d.lat, d.lng]);
+  const ago = d.age_s == null ? '—' : d.age_s < 60 ? d.age_s + ' ثانية' : Math.round(d.age_s / 60) + ' دقيقة';
+  document.getElementById('shFollowText').innerHTML = `تتبع: ${mEsc(d.name)} — آخر موقع قبل ${ago} (${mEsc((d.updated_at || '').slice(11, 19))})`
+    + (d.live ? (d.age_s != null && d.age_s <= 120 ? ' · <span style="color:#0a6640">🟢 متصل الآن</span>' : ' · <span style="color:#b45309">⚪ لا تصل تحديثات حالياً</span>') : ' · <span style="color:#c0392b">انتهت المشاركة</span>');
+}
+function shFollowStop(keep) {
+  clearInterval(shFollowTimer); shFollowTimer = null; shFollowId = null;
+  if (shFollowLayer && shMap) { shMap.removeLayer(shFollowLayer); }
+  shFollowLayer = null;
+  const b = document.getElementById('shFollowBar'); if (b) { b.classList.add('hide'); b.style.display = 'none'; }
+  if (!keep) shRender();
 }
