@@ -991,19 +991,20 @@ async function shLoad() {
 }
 function shVisible() {
   const q = (document.getElementById('shSearch').value || '').trim().toLowerCase();
-  return shRows.filter(r => (shFilter === 'all' || (shFilter === 'live' ? r.live_now : r.kind === shFilter))
+  return shRows.filter(r => (shFilter === 'all' || (shFilter === 'live' ? r.live_now : shFilter === 'flag' ? !!r.flags : r.kind === shFilter))
     && (!q || (r.name || '').toLowerCase().includes(q) || (r.dept || '').toLowerCase().includes(q)));
 }
 function shRender() {
   const cnt = { all: shRows.length, live: shRows.filter(r => r.live_now).length, once: shRows.filter(r => r.kind === 'once').length, liveAll: shRows.filter(r => r.kind === 'live').length };
-  document.getElementById('shChips').innerHTML = [['all', 'الكل', cnt.all], ['live', 'مباشر الآن', cnt.live], ['once', 'موقع حالي', cnt.once]]
+  cnt.flag = shRows.filter(r => r.flags).length;
+  document.getElementById('shChips').innerHTML = [['all', 'الكل', cnt.all], ['live', 'مباشر الآن', cnt.live], ['once', 'موقع حالي', cnt.once], ['flag', 'مشبوه', cnt.flag]]
     .map(([k, l, n]) => `<button class="${shFilter === k ? 'on' : ''}" onclick="shFilter='${k}';shRender()">${l} <b>${n}</b></button>`).join('');
   const rows = shVisible();
   document.getElementById('shTotal').textContent = rows.length;
   document.getElementById('shAll').checked = false;
   document.getElementById('shTable').innerHTML = rows.map(r => `<tr style="cursor:pointer" onclick="if(event.target.type!=='checkbox')shTrack(${r.id})">
     <td><input type="checkbox" class="sh-check" data-id="${r.id}" onchange="shSelCount()"></td>
-    <td><b>${mEsc(r.name)}</b></td><td>${mEsc(r.dept || '—')}</td>
+    <td><b>${mEsc(r.name)}</b>${r.flags ? ` <span title="${mEsc(r.flags)}" style="color:#c0392b;font-weight:700">⚠ مشبوه</span><div style="font-size:.75rem;color:#c0392b">${mEsc(r.flags)}</div>` : ''}${r.source === 'app' ? ' <small style="color:var(--muted)">(التطبيق)</small>' : r.source ? ' <small style="color:var(--muted)">(المتصفح)</small>' : ''}</td><td>${mEsc(r.dept || '—')}</td>
     <td>${r.kind === 'live' ? (r.live_now ? '<span style="color:#0a6640;font-weight:700">مباشر الآن</span>' : 'مباشر (انتهى)') : 'موقع حالي'}</td>
     <td dir="ltr">${mEsc((r.started_at || '').slice(5, 16))}</td><td dir="ltr">${r.kind === 'live' ? mEsc((r.stopped_at || r.ends_at || '').slice(11, 16)) : '—'}</td>
     <td dir="ltr">${mEsc((r.updated_at || '').slice(11, 19) || '—')}</td>
@@ -1025,7 +1026,7 @@ function shDrawMarkers(rows) {
     const b = [];
     rows.filter(r => r.lat != null).forEach(r => {
       const live = r.live_now;
-      L.circleMarker([r.lat, r.lng], { radius: live ? 9 : 6, color: live ? '#0a6640' : '#1B6E8C', fillOpacity: .8 })
+      L.circleMarker([r.lat, r.lng], { radius: live ? 9 : 6, color: r.flags ? '#c0392b' : (live ? '#0a6640' : '#1B6E8C'), fillOpacity: .8 })
         .bindPopup(`<b>${mEsc(r.name)}</b><br>${live ? 'مباشر الآن' : (r.kind === 'live' ? 'مباشر (انتهى)' : 'موقع حالي')}<br>${mEsc((r.updated_at || r.started_at || '').slice(0, 16))}${r.note ? '<br>' + mEsc(r.note) : ''}`)
         .addTo(shLayer);
       b.push([r.lat, r.lng]);

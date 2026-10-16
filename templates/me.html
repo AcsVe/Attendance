@@ -269,22 +269,28 @@
     shareTimer = setInterval(function () {
       if (!POS || Date.now() - sharePingAt < 30000) return;
       sharePingAt = Date.now();
-      api('/me/api/share/live/point', { method: 'POST', body: JSON.stringify({ lat: POS.coords.latitude, lng: POS.coords.longitude, accuracy: POS.coords.accuracy }) })
-        .then(function (d) { if (d && d.ok && !d.active) load(); }).catch(function () {});
+      api('/me/api/share/live/point', { method: 'POST', body: JSON.stringify({ lat: POS.coords.latitude, lng: POS.coords.longitude, accuracy: POS.coords.accuracy, mock: !!POS.mock }) })
+        .then(function (d) { if (d && !d.active) { if (d.error) toast(d.error); load(); } }).catch(function () {});
     }, 5000);
   }
-  function posBody(extra) {
+  // نفس حماية تسجيل الدوام: كشف الموقع الوهمي من أندرويد + توقيع التطبيق + عينات القراءات
+  function shareReq(extra) {
     if (!POS) { toast('لم يُحدَّد موقعك بعد — انتظر قليلاً ثم أعد المحاولة'); return null; }
-    return JSON.stringify(Object.assign({ lat: POS.coords.latitude, lng: POS.coords.longitude, accuracy: POS.coords.accuracy, note: $('shareNote').value }, extra || {}));
+    if (POS.mock) { toast('تم اكتشاف تطبيق موقع وهمي (Fake GPS) على هاتفك — أغلقه ثم أعد المحاولة'); return null; }
+    var lat = POS.coords.latitude, lng = POS.coords.longitude, hdr = {};
+    if (NATIVE && NATIVE.sign) { var ts = String(Date.now()); hdr = { 'X-App': 'android', 'X-App-Ts': ts, 'X-App-Sig': NATIVE.sign('share|' + lat + '|' + lng + '|' + ts + '|0') }; }
+    return { method: 'POST', headers: hdr, body: JSON.stringify(Object.assign({ lat: lat, lng: lng, accuracy: POS.coords.accuracy, note: $('shareNote').value,
+      mock: !!POS.mock, samples: SAMPLES, rooted: NATIVE && NATIVE.isRooted ? !!NATIVE.isRooted() : false,
+      dev_opts: NATIVE && NATIVE.devOptions ? !!NATIVE.devOptions() : null }, extra || {})) };
   }
   $('shareOnce').addEventListener('click', function () {
-    var b = posBody(); if (!b) return;
-    api('/me/api/share/once', { method: 'POST', body: b }).then(function (d) { toast(d.ok ? d.message : d.error, d.ok); if (d.ok) $('shareNote').value = ''; });
+    var r = shareReq(); if (!r) return;
+    api('/me/api/share/once', r).then(function (d) { toast(d.ok ? d.message : d.error, d.ok); if (d.ok) $('shareNote').value = ''; });
   });
   $('shareLiveBtn').addEventListener('click', function () {
-    var b = posBody({ minutes: $('shareMins').value }); if (!b) return;
+    var r = shareReq({ minutes: $('shareMins').value }); if (!r) return;
     $('shareLiveBtn').disabled = true;
-    api('/me/api/share/live/start', { method: 'POST', body: b }).then(function (d) {
+    api('/me/api/share/live/start', r).then(function (d) {
       toast(d.ok ? d.message : d.error, d.ok); $('shareLiveBtn').disabled = false;
       if (d.ok && NATIVE && NATIVE.presenceStart) {   // إعادة تشغيل خدمة الخلفية بفاصل دقيقة
         try { NATIVE.presenceStop(); } catch (e) {}

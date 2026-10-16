@@ -12,7 +12,7 @@ from flask import Blueprint, jsonify, request
 
 import db
 from mobile import (_me_json, admin_required, now_local, _employee_scope_ok, _audit, haversine_m,
-                    sites_for, _work_end)
+                    sites_for, _work_end, check_integrity)
 
 bp = Blueprint('shares', __name__)
 LIVE_CHOICES = {15, 30, 60, 120, 240}
@@ -38,6 +38,29 @@ def init_tables(conn):
         lat REAL NOT NULL, lng REAL NOT NULL, accuracy REAL
     )''')
     conn.execute("CREATE INDEX IF NOT EXISTS ix_share_points ON location_share_points(share_id, ts)")
+    cols = {r['name'] for r in conn.execute("PRAGMA table_info(location_shares)")}
+    for col in ('flags', 'source'):
+        if col not in cols:
+            conn.execute(f"ALTER TABLE location_shares ADD COLUMN {col} TEXT")
+
+
+def _integrity(conn, emp, d, cfg):
+    """نفس حماية تسجيل الدوام من الموقع الوهمي: يرجع (سبب الرفض، علامات الاشتباه، المصدر)"""
+    lat, lng, acc = _num(d.get('lat')), _num(d.get('lng')), _num(d.get('accuracy'))
+    reason, flags, source = check_integrity(conn, emp, 'share', d, lat, lng, acc, None, cfg)
+    if not reason and source == 'app' and d.get('dev_opts'):
+        flags.append('خيارات المطوّر مفعّلة على الهاتف')
+    if not reason and d.get('mock'):      # المتصفح لا يكشفه عادةً، لكن إن وصل نرفضه
+        reason = 'تم اكتشاف تطبيق موقع وهمي (Fake GPS) على هاتفك — أغلقه ثم أعد المحاولة'
+    return reason, flags, source
+
+
+def _flag(conn, share_id, text):
+    r = conn.execute("SELECT flags FROM location_shares WHERE id = ?", (share_id,)).fetchone()
+    old = [x for x in ((r['flags'] if r else '') or '').split('؛ ') if x]
+    if text not in old:
+        old.append(text)
+    conn.execute("UPDATE location_shares SET flags = ? WHERE id = ?", ('؛ '.join(old)[:500], share_id))
 
 
 def _ts(now=None):
@@ -65,7 +88,12 @@ def add_point(conn, share, lat, lng, acc, now=None):
     if lat is None or lng is None or not (-90 <= lat <= 90 and -180 <= lng <= 180):
         return False
     ts = _ts(now)
-    last = conn.execute("SELECT ts FROM location_share_points WHERE share_id = ? ORDER BY ts DESC LIMIT 1", (share['id'],)).fetchone()
+    last = conn.execute("SELECT ts, lat, lng FROM location_share_points WHERE share_id = ? ORDER BY ts DESC LIMIT 1", (share['id'],)).fetchone()
+    if last:
+        secs = max((datetime.strptime(ts, '%Y-%m-%d %H:%M:%S') - datetime.strptime(last['ts'], '%Y-%m-%d %H:%M:%S')).total_seconds(), 1)
+        km = haversine_m(lat, lng, last['lat'], last['lng']) / 1000
+        if km > 1 and km / (secs / 3600) > 250:
+            _flag(conn, share['id'], f'قفزة غير منطقية ({km:.0f} كم خلال ' + (f'{secs / 60:.0f} دقيقة)' if secs >= 60 else 'أقل من دقيقة)'))
     if last and (datetime.strptime(ts, '%Y-%m-%d %H:%M:%S') - datetime.strptime(last['ts'], '%Y-%m-%d %H:%M:%S')).total_seconds() < 20:
         conn.execute("UPDATE location_shares SET lat = ?, lng = ?, accuracy = ?, updated_at = ? WHERE id = ?", (lat, lng, acc, ts, share['id']))
         return True
@@ -91,10 +119,14 @@ def me_share_once(conn, acc, emp, cfg):
     lat, lng = _num(d.get('lat')), _num(d.get('lng'))
     if lat is None or lng is None:
         return jsonify({'ok': False, 'error': 'لم يُحدَّد موقعك بعد — انتظر قليلاً ثم أعد المحاولة'}), 400
+    reason, flags, source = _integrity(conn, emp, d, cfg)
+    if reason:
+        return jsonify({'ok': False, 'error': reason}), 403
     now = _ts()
-    cur = conn.execute("INSERT INTO location_shares (employee_id, name, dept, kind, note, started_at, ends_at, stopped_at, lat, lng, accuracy, updated_at, points) "
-                       "VALUES (?, ?, ?, 'once', ?, ?, ?, ?, ?, ?, ?, ?, 1)",
-                       (emp['id'], emp['name'], emp['dept'] or '', (d.get('note') or '').strip()[:200], now, now, now, lat, lng, _num(d.get('accuracy')), now))
+    cur = conn.execute("INSERT INTO location_shares (employee_id, name, dept, kind, note, started_at, ends_at, stopped_at, lat, lng, accuracy, updated_at, points, flags, source) "
+                       "VALUES (?, ?, ?, 'once', ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)",
+                       (emp['id'], emp['name'], emp['dept'] or '', (d.get('note') or '').strip()[:200], now, now, now, lat, lng, _num(d.get('accuracy')), now,
+                        '؛ '.join(flags)[:500], source))
     conn.execute("INSERT INTO location_share_points (share_id, ts, lat, lng, accuracy) VALUES (?, ?, ?, ?, ?)",
                  (cur.lastrowid, now, lat, lng, _num(d.get('accuracy'))))
     conn.commit()
@@ -106,6 +138,11 @@ def me_share_once(conn, acc, emp, cfg):
 def me_share_live_start(conn, acc, emp, cfg):
     d = request.get_json(silent=True) or {}
     now = now_local()
+    if _num(d.get('lat')) is None:
+        return jsonify({'ok': False, 'error': 'لم يُحدَّد موقعك بعد — انتظر قليلاً ثم أعد المحاولة'}), 400
+    reason, flags, source = _integrity(conn, emp, d, cfg)
+    if reason:
+        return jsonify({'ok': False, 'error': reason}), 403
     mins = d.get('minutes')
     if mins == 'shift':
         end = _work_end(conn, emp, cfg, now)
@@ -122,8 +159,8 @@ def me_share_live_start(conn, acc, emp, cfg):
     old = active_share(conn, emp['id'], now)
     if old:
         conn.execute("UPDATE location_shares SET stopped_at = ? WHERE id = ?", (_ts(now), old['id']))
-    cur = conn.execute("INSERT INTO location_shares (employee_id, name, dept, kind, note, started_at, ends_at) VALUES (?, ?, ?, 'live', ?, ?, ?)",
-                       (emp['id'], emp['name'], emp['dept'] or '', (d.get('note') or '').strip()[:200], _ts(now), _ts(end)))
+    cur = conn.execute("INSERT INTO location_shares (employee_id, name, dept, kind, note, started_at, ends_at, flags, source) VALUES (?, ?, ?, 'live', ?, ?, ?, ?, ?)",
+                       (emp['id'], emp['name'], emp['dept'] or '', (d.get('note') or '').strip()[:200], _ts(now), _ts(end), '؛ '.join(flags)[:500], source))
     share = dict(conn.execute("SELECT * FROM location_shares WHERE id = ?", (cur.lastrowid,)).fetchone())
     add_point(conn, share, d.get('lat'), d.get('lng'), d.get('accuracy'), now)
     conn.commit()
@@ -137,9 +174,18 @@ def me_share_live_point(conn, acc, emp, cfg):
     s = active_share(conn, emp['id'])
     if not s:
         return jsonify({'ok': True, 'active': False})
+    if d.get('mock'):
+        stop_for_mock(conn, s)
+        conn.commit()
+        return jsonify({'ok': False, 'active': False, 'error': 'أُوقفت المشاركة: تم اكتشاف تطبيق موقع وهمي'}), 403
     add_point(conn, s, d.get('lat'), d.get('lng'), d.get('accuracy'))
     conn.commit()
     return jsonify({'ok': True, 'active': True})
+
+
+def stop_for_mock(conn, share):
+    conn.execute("UPDATE location_shares SET stopped_at = ? WHERE id = ?", (_ts(), share['id']))
+    _flag(conn, share['id'], 'موقع وهمي (Fake GPS) أثناء المشاركة — أُوقفت تلقائياً')
 
 
 @bp.route('/me/api/share/live/stop', methods=['POST'])

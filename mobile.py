@@ -2563,11 +2563,18 @@ def me_presence_ping():
             chk = presence_check_for(conn, emp, acc, cfg, now)
         interval, remaining = st['interval_s'], (max(0, st['end_ms'] - int(time.time() * 1000)) if st['active'] else 0)
         if share:
-            if not d.get('mock'):
+            if d.get('mock'):      # موقع وهمي: تُوقف المشاركة وتُعلَّم للإدارة
+                shares.stop_for_mock(conn, share)
+                share = None
+            else:
                 shares.add_point(conn, share, lat, lng, accu, now)
+        if share:
             interval = 60
             share_left = int((datetime.strptime(share['ends_at'], '%Y-%m-%d %H:%M:%S') - now).total_seconds() * 1000)
             remaining = max(remaining, share_left)
+        elif not st['active']:
+            conn.commit()
+            return jsonify({'ok': True, 'continue': False, 'reason': 'mock'})
         notes = _device_notes(conn, emp['id'])
         conn.commit()
         return jsonify({'ok': True, 'continue': True, 'interval_s': interval, 'end_ms': st['end_ms'],
