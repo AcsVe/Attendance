@@ -68,7 +68,7 @@ public class PresenceService extends Service implements LocationListener {
             String d = intent.getStringExtra(EXTRA_DEVICE);
             if (d != null && !d.isEmpty()) device = d;
             long iv = intent.getLongExtra(EXTRA_INTERVAL, 600) * 1000L;
-            intervalMs = Math.max(120000L, Math.min(3600000L, iv));
+            intervalMs = Math.max(60000L, Math.min(3600000L, iv));
             long rem = intent.getLongExtra(EXTRA_REMAINING, 0);
             if (rem > 0) stopAtElapsed = SystemClock.elapsedRealtime() + rem;
             sp.edit().putString("device", device).putLong("interval", intervalMs).apply();
@@ -97,7 +97,7 @@ public class PresenceService extends Service implements LocationListener {
         }
         Notification n = builder(CHANNEL)
                 .setContentTitle("RAS Check-in")
-                .setContentText("التحقق من وجودك في موقع العمل أثناء الدوام مفعّل")
+                .setContentText("يرسل التطبيق موقعك إلى النظام الآن (التحقق من التواجد أو مشاركة الموقع)")
                 .setSmallIcon(android.R.drawable.ic_menu_mylocation)
                 .setOngoing(true)
                 .setContentIntent(openApp())
@@ -220,7 +220,7 @@ public class PresenceService extends Service implements LocationListener {
                 return;
             }
             long iv = r.optLong("interval_s", 0) * 1000L;
-            if (iv >= 120000L) intervalMs = iv;
+            if (iv >= 60000L) intervalMs = iv;
             long rem = r.optLong("remaining_ms", 0);
             if (rem > 0) stopAtElapsed = SystemClock.elapsedRealtime() + rem;
             JSONObject chk = r.optJSONObject("check");

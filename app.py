@@ -90,10 +90,13 @@ import adms as _adms  # noqa: E402 — استقبال البصمات من الأ
 app.register_blueprint(_adms.bp)
 import admin_notes as _admin_notes  # noqa: E402 — إشعارات أندرويد لتطبيق الإدارة
 app.register_blueprint(_admin_notes.bp)
+import shares as _shares  # noqa: E402 — مشاركة الموقع من تطبيق الموظف
+app.register_blueprint(_shares.bp)
 try:
     _c = db.get_db()
     _adms.init_tables(_c)
     _admin_notes.init_tables(_c)
+    _shares.init_tables(_c)
     _c.commit()
     _c.close()
 except Exception:

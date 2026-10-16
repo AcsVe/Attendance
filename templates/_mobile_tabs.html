@@ -216,6 +216,29 @@
 </div>
 
 <!-- ============ التحقق من التواجد أثناء الدوام ============ -->
+<div class="tab-panel" id="tab-shares">
+  <div class="card">
+    <div class="card-title"><i class="fas fa-map-location-dot" aria-hidden="true"></i> المواقع المشاركة من الموظفين — مباشر الآن: <span id="shLiveCount">0</span></div>
+    <p style="font-size:.84rem;color:var(--muted);margin-bottom:8px">يرسلها الموظف من تطبيقه بنفسه: «موقعي الحالي» مرة واحدة، أو «مشاركة مباشرة» لمدة يختارها. اضغط صفاً لعرض مساره على الخريطة. تتحدّث الصفحة كل 30 ثانية.</p>
+    <div class="filter-bar" style="margin-bottom:8px">
+      <input type="search" id="shSearch" class="search-input" placeholder="بحث بالاسم أو القسم…" oninput="shRender()">
+      <select id="shDays" class="search-input" onchange="shLoad()"><option value="1">اليوم</option><option value="7" selected>آخر 7 أيام</option><option value="30">آخر 30 يوماً</option><option value="90">آخر 90 يوماً</option></select>
+      <div class="m-chips" id="shChips"></div>
+    </div>
+    <div id="shMap" style="height:360px;border-radius:12px;margin-bottom:10px"></div>
+    <div class="filter-bar" style="margin-bottom:6px">
+      <button class="btn btn-red btn-sm" onclick="shDelete()"><i class="fas fa-trash" aria-hidden="true"></i> حذف المحدد</button>
+      <span style="font-size:.85rem;color:var(--muted)">المحدد: <b id="shSel">0</b> من <b id="shTotal">0</b></span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th><input type="checkbox" id="shAll" onchange="shCheckAll(this.checked)" aria-label="تحديد الكل"></th><th>الموظف</th><th>القسم</th><th>النوع</th><th>البداية</th><th>حتى</th><th>آخر تحديث</th><th>البعد عن موقع العمل</th><th>ملاحظة</th></tr></thead>
+        <tbody id="shTable"><tr><td colspan="9" style="color:var(--muted)">لا توجد مواقع مشاركة</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <div class="tab-panel" id="tab-presence">
   <div class="card">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">

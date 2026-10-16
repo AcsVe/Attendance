@@ -4,7 +4,7 @@
    ===================================================================== */
 Object.assign(PAGE_TITLES, {
   leaves: 'الخروج المؤقت والمغادرات',
-  presence: 'التحقق من التواجد أثناء الدوام',
+  presence: 'التحقق من التواجد أثناء الدوام', shares: 'المواقع المشاركة من الموظفين',
   'mobile-accounts': 'حسابات تطبيق الهاتف', 'mobile-sites': 'مواقع العمل (النطاق الجغرافي)', 'mobile-moves': 'المتابعة المباشرة وحركات الهاتف',
 });
 window.EXTRA_LOADERS = Object.assign(window.EXTRA_LOADERS || {}, {
@@ -12,6 +12,7 @@ window.EXTRA_LOADERS = Object.assign(window.EXTRA_LOADERS || {}, {
   'mobile-sites': () => { loadSites(); loadKiosks(); },
   'mobile-moves': () => { loadLive(); loadMoves(); },
   presence: prLoad,
+  shares: shLoad,
   leaves: () => { lvSettings(); lvLoad(); lvReport(); },
 });
 
@@ -974,3 +975,82 @@ async function prAlertPoll() {
   } catch (e) {}
 }
 document.addEventListener('DOMContentLoaded', () => { prAlertPoll(); setInterval(prAlertPoll, 60000); });
+
+
+/* ================= المواقع المشاركة من الموظفين ================= */
+let shRows = [], shMap = null, shLayer = null, shFilter = 'all', shTimer = null;
+async function shLoad() {
+  const d = await api('/api/shares?days=' + document.getElementById('shDays').value).catch(() => null);
+  if (!d) return;
+  shRows = d.rows;
+  document.getElementById('shLiveCount').textContent = d.live;
+  const nb = document.getElementById('shNavBadge'); if (nb) { nb.classList.toggle('hide', !d.live); nb.textContent = d.live; }
+  shRender();
+  clearInterval(shTimer);
+  shTimer = setInterval(() => { if (typeof currentTab !== 'undefined' && currentTab === 'shares') shLoad(); else clearInterval(shTimer); }, 30000);
+}
+function shVisible() {
+  const q = (document.getElementById('shSearch').value || '').trim().toLowerCase();
+  return shRows.filter(r => (shFilter === 'all' || (shFilter === 'live' ? r.live_now : r.kind === shFilter))
+    && (!q || (r.name || '').toLowerCase().includes(q) || (r.dept || '').toLowerCase().includes(q)));
+}
+function shRender() {
+  const cnt = { all: shRows.length, live: shRows.filter(r => r.live_now).length, once: shRows.filter(r => r.kind === 'once').length, liveAll: shRows.filter(r => r.kind === 'live').length };
+  document.getElementById('shChips').innerHTML = [['all', 'الكل', cnt.all], ['live', 'مباشر الآن', cnt.live], ['once', 'موقع حالي', cnt.once]]
+    .map(([k, l, n]) => `<button class="${shFilter === k ? 'on' : ''}" onclick="shFilter='${k}';shRender()">${l} <b>${n}</b></button>`).join('');
+  const rows = shVisible();
+  document.getElementById('shTotal').textContent = rows.length;
+  document.getElementById('shAll').checked = false;
+  document.getElementById('shTable').innerHTML = rows.map(r => `<tr style="cursor:pointer" onclick="if(event.target.type!=='checkbox')shTrack(${r.id})">
+    <td><input type="checkbox" class="sh-check" data-id="${r.id}" onchange="shSelCount()"></td>
+    <td><b>${mEsc(r.name)}</b></td><td>${mEsc(r.dept || '—')}</td>
+    <td>${r.kind === 'live' ? (r.live_now ? '<span style="color:#0a6640;font-weight:700">مباشر الآن</span>' : 'مباشر (انتهى)') : 'موقع حالي'}</td>
+    <td dir="ltr">${mEsc((r.started_at || '').slice(5, 16))}</td><td dir="ltr">${r.kind === 'live' ? mEsc((r.stopped_at || r.ends_at || '').slice(11, 16)) : '—'}</td>
+    <td dir="ltr">${mEsc((r.updated_at || '').slice(11, 19) || '—')}</td>
+    <td>${r.site_dist == null ? '—' : (r.site_dist === 0 ? '<span style="color:#0a6640">داخل «' + mEsc(r.site_name) + '»</span>' : r.site_dist + ' م عن «' + mEsc(r.site_name) + '»')}</td>
+    <td>${mEsc(r.note || '')}</td></tr>`).join('') || '<tr><td colspan="9" style="color:var(--muted)">لا توجد مواقع مشاركة</td></tr>';
+  shSelCount();
+  shDrawMarkers(rows);
+}
+function shEnsureMap() {
+  if (shMap || typeof L === 'undefined') return;
+  shMap = L.map('shMap').setView([31.95, 35.91], 12);
+  L.tileLayer(OSM, { maxZoom: 19, attribution: OSM_ATTR }).addTo(shMap);
+  shLayer = L.layerGroup().addTo(shMap);
+}
+function shDrawMarkers(rows) {
+  setTimeout(() => {
+    shEnsureMap(); if (!shMap) return;
+    shMap.invalidateSize(); shLayer.clearLayers();
+    const b = [];
+    rows.filter(r => r.lat != null).forEach(r => {
+      const live = r.live_now;
+      L.circleMarker([r.lat, r.lng], { radius: live ? 9 : 6, color: live ? '#0a6640' : '#1B6E8C', fillOpacity: .8 })
+        .bindPopup(`<b>${mEsc(r.name)}</b><br>${live ? 'مباشر الآن' : (r.kind === 'live' ? 'مباشر (انتهى)' : 'موقع حالي')}<br>${mEsc((r.updated_at || r.started_at || '').slice(0, 16))}${r.note ? '<br>' + mEsc(r.note) : ''}`)
+        .addTo(shLayer);
+      b.push([r.lat, r.lng]);
+    });
+    if (b.length) shMap.fitBounds(b, { padding: [30, 30], maxZoom: 16 });
+  }, 50);
+}
+async function shTrack(id) {
+  const d = await api('/api/shares/' + id + '/track').catch(() => null);
+  if (!d || !shMap) return;
+  shLayer.clearLayers();
+  const pts = d.points.map(p => [p[0], p[1]]);
+  if (pts.length > 1) L.polyline(pts, { color: '#d9822b', weight: 4 }).addTo(shLayer);
+  d.points.forEach((p, i) => L.circleMarker([p[0], p[1]], { radius: i === d.points.length - 1 ? 9 : 4, color: i === d.points.length - 1 ? '#0a6640' : '#d9822b', fillOpacity: .9 })
+    .bindPopup(`${mEsc(d.share.name)}<br>${p[2]}${p[3] ? ' · دقة ' + Math.round(p[3]) + ' م' : ''}`).addTo(shLayer));
+  if (pts.length) shMap.fitBounds(pts, { padding: [30, 30], maxZoom: 17 });
+  document.getElementById('shMap').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+function shChecked() { return [...document.querySelectorAll('.sh-check:checked')].map(c => +c.dataset.id); }
+function shSelCount() { document.getElementById('shSel').textContent = shChecked().length; }
+function shCheckAll(on) { document.querySelectorAll('.sh-check').forEach(c => { c.checked = on; }); shSelCount(); }
+async function shDelete() {
+  const ids = shChecked();
+  if (!ids.length) { toast('حدّد سجلاً واحداً على الأقل', true); return; }
+  if (!confirm(`حذف ${ids.length} سجل مشاركة مع مساراتها؟`)) return;
+  await api('/api/shares/delete', { method: 'POST', body: JSON.stringify({ ids }) });
+  toast('تم الحذف'); shLoad();
+}

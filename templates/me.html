@@ -72,6 +72,24 @@
       </div>
       <div class="gps wait" id="gps"><i class="fas fa-location-crosshairs fa-beat-fade" aria-hidden="true"></i><span>جارٍ تحديد موقعك…</span></div>
     </div>
+    <div class="card" id="shareCard">
+      <b style="color:var(--pd)"><i class="fas fa-location-dot" aria-hidden="true"></i> مشاركة موقعي مع الإدارة</b>
+      <div id="shareLive" class="hide" style="background:#e8f5ee;border:1px solid #bfe3cf;border-radius:12px;padding:10px;margin:8px 0;font-weight:700;color:#0a6640">
+        <i class="fas fa-tower-broadcast fa-beat-fade" aria-hidden="true"></i> <span id="shareLiveText"></span>
+        <button class="btn btn-l" id="shareStop" style="width:100%;margin-top:8px;color:#c0392b">إيقاف المشاركة</button>
+      </div>
+      <label for="shareNote" class="muted" style="font-size:.85rem">ملاحظة (اختيارية)</label>
+      <input id="shareNote" maxlength="200" placeholder="مثال: في مهمة خارجية لدى الوزارة">
+      <button class="btn btn-l" id="shareOnce" style="width:100%;margin-top:8px"><i class="fas fa-paper-plane" aria-hidden="true"></i> إرسال موقعي الحالي</button>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <select id="shareMins" style="flex:1" aria-label="مدة مشاركة الموقع المباشر">
+          <option value="15">15 دقيقة</option><option value="30">30 دقيقة</option><option value="60" selected>ساعة</option>
+          <option value="120">ساعتان</option><option value="240">4 ساعات</option><option value="shift">حتى نهاية الدوام</option>
+        </select>
+        <button class="btn btn-p" id="shareLiveBtn" style="flex:1.4"><i class="fas fa-tower-broadcast" aria-hidden="true"></i> مشاركة مباشرة</button>
+      </div>
+      <p class="muted" style="font-size:.78rem;margin:6px 0 0">تُرسل فقط عند ضغطك، وتتوقف المشاركة المباشرة تلقائياً بانتهاء المدة أو عند ضغط «إيقاف».</p>
+    </div>
     <div class="card">
       <b style="color:var(--pd)">حركات اليوم</b>
       <ul class="tl" id="moves" style="margin-top:6px"></ul>
@@ -228,11 +246,61 @@
       if (d.override) ob.innerHTML = '<i class="fas fa-unlock" aria-hidden="true"></i> استثناء من الإدارة: يمكنك التسجيل من خارج موقع العمل حتى ' + esc(d.override.until) + (d.override.no_location ? ' (حتى بدون تحديد الموقع)' : '') + '<br><span class="muted">' + esc(d.override.reason) + '</span>';
       renderBio();
       presenceSync();
+      shareSync();
       leaveSync();
       $('k-days').textContent = d.summary.days; $('k-late').textContent = d.summary.late_days; $('k-min').textContent = d.summary.late_minutes; $('k-abs').textContent = d.summary.absent; $('k-hours').textContent = d.summary.hours;
       render();
     });
   }
+  // ===== مشاركة الموقع (بمبادرة الموظف) =====
+  var shareTimer = null, sharePingAt = 0;
+  function shareSync() {
+    var sh = S.share, box = $('shareLive');
+    box.classList.toggle('hide', !sh);
+    $('shareLiveBtn').disabled = false;
+    clearInterval(shareTimer);
+    if (!sh) return;
+    $('shareLiveText').textContent = 'تشارك موقعك المباشر مع الإدارة حتى ' + sh.ends;
+    if (NATIVE && NATIVE.presenceStart) {
+      var running = false; try { running = NATIVE.presenceRunning(); } catch (e) {}
+      if (!running) { try { NATIVE.presenceStart(60, sh.remaining_ms); } catch (e) {} }
+    }
+    // والصفحة مفتوحة (آيفون/المتصفح، وأيضاً أندرويد للتحديث الفوري): نقطة كل 30 ثانية
+    shareTimer = setInterval(function () {
+      if (!POS || Date.now() - sharePingAt < 30000) return;
+      sharePingAt = Date.now();
+      api('/me/api/share/live/point', { method: 'POST', body: JSON.stringify({ lat: POS.coords.latitude, lng: POS.coords.longitude, accuracy: POS.coords.accuracy }) })
+        .then(function (d) { if (d && d.ok && !d.active) load(); }).catch(function () {});
+    }, 5000);
+  }
+  function posBody(extra) {
+    if (!POS) { toast('لم يُحدَّد موقعك بعد — انتظر قليلاً ثم أعد المحاولة'); return null; }
+    return JSON.stringify(Object.assign({ lat: POS.coords.latitude, lng: POS.coords.longitude, accuracy: POS.coords.accuracy, note: $('shareNote').value }, extra || {}));
+  }
+  $('shareOnce').addEventListener('click', function () {
+    var b = posBody(); if (!b) return;
+    api('/me/api/share/once', { method: 'POST', body: b }).then(function (d) { toast(d.ok ? d.message : d.error, d.ok); if (d.ok) $('shareNote').value = ''; });
+  });
+  $('shareLiveBtn').addEventListener('click', function () {
+    var b = posBody({ minutes: $('shareMins').value }); if (!b) return;
+    $('shareLiveBtn').disabled = true;
+    api('/me/api/share/live/start', { method: 'POST', body: b }).then(function (d) {
+      toast(d.ok ? d.message : d.error, d.ok); $('shareLiveBtn').disabled = false;
+      if (d.ok && NATIVE && NATIVE.presenceStart) {   // إعادة تشغيل خدمة الخلفية بفاصل دقيقة
+        try { NATIVE.presenceStop(); } catch (e) {}
+        try { NATIVE.presenceStart(60, d.share.remaining_ms); } catch (e) {}
+      }
+      load();
+    });
+  });
+  $('shareStop').addEventListener('click', function () {
+    api('/me/api/share/live/stop', { method: 'POST', body: '{}' }).then(function (d) {
+      toast(d.ok ? d.message : d.error, d.ok);
+      if (NATIVE && NATIVE.presenceStop && !(S.presence && S.presence.active)) { try { NATIVE.presenceStop(); } catch (e) {} }
+      load();
+    });
+  });
+
   // ===== مراقبة الحضور أثناء الدوام =====
   var webPingAt = 0, checkTimer = null;
   function presenceSync() {
@@ -245,7 +313,7 @@
     if (NATIVE && NATIVE.presenceStart) {
       var running = false; try { running = NATIVE.presenceRunning(); } catch (e) {}
       if (p.active && !running) { try { NATIVE.presenceStart(p.interval_s || 600, Math.max(0, (p.end_ms || 0) - Date.now())); } catch (e) {} }
-      if (!p.active && running) { try { NATIVE.presenceStop(); } catch (e) {} }
+      if (!p.active && running && !S.share) { try { NATIVE.presenceStop(); } catch (e) {} }
     } else if (p.active && POS && Date.now() - webPingAt > (p.interval_s || 600) * 1000) {
       webPingAt = Date.now();
       api('/me/api/presence/web-ping', { method: 'POST', body: JSON.stringify({ lat: POS.coords.latitude, lng: POS.coords.longitude, accuracy: POS.coords.accuracy }) }).catch(function () {});

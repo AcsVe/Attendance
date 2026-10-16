@@ -653,6 +653,7 @@ def me_status(conn, acc, emp, cfg):
         'biometric': cfg.get('mobile_biometric', 'off'), 'bio_enrolled': creds > 0, 'webauthn': _webauthn_ready(),
         'presence': presence_state(conn, emp, acc, cfg), 'presence_check': presence_check_for(conn, emp, acc, cfg),
         'leave': _leave_info(conn, emp, cfg, now),
+        'share': __import__('shares').share_info(conn, emp['id']),
         'ok': True, 'now': now.strftime('%Y-%m-%d %H:%M:%S'), 'date': d,
         'name': emp['name'], 'dept': emp['dept'] or '',
         'enabled': cfg.get('mobile_enabled', '1') == '1',
@@ -2550,16 +2551,27 @@ def me_presence_ping():
         cfg = settings()
         now = now_local()
         st = presence_state(conn, emp, acc, cfg, now)
-        if not st['active']:
+        import shares   # مشاركة الموقع المباشر بمبادرة الموظف تستخدم خدمة الخلفية نفسها
+        share = shares.active_share(conn, emp['id'], now)
+        if not st['active'] and not share:
             return jsonify({'ok': True, 'continue': False, 'reason': st['reason']})
         lat, lng, accu = d.get('lat'), d.get('lng'), d.get('accuracy')
-        status = 'mock' if d.get('mock') else 'location_off' if (d.get('location_off') or lat is None) else 'ok'
-        record_ping(conn, emp, acc, cfg, lat, lng, accu, status, now)
-        chk = presence_check_for(conn, emp, acc, cfg, now)
+        chk = None
+        if st['active']:
+            status = 'mock' if d.get('mock') else 'location_off' if (d.get('location_off') or lat is None) else 'ok'
+            record_ping(conn, emp, acc, cfg, lat, lng, accu, status, now)
+            chk = presence_check_for(conn, emp, acc, cfg, now)
+        interval, remaining = st['interval_s'], (max(0, st['end_ms'] - int(time.time() * 1000)) if st['active'] else 0)
+        if share:
+            if not d.get('mock'):
+                shares.add_point(conn, share, lat, lng, accu, now)
+            interval = 60
+            share_left = int((datetime.strptime(share['ends_at'], '%Y-%m-%d %H:%M:%S') - now).total_seconds() * 1000)
+            remaining = max(remaining, share_left)
         notes = _device_notes(conn, emp['id'])
         conn.commit()
-        return jsonify({'ok': True, 'continue': True, 'interval_s': st['interval_s'], 'end_ms': st['end_ms'],
-                        'remaining_ms': max(0, st['end_ms'] - int(time.time() * 1000)), 'check': chk, 'notes': notes})
+        return jsonify({'ok': True, 'continue': True, 'interval_s': interval, 'end_ms': st['end_ms'],
+                        'remaining_ms': max(0, remaining), 'check': chk, 'notes': notes})
     finally:
         conn.close()
 
