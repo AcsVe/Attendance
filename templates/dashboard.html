@@ -1427,5 +1427,130 @@
 function toggleTheme(){var r=document.documentElement,d=r.getAttribute('data-theme')==='dark';r.setAttribute('data-theme',d?'light':'dark');try{localStorage.setItem('att_theme',d?'light':'dark');}catch(e){}var b=document.getElementById('themeIcon');if(b)b.className=d?'fas fa-moon':'fas fa-sun';}
 document.addEventListener('DOMContentLoaded',function(){var b=document.getElementById('themeIcon');if(b)b.className=document.documentElement.getAttribute('data-theme')==='dark'?'fas fa-sun':'fas fa-moon';});
 </script>
+<script>window.__CMDK_CONFIG={sel:".sidebar .nav-item"};</script>
+<!-- ===== لوحة البحث السريع للتنقّل (Ctrl+K) — مكوّن مستقل ===== -->
+<script>
+(function(){
+  if (window.__cmdkReady) return; window.__cmdkReady = true;
+  var cfg = window.__CMDK_CONFIG || {};
+  var SEL = cfg.sel || '.sidebar .nav-item, .sidebar-nav .nav-item, #nav-sidebar a';
+
+  // --- حقن الأنماط (يتكيّف مع الوضع الداكن) ---
+  var css = ''
+    + '.cmdk-ov{position:fixed;inset:0;z-index:99999;display:none;align-items:flex-start;justify-content:center;background:rgba(0,0,0,.45);padding-top:12vh;backdrop-filter:blur(2px)}'
+    + '.cmdk-ov.open{display:flex}'
+    + '.cmdk-box{width:min(620px,92vw);background:#fff;color:#1a2b2e;border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.35);overflow:hidden;font-family:inherit;border:1px solid rgba(0,0,0,.08)}'
+    + '.cmdk-ih{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid rgba(0,0,0,.08)}'
+    + '.cmdk-ih i{opacity:.55;font-size:16px}'
+    + '.cmdk-ih input{flex:1;border:0;outline:0;background:transparent;font-size:16px;color:inherit;font-family:inherit}'
+    + '.cmdk-kbd{font-size:11px;opacity:.6;border:1px solid rgba(0,0,0,.2);border-radius:6px;padding:1px 6px;white-space:nowrap}'
+    + '.cmdk-list{max-height:52vh;overflow:auto;padding:6px}'
+    + '.cmdk-it{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:9px;cursor:pointer}'
+    + '.cmdk-it i{width:20px;text-align:center;opacity:.8}'
+    + '.cmdk-it .cmdk-lbl{flex:1;font-size:14.5px}'
+    + '.cmdk-it .cmdk-grp{font-size:11.5px;opacity:.55}'
+    + '.cmdk-it.sel,.cmdk-it:hover{background:rgba(24,124,135,.14)}'
+    + '.cmdk-empty{padding:22px;text-align:center;opacity:.6;font-size:14px}'
+    + '@media (prefers-color-scheme:dark){.cmdk-box{background:#13201f;color:#e7eef0;border-color:rgba(255,255,255,.1)}.cmdk-ih,.cmdk-it.sel,.cmdk-it:hover{border-color:rgba(255,255,255,.1)}.cmdk-it.sel,.cmdk-it:hover{background:rgba(255,255,255,.08)}.cmdk-kbd{border-color:rgba(255,255,255,.25)}}'
+    + ':root[data-theme="dark"] .cmdk-box{background:#13201f;color:#e7eef0;border-color:rgba(255,255,255,.1)}'
+    + ':root[data-theme="dark"] .cmdk-ih{border-color:rgba(255,255,255,.1)}'
+    + ':root[data-theme="dark"] .cmdk-it.sel,:root[data-theme="dark"] .cmdk-it:hover{background:rgba(255,255,255,.08)}'
+    + ':root[data-theme="dark"] .cmdk-kbd{border-color:rgba(255,255,255,.25)}';
+  var st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
+
+  // --- بناء الواجهة ---
+  var ov = document.createElement('div'); ov.className = 'cmdk-ov';
+  ov.innerHTML =
+    '<div class="cmdk-box" role="dialog" aria-label="بحث سريع">'
+    + '<div class="cmdk-ih"><i class="fas fa-magnifying-glass"></i>'
+    + '<input type="text" id="cmdkInput" placeholder="اكتب اسم القائمة أو الصفحة…" autocomplete="off" spellcheck="false">'
+    + '<span class="cmdk-kbd">Esc</span></div>'
+    + '<div class="cmdk-list" id="cmdkList"></div></div>';
+  document.body.appendChild(ov);
+  var input = ov.querySelector('#cmdkInput');
+  var list  = ov.querySelector('#cmdkList');
+  var items = [], view = [], idx = 0;
+
+  function norm(s){ return (s||'').toString().toLowerCase()
+      .replace(/[ً-ٰٟ]/g,'').replace(/[أإآ]/g,'ا')
+      .replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/[‌-‏]/g,'')
+      .replace(/\s+/g,' ').trim(); }
+
+  function collect(){
+    var els = Array.prototype.slice.call(document.querySelectorAll(SEL)), out = [], seen = {};
+    els.forEach(function(el){
+      if (el.style.display === 'none' || el.hasAttribute('hidden') || el.getAttribute('aria-hidden') === 'true') return;
+      var lbl = (el.getAttribute('data-cmdk-label') || el.textContent || '').replace(/\s+/g,' ').trim();
+      lbl = lbl.replace(/\s+\d+$/,'').trim();
+      if (!lbl) return;
+      var ic = el.querySelector('i'); var icon = ic ? ic.className : 'fas fa-chevron-left';
+      var g = el.closest('.nav-group'); var gt = g ? g.querySelector('.nav-group-title') : null;
+      var grp = gt ? gt.textContent.replace(/\s+/g,' ').trim() : '';
+      var key = grp + '|' + lbl; if (seen[key]) return; seen[key] = 1;
+      out.push({ el: el, label: lbl, icon: icon, group: grp, n: norm(lbl + ' ' + grp) });
+    });
+    return out;
+  }
+
+  function render(){
+    list.innerHTML = '';
+    if (!view.length){ list.innerHTML = '<div class="cmdk-empty">لا نتائج</div>'; return; }
+    view.forEach(function(o, i){
+      var d = document.createElement('div');
+      d.className = 'cmdk-it' + (i === idx ? ' sel' : '');
+      d.innerHTML = '<i class="' + o.icon + '"></i><span class="cmdk-lbl"></span>'
+                  + (o.group ? '<span class="cmdk-grp"></span>' : '');
+      d.querySelector('.cmdk-lbl').textContent = o.label;
+      if (o.group) d.querySelector('.cmdk-grp').textContent = o.group;
+      d.addEventListener('mouseenter', function(){ idx = i; markSel(); });
+      d.addEventListener('click', function(){ activate(o); });
+      list.appendChild(d);
+    });
+  }
+  function markSel(){
+    var ch = list.children;
+    for (var i=0;i<ch.length;i++) ch[i].classList.toggle('sel', i===idx);
+    if (ch[idx]) ch[idx].scrollIntoView({ block:'nearest' });
+  }
+  function filter(){
+    var q = norm(input.value);
+    if (!q){ view = items.slice(0, 50); }
+    else {
+      var toks = q.split(' ');
+      view = items.filter(function(o){ return toks.every(function(t){ return o.n.indexOf(t) !== -1; }); });
+    }
+    idx = 0; render();
+  }
+  function activate(o){
+    close();
+    var el = o.el, href = el.getAttribute && el.getAttribute('href');
+    if (el.tagName === 'A' && href && href !== '#') window.location.href = el.href;
+    else el.click();
+  }
+  function open(){
+    items = collect(); input.value = ''; filter();
+    ov.classList.add('open');
+    setTimeout(function(){ input.focus(); }, 20);
+  }
+  function close(){ ov.classList.remove('open'); }
+  window.__cmdkOpen = open;
+
+  input.addEventListener('input', filter);
+  input.addEventListener('keydown', function(e){
+    if (e.key === 'ArrowDown'){ e.preventDefault(); idx = Math.min(idx+1, view.length-1); markSel(); }
+    else if (e.key === 'ArrowUp'){ e.preventDefault(); idx = Math.max(idx-1, 0); markSel(); }
+    else if (e.key === 'Enter'){ e.preventDefault(); if (view[idx]) activate(view[idx]); }
+    else if (e.key === 'Escape'){ e.preventDefault(); close(); }
+  });
+  ov.addEventListener('click', function(e){ if (e.target === ov) close(); });
+
+  document.addEventListener('keydown', function(e){
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')){
+      e.preventDefault(); ov.classList.contains('open') ? close() : open();
+    }
+  });
+})();
+</script>
+
 </body>
 </html>
