@@ -8,7 +8,7 @@ call scripts\find_python.bat
 set PYTHONUTF8=1
 if not exist .git (
   git init -q
-  git remote add origin https://github.com/AcsVe/attendance.git
+  git remote add origin https://github.com/AcsVe/Attendance.git
   git fetch -q origin main || (echo [X] Could not reach GitHub & pause & exit /b 1)
   git reset -q --hard origin/main
   git branch -q -M main

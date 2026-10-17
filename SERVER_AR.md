@@ -15,7 +15,7 @@
 ## الكمبيوتر (مرة واحدة)
 
 ```bat
-git clone https://github.com/AcsVe/attendance.git C:\attendance
+git clone https://github.com/AcsVe/Attendance.git C:\attendance
 cd C:\attendance
 1_setup.bat            :: الإعدادات + كلمة مرور admin + نقل قاعدة قديمة (اختياري) + ربط 3.iajaward.org
 3_autostart.bat        :: كمسؤول: تشغيل مع Windows + نسخ كل ساعة + الحارس
@@ -36,7 +36,7 @@ cd C:\attendance
 
 ```bash
 cd ~ && curl -sL -H "Authorization: Bearer $(cat ~/.iaj_github_token)" \
-  https://api.github.com/repos/AcsVe/attendance/zipball/main -o r.zip && \
+  https://api.github.com/repos/AcsVe/Attendance/zipball/main -o r.zip && \
   unzip -q r.zip -d rtmp && mv rtmp/* attendance && rm -rf rtmp r.zip && \
   bash ~/attendance/standby/phone.sh setup && bash ~/attendance/standby/phone.sh configure
 ```

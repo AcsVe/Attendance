@@ -1,6 +1,6 @@
 """تحديث كود نظام الحضور على الهاتف من GitHub مباشرة (يستخدم نفس رمز موقع الجائزة ~/.iaj_github_token).
 
-• يجب أن يشمل الرمز (Fine-grained, Contents: Read-only) مستودع AcsVe/attendance أيضاً.
+• يجب أن يشمل الرمز (Fine-grained, Contents: Read-only) مستودع AcsVe/Attendance أيضاً.
 • لا يلمس: .env ومجلد data (القاعدة والمرفقات) وlogs.
 """
 import io
@@ -9,7 +9,7 @@ import sys
 import urllib.request
 import zipfile
 
-REPO = os.environ.get('ATTENDANCE_GITHUB_REPO', 'AcsVe/attendance')
+REPO = os.environ.get('ATTENDANCE_GITHUB_REPO', 'AcsVe/Attendance')
 BRANCH = os.environ.get('ATTENDANCE_GITHUB_BRANCH', 'main')
 SITE = os.path.expanduser('~/attendance')
 KEEP = {'.env', 'data', 'logs', 'backups', 'uploads'}
