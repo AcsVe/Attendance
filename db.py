@@ -417,6 +417,13 @@ def init_db():
         FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
     )''')
     user_cols = {r['name'] for r in cur.execute("PRAGMA table_info(users)").fetchall()}
+    cur.execute('''CREATE TABLE IF NOT EXISTS user_login_devices (
+        user_id INTEGER NOT NULL,
+        device_hash TEXT NOT NULL,
+        label TEXT,
+        created_at TEXT,
+        PRIMARY KEY (user_id, device_hash)
+    )''')
     for col in ('last_login_at', 'last_login_ip', 'email', 'fav_tabs'):
         if col not in user_cols:
             cur.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")

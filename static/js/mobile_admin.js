@@ -129,14 +129,24 @@ function maShowCreds(list) {
 }
 
 function maPrint() {
-  const w = window.open('', '_blank');
-  w.document.write(`<html dir="rtl"><head><meta charset="utf-8"><title>بيانات دخول تطبيق الموظف</title><style>body{font-family:Tahoma,Arial;padding:20px}
+  // داخل تطبيق أندرويد (WebView) لا يعمل window.open — نطبع عبر إطار مخفي داخل الصفحة نفسها
+  const html = `<!doctype html><html dir="rtl"><head><meta charset="utf-8"><title>بيانات دخول تطبيق الموظف</title><style>body{font-family:Tahoma,Arial;padding:20px;margin:0}
     .c{display:inline-block;width:46%;margin:1%;border:1px dashed #999;border-radius:10px;padding:12px;vertical-align:top;page-break-inside:avoid}
-    .c b{font-size:1.05rem}.m{font-family:Consolas,monospace;direction:ltr;font-size:1.1rem}</style></head><body>
-    ${maCredsCache.map(c => `<div class="c"><b>${mEsc(c.name)}</b><br><small>${mEsc(c.dept)}</small><br>الرابط: <span class="m">${location.origin}/me</span><br>
-    المستخدم: <span class="m">${mEsc(c.username)}</span><br>كلمة المرور: <span class="m">${mEsc(c.password)}</span></div>`).join('')}
-    <script>print()<\/script></body></html>`);
-  w.document.close();
+    .c b{font-size:1.05rem}.m{font-family:Consolas,monospace;direction:ltr;font-size:1.1rem}</style></head><body>` +
+    maCredsCache.map(c => `<div class="c"><b>${mEsc(c.name)}</b><br><small>${mEsc(c.dept)}</small><br>الرابط: <span class="m">${location.origin}/me</span><br>
+    المستخدم: <span class="m">${mEsc(c.username)}</span><br>كلمة المرور: <span class="m">${mEsc(c.password)}</span></div>`).join('') +
+    `</body></html>`;
+  const old = document.getElementById('printFrame'); if (old) old.remove();
+  const f = document.createElement('iframe');
+  f.id = 'printFrame';
+  f.style.cssText = 'position:fixed;right:-10000px;top:0;width:800px;height:600px;border:0';
+  document.body.appendChild(f);
+  f.onload = () => {
+    try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { toast('تعذّرت الطباعة من التطبيق — افتح الرابط من المتصفح للطباعة', true); }
+    setTimeout(() => f.remove(), 60000);
+  };
+  const d = f.contentWindow.document;
+  d.open(); d.write(html); d.close();
 }
 
 function maEdit(id) {

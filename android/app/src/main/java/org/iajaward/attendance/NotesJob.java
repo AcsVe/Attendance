@@ -64,6 +64,11 @@ public class NotesJob extends JobService {
     @Override
     public boolean onStopJob(JobParameters params) { return true; }
 
+    /** سحب فوري للإشعارات (يستدعيه التطبيق كل دقيقة وهو مفتوح لإظهارها شبه لحظياً) */
+    static void pullNow(final Context ctx) {
+        new Thread(() -> { try { pull(ctx.getApplicationContext()); } catch (Exception ignored) { } }).start();
+    }
+
     private static void pull(Context ctx) throws Exception {
         JSONObject o = new JSONObject();
         String path;

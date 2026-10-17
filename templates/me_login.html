@@ -96,5 +96,6 @@
 })();
 </script>
 <p style="margin-top:10px;font-size:.85rem;text-align:center" data-notr><a href="#" onclick="toggleUiLang();return false">{{ 'العربية' if ui_lang == 'en' else 'English' }}</a></p>
+<button type="button" class="theme-toggle" onclick="var r=document.documentElement,d=r.getAttribute('data-theme')==='dark';r.setAttribute('data-theme',d?'light':'dark');try{localStorage.setItem('att_theme',d?'light':'dark');}catch(e){}this.querySelector('i').className=d?'fas fa-moon':'fas fa-sun';" style="position:fixed;top:12px;inset-inline-end:12px" aria-label="الوضع الداكن"><i class="fas fa-moon" aria-hidden="true"></i></button>
 </body>
 </html>

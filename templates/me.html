@@ -123,6 +123,10 @@
       <b style="color:var(--pd)"><i class="fas fa-language" aria-hidden="true"></i> {{ 'Language' if ui_lang == 'en' else 'اللغة' }}</b>
       <div style="display:flex;gap:6px"><button class="btn {{ 'btn-p' if ui_lang != 'en' else 'btn-l' }}" style="padding:8px 14px" onclick="setUiLang('ar')">العربية</button><button class="btn {{ 'btn-p' if ui_lang == 'en' else 'btn-l' }}" style="padding:8px 14px" onclick="setUiLang('en')">English</button></div>
     </div>
+    <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <b style="color:var(--pd)"><i class="fas fa-circle-half-stroke" aria-hidden="true"></i> المظهر</b>
+      <button class="btn btn-l" style="padding:8px 14px" onclick="toggleTheme()"><i id="themeIcon" class="fas fa-moon" aria-hidden="true"></i> <span id="themeLbl">الوضع الداكن</span></button>
+    </div>
     <div class="card" id="bioCard">
       <b style="color:var(--pd)"><i class="fas fa-fingerprint" aria-hidden="true"></i> بصمة الوجه / الإصبع</b>
       <p class="muted" id="bioText" style="margin:6px 0 10px;line-height:1.7"></p>
@@ -543,6 +547,11 @@
   load();
   setInterval(load, 60000);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) load(); });
+  // سحب فوري لإشعارات النظام كل دقيقة والتطبيق مفتوح (حتى خارج أوقات التحقق من التواجد)
+  if (NATIVE && NATIVE.pullNotes) {
+    var pn = function () { if (!document.hidden) { try { NATIVE.pullNotes(); } catch (e) {} } };
+    setInterval(pn, 60000); document.addEventListener('visibilitychange', pn); pn();
+  }
 })();
 
   /* جدول الشهر: العنوان مثبّت + فرز بالضغط على أي عمود (يبقى بعد التحديث) */
@@ -570,6 +579,11 @@
     });
     new MutationObserver(function () { if (!busy) apply(); }).observe(body, { childList: true });
   })();
+</script>
+<script>
+  function toggleTheme(){var r=document.documentElement,d=r.getAttribute('data-theme')==='dark';r.setAttribute('data-theme',d?'light':'dark');try{localStorage.setItem('att_theme',d?'light':'dark');}catch(e){}themeLbl();}
+  function themeLbl(){var d=document.documentElement.getAttribute('data-theme')==='dark',i=document.getElementById('themeIcon'),l=document.getElementById('themeLbl');if(i)i.className=d?'fas fa-sun':'fas fa-moon';if(l)l.textContent=d?'الوضع الفاتح':'الوضع الداكن';}
+  themeLbl();
 </script>
 </body>
 </html>

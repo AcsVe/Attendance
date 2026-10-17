@@ -2819,6 +2819,12 @@ function syncKeyGen() {
 (function () {
   const N = window.AttNative;
   if (!N || typeof N.setNotifyToken !== 'function') return;
+  // سحب فوري للإشعارات كل دقيقة والتطبيق مفتوح — شبه لحظي بدل انتظار مهمة الخلفية (كل 15 دقيقة)
+  if (typeof N.pullNotes === 'function') {
+    const tick = () => { if (!document.hidden) { try { N.pullNotes(); } catch (e) {} } };
+    setInterval(tick, 60000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
+  }
   try {
     if (!N.hasNotifyToken()) {
       fetch('/api/my/notify-token', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } })
@@ -2829,4 +2835,31 @@ function syncKeyGen() {
     const a = e.target.closest && e.target.closest('a[href$="/logout"]');
     if (a && typeof N.clearNotifyToken === 'function') { try { N.clearNotifyToken(); } catch (x) {} }
   }, true);
+})();
+
+
+/* ===== الدخول البيومتري لتطبيق الإدارة (هذا الهاتف) ===== */
+(function () {
+  const N = window.AttNative;
+  if (!N || typeof N.authenticate !== 'function' || typeof N.deviceId !== 'function') return;
+  let can = false; try { can = N.canAuthenticate(); } catch (e) {}
+  if (!can) return;
+  const card = document.getElementById('bioCard'); if (card) card.classList.remove('hide');
+  fetch('/api/my/biometric', { credentials: 'same-origin', headers: { 'X-Device': N.deviceId() } })
+    .then(r => r.json()).then(d => { const c = document.getElementById('bioEnable'); if (c && d.ok) c.checked = !!d.enabled; }).catch(() => {});
+  window.bioToggle = function (on) {
+    const msg = document.getElementById('bioCardMsg'), dev = N.deviceId();
+    const done = (m) => { if (msg) msg.textContent = m; };
+    if (on) {
+      window.attBioResult = function (ok) {
+        if (!ok) { document.getElementById('bioEnable').checked = false; done('أُلغي التحقق'); return; }
+        fetch('/api/my/biometric', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Device': dev }, body: JSON.stringify({ device: dev }) })
+          .then(r => r.json()).then(d => done(d.ok ? 'تم التفعيل — يمكنك الدخول ببصمتك في المرة القادمة' : (d.error || 'تعذّر التفعيل')));
+      };
+      try { N.authenticate('تأكيد الهوية لتفعيل الدخول البيومتري'); } catch (e) {}
+    } else {
+      fetch('/api/my/biometric', { method: 'DELETE', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Device': dev }, body: JSON.stringify({ device: dev }) })
+        .then(r => r.json()).then(() => done('أُلغي الدخول البيومتري على هذا الهاتف'));
+    }
+  };
 })();

@@ -7,6 +7,7 @@
   <title>لوحة التحكم — نظام تحليل الحضور والانصراف</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <script>(function(){try{var t=localStorage.getItem('att_theme');if(t==='dark'||(t===null&&window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches))document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   <!-- ===== إعدادات تثبيت التطبيق (PWA) على أندرويد/ويندوز/آيفون ===== -->
   <link rel="manifest" href="/manifest.json?v={{ icon_ver }}">
@@ -111,6 +112,7 @@
       <h1 id="pageTitle">لوحة التحكم</h1>
     </div>
     <div class="topbar-right">
+      <button type="button" class="theme-toggle" data-notr onclick="toggleTheme()" title="الوضع الفاتح/الداكن" aria-label="تبديل الوضع الداكن"><i id="themeIcon" class="fas fa-moon" aria-hidden="true"></i></button>
       <button type="button" class="btn btn-outline btn-sm" data-notr onclick="toggleUiLang()" title="{{ 'Switch to Arabic — التبديل إلى العربية' if ui_lang == 'en' else 'Switch to English' }}"><i class="fas fa-language" aria-hidden="true"></i> <span class="lbl">{{ 'العربية' if ui_lang == 'en' else 'English' }}</span><span class="lbl-s">{{ 'ع' if ui_lang == 'en' else 'EN' }}</span></button>
       <button class="btn btn-primary btn-sm" id="pwaInstallBtn" style="display:none" onclick="pwaInstall()" title="يُضاف النظام كتطبيق في قائمة ابدأ وشريط المهام"><i class="fas fa-download" aria-hidden="true"></i> <span class="lbl">تثبيت على هذا الجهاز</span></button>
       <a class="btn btn-outline btn-sm" href="/app" target="_blank" title="تطبيقات أندرويد للموظفين والإدارة" aria-label="التطبيقات"><i class="fab fa-android" aria-hidden="true"></i> <span class="lbl">التطبيقات</span></a>
@@ -978,6 +980,12 @@
 
     <!-- ============ SETTINGS ============ -->
     <div class="tab-panel" id="tab-settings">
+      <div class="card hide" id="bioCard">
+        <div class="card-title"><i class="fas fa-fingerprint" aria-hidden="true"></i> الدخول ببصمة الجهاز / الوجه (هذا الهاتف)</div>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">فعّل الدخول السريع ببصمة الإصبع أو الوجه على هذا الهاتف لحسابك. يبقى الدخول باسم المستخدم وكلمة المرور متاحاً دائماً.</p>
+        <label class="sw" style="display:inline-flex;align-items:center;gap:10px;font-weight:700"><input type="checkbox" id="bioEnable" onchange="bioToggle(this.checked)"><span></span> تفعيل الدخول البيومتري على هذا الهاتف</label>
+        <div id="bioCardMsg" style="font-size:.85rem;color:var(--muted);margin-top:8px"></div>
+      </div>
       <div class="card">
         <div class="card-title"><i class="fas fa-building" aria-hidden="true"></i> بيانات المؤسسة</div>
         <div class="form-group"><label>اسم المؤسسة</label><input type="text" id="setOrgName"></div>
@@ -1413,5 +1421,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="{{ url_for('static', filename='js/mobile_admin.js') }}"></script>
 <script src="{{ url_for('static', filename='js/admin_extra.js') }}"></script>
+<script>
+function toggleTheme(){var r=document.documentElement,d=r.getAttribute('data-theme')==='dark';r.setAttribute('data-theme',d?'light':'dark');try{localStorage.setItem('att_theme',d?'light':'dark');}catch(e){}var b=document.getElementById('themeIcon');if(b)b.className=d?'fas fa-moon':'fas fa-sun';}
+document.addEventListener('DOMContentLoaded',function(){var b=document.getElementById('themeIcon');if(b)b.className=document.documentElement.getAttribute('data-theme')==='dark'?'fas fa-sun':'fas fa-moon';});
+</script>
 </body>
 </html>

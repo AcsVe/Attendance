@@ -240,7 +240,7 @@ PERMISSION_REQUIRED_ENDPOINTS = {
 }
 
 # دور «اطّلاع فقط» (viewer): لا يعدّل شيئاً — مسموح له فقط بهذه الطلبات غير GET (حسابات وتقارير بلا حفظ)
-VIEWER_ALLOWED_WRITES = {'api_overtime', 'api_overtime_export_csv', 'api_change_password', 'login', 'logout', 'api_my_favorites', 'admin_notes.api_notify_token'}
+VIEWER_ALLOWED_WRITES = {'api_overtime', 'api_overtime_export_csv', 'api_change_password', 'login', 'logout', 'api_my_favorites', 'admin_notes.api_notify_token', 'api_my_biometric', 'api_my_biometric_set', 'login_biometric'}
 
 # مسارات admin فقط بغض النظر عن أي صلاحية دقيقة - إدارة المستخدمين حصراً
 # (تبويب "المستخدمون" بالكامل مخفي عن غير admin بالواجهة أيضاً، مطابقةً
@@ -512,11 +512,16 @@ def login():
     ip = (request.headers.get('CF-Connecting-IP') or request.remote_addr or '')[:45]
     conn.execute("UPDATE users SET last_login_at = ?, last_login_ip = ? WHERE id = ?",
                  (datetime.now().strftime('%Y-%m-%d %H:%M'), ip, user['id']))
-    session['username'] = user['username']
     log_audit(conn, 'login', 'user', new_value=f"{user['username']} — {ip}")
     conn.commit()
+    _establish_session(conn, user, dept_rows)
     conn.close()
+    return redirect(url_for('dashboard'))
 
+
+def _establish_session(conn, user, dept_rows=None):
+    if dept_rows is None:
+        dept_rows = conn.execute("SELECT dept FROM user_departments WHERE user_id = ?", (user['id'],)).fetchall()
     session.clear()
     session.permanent = True
     session['user_id'] = user['id']
@@ -526,7 +531,87 @@ def login():
     for perm in _PERMISSION_KEYS:
         session[perm] = bool(user[perm])
     session['allowed_depts'] = [r['dept'] for r in dept_rows]
-    return redirect(url_for('dashboard'))
+
+
+# ============================================================
+# ===== دخول تطبيق الإدارة ببصمة الجهاز/الوجه =====
+#   ربط الهاتف (رمز الجهاز) + بصمة محلية على الهاتف + توقيع بمفتاح التطبيق
+# ============================================================
+import hashlib as _hl  # noqa: E402
+import hmac as _hm2  # noqa: E402
+import time  # noqa: E402
+from mobile import APP_KEY as _APP_KEY  # noqa: E402
+
+
+def _dev_hash(t):
+    return _hl.sha256(('userdev:' + (t or '')).encode()).hexdigest()
+
+
+def _bio_sig_ok(device, ts):
+    good = _hm2.new(_APP_KEY.encode(), (device + '|' + ts).encode(), _hl.sha256).hexdigest()
+    try:
+        fresh = abs(time.time() * 1000 - float(ts)) < 600000
+    except (TypeError, ValueError):
+        fresh = False
+    return fresh and _hm2.compare_digest(good, request.headers.get('X-App-Sig', ''))
+
+
+@app.route('/api/my/biometric', methods=['GET'])
+@login_required
+def api_my_biometric():
+    dev = (request.headers.get('X-Device') or request.args.get('device') or '').strip()
+    conn = db.get_db()
+    try:
+        on = bool(dev) and conn.execute("SELECT 1 FROM user_login_devices WHERE user_id = ? AND device_hash = ?",
+                                        (session['user_id'], _dev_hash(dev))).fetchone() is not None
+        return jsonify({'ok': True, 'enabled': on})
+    finally:
+        conn.close()
+
+
+@app.route('/api/my/biometric', methods=['POST', 'DELETE'])
+@login_required
+def api_my_biometric_set():
+    d = request.get_json(silent=True) or {}
+    dev = (d.get('device') or request.headers.get('X-Device') or '').strip()
+    if len(dev) < 32:
+        return jsonify({'ok': False, 'error': 'هذا متاح فقط من تطبيق أندرويد'}), 400
+    conn = db.get_db()
+    try:
+        if request.method == 'DELETE':
+            conn.execute("DELETE FROM user_login_devices WHERE user_id = ? AND device_hash = ?", (session['user_id'], _dev_hash(dev)))
+        else:
+            conn.execute("INSERT OR REPLACE INTO user_login_devices (user_id, device_hash, label, created_at) VALUES (?, ?, ?, ?)",
+                         (session['user_id'], _dev_hash(dev), (d.get('label') or '')[:60], datetime.now().strftime('%Y-%m-%d %H:%M')))
+            log_audit(conn, 'biometric_enable', 'user', new_value=session.get('username', ''))
+        conn.commit()
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
+
+
+@app.route('/login/biometric', methods=['POST'])
+def login_biometric():
+    d = request.get_json(silent=True) or {}
+    dev = (d.get('device') or '').strip()
+    ts = str(d.get('ts') or '')
+    if len(dev) < 32 or not _bio_sig_ok(dev, ts):
+        return jsonify({'ok': False, 'error': 'تعذّر التحقق — سجّل الدخول باسم المستخدم وكلمة المرور'}), 403
+    conn = db.get_db()
+    try:
+        row = conn.execute("SELECT u.* FROM user_login_devices d JOIN users u ON u.id = d.user_id WHERE d.device_hash = ? LIMIT 1",
+                           (_dev_hash(dev),)).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'error': 'لم يُفعَّل الدخول البيومتري على هذا الهاتف'}), 403
+        ip = (request.headers.get('CF-Connecting-IP') or request.remote_addr or '')[:45]
+        conn.execute("UPDATE users SET last_login_at = ?, last_login_ip = ? WHERE id = ?",
+                     (datetime.now().strftime('%Y-%m-%d %H:%M'), ip, row['id']))
+        _establish_session(conn, row)
+        log_audit(conn, 'login_biometric', 'user', new_value=f"{row['username']} — {ip}")
+        conn.commit()
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
 
 
 # ============================================================

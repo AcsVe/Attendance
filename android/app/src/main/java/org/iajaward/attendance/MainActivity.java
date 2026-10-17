@@ -498,6 +498,15 @@ public class MainActivity extends Activity {
             return (double) (gpsFixTime + (SystemClock.elapsedRealtime() - gpsFixElapsed));
         }
 
+        /** سحب فوري لإشعارات النظام وعرضها في شريط أندرويد (يُستدعى دورياً والتطبيق مفتوح) */
+        @JavascriptInterface
+        public void pullNotes() {
+            if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED) {
+                runOnUiThread(() -> requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, REQ_NOTIF));
+            }
+            NotesJob.pullNow(MainActivity.this);
+        }
+
         @JavascriptInterface
         public boolean isRooted() {
             String tags = Build.TAGS;
