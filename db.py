@@ -435,6 +435,8 @@ def init_db():
         cur.execute("ALTER TABLE employee_accounts ADD COLUMN track_interval INTEGER NOT NULL DEFAULT 60")
     if 'qr_secret' not in acc_cols:
         cur.execute("ALTER TABLE employee_accounts ADD COLUMN qr_secret TEXT")
+    if 'bio_mode' not in acc_cols:   # بصمة الحضور لكل موظف: '' = حسب الإعداد العام، off / optional / required
+        cur.execute("ALTER TABLE employee_accounts ADD COLUMN bio_mode TEXT NOT NULL DEFAULT ''")
     cur.execute('''CREATE TABLE IF NOT EXISTS qr_kiosks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,

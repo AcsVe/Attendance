@@ -2845,6 +2845,11 @@ function syncKeyGen() {
   let can = false; try { can = N.canAuthenticate(); } catch (e) {}
   if (!can) return;
   const card = document.getElementById('bioCard'); if (card) card.classList.remove('hide');
+  if (typeof N.setAppLock === 'function') {
+    const row = document.getElementById('appLockRow');
+    if (row) { row.style.display = 'inline-flex'; try { document.getElementById('appLock').checked = !!N.appLock(); } catch (e) {} }
+    window.appLockToggle = function (on) { try { N.setAppLock(!!on); } catch (e) {} };
+  }
   fetch('/api/my/biometric', { credentials: 'same-origin', headers: { 'X-Device': N.deviceId() } })
     .then(r => r.json()).then(d => { const c = document.getElementById('bioEnable'); if (c && d.ok) c.checked = !!d.enabled; }).catch(() => {});
   window.bioToggle = function (on) {

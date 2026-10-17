@@ -39,6 +39,12 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
+import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import android.widget.Button;
+import android.view.Gravity;
+import android.view.View;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -62,6 +68,7 @@ public class MainActivity extends Activity {
     private static final int REQ_STORAGE = 13;
     private static final int REQ_CONFIRM = 14;
     private static final int REQ_NOTIF = 15;
+    private static final int REQ_LOCK = 16;
 
     private WebView web;
     private LocationManager locationManager;
@@ -72,6 +79,9 @@ public class MainActivity extends Activity {
     private GeolocationPermissions.Callback geoCallback;
     private String host;
     private boolean askedFine = false;
+    private FrameLayout rootView;
+    private View lockView;
+    private boolean appLockEnabled = false, wentBackground = false, lockActive = false;
 
     @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
     @Override
@@ -84,7 +94,13 @@ public class MainActivity extends Activity {
         host = Uri.parse(BuildConfig.BASE_URL).getHost();
 
         web = new WebView(this);
-        setContentView(web);
+        rootView = new FrameLayout(this);
+        rootView.addView(web, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        lockView = buildLockView();
+        lockView.setVisibility(View.GONE);
+        rootView.addView(lockView, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        setContentView(rootView);
+        try { appLockEnabled = getSharedPreferences("app", MODE_PRIVATE).getBoolean("lock", false); } catch (Exception e) {}
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
@@ -106,6 +122,7 @@ public class MainActivity extends Activity {
         } else {
             web.loadUrl(BuildConfig.BASE_URL + BuildConfig.START_PATH);
         }
+        if (appLockEnabled) lockShow();
         if (BuildConfig.EMPLOYEE) {
             NotesJob.schedule(this);   // إشعارات النظام في شريط الإشعارات حتى والتطبيق مغلق
             if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED
@@ -179,6 +196,10 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQ_LOCK) {
+            if (resultCode == RESULT_OK) lockHide();
+            return;
+        }
         if (requestCode == REQ_CONFIRM) {
             bioResult(resultCode == RESULT_OK, resultCode == RESULT_OK ? "" : "أُلغي التحقق");
             return;
@@ -238,9 +259,16 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onStop() {
+        super.onStop();
+        if (appLockEnabled) wentBackground = true;
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
         if (wantLocation) startNativeLocation();
+        if (appLockEnabled && wentBackground && !lockActive) lockShow();
     }
 
     // =====================================================
@@ -507,6 +535,17 @@ public class MainActivity extends Activity {
             NotesJob.pullNow(MainActivity.this);
         }
 
+        /** قفل فتح التطبيق بالبصمة: مفعّل؟ */
+        @JavascriptInterface
+        public boolean appLock() { return appLockEnabled; }
+
+        /** تفعيل/إلغاء قفل فتح التطبيق بالبصمة على هذا الهاتف */
+        @JavascriptInterface
+        public void setAppLock(boolean on) {
+            appLockEnabled = on;
+            try { getSharedPreferences("app", MODE_PRIVATE).edit().putBoolean("lock", on).apply(); } catch (Exception e) {}
+        }
+
         @JavascriptInterface
         public boolean isRooted() {
             String tags = Build.TAGS;
@@ -536,6 +575,81 @@ public class MainActivity extends Activity {
     private void bioResult(boolean ok, String msg) {
         String safe = msg == null ? "" : msg.replace("\\", " ").replace("'", " ").replace("\n", " ");
         runOnUiThread(() -> web.evaluateJavascript("window.attBioResult&&window.attBioResult(" + ok + ",'" + safe + "')", null));
+    }
+
+    // =====================================================
+    //   قفل فتح التطبيق بالبصمة/الوجه (خصوصية — منفصل عن تسجيل الدخول)
+    // =====================================================
+    private View buildLockView() {
+        LinearLayout ll = new LinearLayout(this);
+        ll.setOrientation(LinearLayout.VERTICAL);
+        ll.setGravity(Gravity.CENTER);
+        ll.setClickable(true);
+        ll.setBackgroundColor(Color.parseColor("#124A5F"));
+        int pad = (int) (24 * getResources().getDisplayMetrics().density);
+        ll.setPadding(pad, pad, pad, pad);
+        TextView icon = new TextView(this);
+        icon.setText("\uD83D\uDD12");
+        icon.setTextSize(56);
+        icon.setGravity(Gravity.CENTER);
+        TextView name = new TextView(this);
+        name.setText(BuildConfig.EMPLOYEE ? "Check-in" : "Att Dashboard");
+        name.setTextColor(Color.WHITE);
+        name.setTextSize(20);
+        name.setGravity(Gravity.CENTER);
+        name.setPadding(0, pad / 2, 0, pad);
+        Button b = new Button(this);
+        b.setText("فتح بالبصمة / الوجه");
+        b.setAllCaps(false);
+        b.setOnClickListener(v -> lockAuth());
+        ll.addView(icon);
+        ll.addView(name);
+        ll.addView(b);
+        return ll;
+    }
+
+    private void lockShow() {
+        lockActive = true;
+        runOnUiThread(() -> { lockView.setVisibility(View.VISIBLE); lockView.bringToFront(); });
+        lockAuth();
+    }
+
+    private void lockHide() {
+        lockActive = false;
+        wentBackground = false;
+        runOnUiThread(() -> lockView.setVisibility(View.GONE));
+    }
+
+    @SuppressWarnings("deprecation")
+    private void lockAuth() {
+        if (Build.VERSION.SDK_INT < 28) { lockKeyguard(); return; }
+        try {
+            BiometricPrompt.Builder b = new BiometricPrompt.Builder(this)
+                    .setTitle("فتح التطبيق")
+                    .setSubtitle("بصمة الإصبع أو الوجه");
+            if (Build.VERSION.SDK_INT >= 30) {
+                b.setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK | BiometricManager.Authenticators.DEVICE_CREDENTIAL);
+            } else if (Build.VERSION.SDK_INT == 29) {
+                b.setDeviceCredentialAllowed(true);
+            } else {
+                b.setNegativeButton("رمز القفل", getMainExecutor(), (d, w) -> lockKeyguard());
+            }
+            b.build().authenticate(new CancellationSignal(), getMainExecutor(), new BiometricPrompt.AuthenticationCallback() {
+                @Override public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) { lockHide(); }
+                @Override public void onAuthenticationError(int code, CharSequence err) {
+                    if (Build.VERSION.SDK_INT < 29 && code == BiometricPrompt.BIOMETRIC_ERROR_HW_NOT_PRESENT) lockKeyguard();
+                    // غير ذلك: يبقى القفل ظاهراً وللمستخدم زر «فتح» لإعادة المحاولة
+                }
+            });
+        } catch (Exception e) { lockKeyguard(); }
+    }
+
+    @SuppressWarnings("deprecation")
+    private void lockKeyguard() {
+        KeyguardManager km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+        Intent i = km == null ? null : km.createConfirmDeviceCredentialIntent("فتح التطبيق", "أكّد هويتك لفتح التطبيق");
+        if (i == null) { lockHide(); return; }   // لا يوجد قفل على الهاتف — لا نحبس المستخدم
+        try { startActivityForResult(i, REQ_LOCK); } catch (Exception e) { lockHide(); }
     }
 
     private boolean canBio() {

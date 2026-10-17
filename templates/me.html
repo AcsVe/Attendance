@@ -127,6 +127,11 @@
       <b style="color:var(--pd)"><i class="fas fa-circle-half-stroke" aria-hidden="true"></i> المظهر</b>
       <button class="btn btn-l" style="padding:8px 14px" onclick="toggleTheme()"><i id="themeIcon" class="fas fa-moon" aria-hidden="true"></i> <span id="themeLbl">الوضع الداكن</span></button>
     </div>
+    <div class="card hide" id="appLockCard">
+      <b style="color:var(--pd)"><i class="fas fa-lock" aria-hidden="true"></i> قفل فتح التطبيق</b>
+      <p class="muted" style="margin:6px 0 10px;line-height:1.7">عند التفعيل، يُطلب منك بصمتك أو وجهك كلما فتحت التطبيق — حماية إضافية لخصوصيتك.</p>
+      <label style="display:flex;gap:10px;align-items:center;font-weight:700"><input type="checkbox" id="appLock" onchange="appLockToggle(this.checked)"> تفعيل قفل الفتح بالبصمة/الوجه</label>
+    </div>
     <div class="card" id="bioCard">
       <b style="color:var(--pd)"><i class="fas fa-fingerprint" aria-hidden="true"></i> بصمة الوجه / الإصبع</b>
       <p class="muted" id="bioText" style="margin:6px 0 10px;line-height:1.7"></p>
@@ -584,6 +589,14 @@
   function toggleTheme(){var r=document.documentElement,d=r.getAttribute('data-theme')==='dark';r.setAttribute('data-theme',d?'light':'dark');try{localStorage.setItem('att_theme',d?'light':'dark');}catch(e){}themeLbl();}
   function themeLbl(){var d=document.documentElement.getAttribute('data-theme')==='dark',i=document.getElementById('themeIcon'),l=document.getElementById('themeLbl');if(i)i.className=d?'fas fa-sun':'fas fa-moon';if(l)l.textContent=d?'الوضع الفاتح':'الوضع الداكن';}
   themeLbl();
+  (function(){
+    var N=window.AttNative;
+    if(!N||typeof N.setAppLock!=='function')return;
+    try{ if(!N.canAuthenticate())return; }catch(e){return;}
+    var c=document.getElementById('appLockCard'); if(c)c.classList.remove('hide');
+    try{ document.getElementById('appLock').checked=!!N.appLock(); }catch(e){}
+    window.appLockToggle=function(on){ try{N.setAppLock(!!on);}catch(e){} };
+  })();
 </script>
 </body>
 </html>

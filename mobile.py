@@ -662,7 +662,7 @@ def me_status(conn, acc, emp, cfg):
         'sources': sorted(MODE_SOURCES.get(emp['attendance_mode'] or 'both', MODE_SOURCES['both'])), 'server_ms': int(time.time() * 1000),
         'override': {'until': ov['ends_at'], 'reason': ov['reason'], 'no_location': bool(ov['no_location'])} if ov else None,
         'notifications': notes, 'unread': sum(1 for n in notes if not n['read_at']),
-        'biometric': cfg.get('mobile_biometric', 'off'), 'bio_enrolled': creds > 0, 'webauthn': _webauthn_ready(),
+        'biometric': _bio_mode(acc, cfg), 'bio_enrolled': creds > 0, 'webauthn': _webauthn_ready(),
         'presence': presence_state(conn, emp, acc, cfg), 'presence_check': presence_check_for(conn, emp, acc, cfg),
         'leave': _leave_info(conn, emp, cfg, now),
         'share': __import__('shares').share_info(conn, emp['id']),
@@ -1189,7 +1189,7 @@ def api_accounts():
         today = now_local().strftime('%Y-%m-%d')
         rows = []
         q = """SELECT e.id, e.name, e.dept, e.device_uid, e.active, e.attendance_mode, e.presence_monitor, a.username, a.active AS acc_active, a.anywhere,
-                      a.device_label, a.bound_at, a.last_login_at, a.id AS acc_id
+                      a.device_label, a.bound_at, a.last_login_at, a.id AS acc_id, a.bio_mode
                FROM employees e LEFT JOIN employee_accounts a ON a.employee_id = e.id ORDER BY e.dept, e.name"""
         last = {r['employee_id']: dict(r) for r in conn.execute(
             "SELECT employee_id, kind, time, date FROM mobile_punches WHERE id IN "
@@ -1661,8 +1661,17 @@ def verify_assertion(conn, emp_id, a):
         return f'تعذّر التحقق من البصمة: {type(e).__name__}'
 
 
+def _bio_mode(acc, cfg):
+    """طريقة بصمة الحضور الفعّالة لهذا الموظف: إعداده الخاص إن وُجد، وإلا الإعداد العام"""
+    try:
+        per = (acc['bio_mode'] or '').strip()
+    except (KeyError, IndexError, TypeError):
+        per = ''
+    return per if per in ('off', 'optional', 'required') else cfg.get('mobile_biometric', 'off')
+
+
 def check_biometric(conn, acc, emp, kind, data, cfg):
-    mode = cfg.get('mobile_biometric', 'off')
+    mode = _bio_mode(acc, cfg)
     if mode == 'off':
         return ''
     enrolled = conn.execute("SELECT COUNT(*) FROM webauthn_credentials WHERE employee_id = ?", (emp['id'],)).fetchone()[0]
@@ -1941,6 +1950,8 @@ def api_employees_bulk():
                 conn.execute("UPDATE employees SET attendance_mode = ? WHERE id = ?", (value, e['id']))
             elif action == 'presence' and value in ('on', 'off'):
                 conn.execute("UPDATE employees SET presence_monitor = ? WHERE id = ?", (1 if value == 'on' else 0, e['id']))
+            elif action == 'bio' and value in ('', 'off', 'optional', 'required'):
+                conn.execute("UPDATE employee_accounts SET bio_mode = ? WHERE employee_id = ?", (value, e['id']))
             else:
                 return jsonify({'ok': False, 'error': 'إجراء غير معروف'}), 400
             _audit_emp(conn, f'employees_{action}', 'employee', e['name'], value or '')

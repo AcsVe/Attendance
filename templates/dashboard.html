@@ -985,6 +985,8 @@
         <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">فعّل الدخول السريع ببصمة الإصبع أو الوجه على هذا الهاتف لحسابك. يبقى الدخول باسم المستخدم وكلمة المرور متاحاً دائماً.</p>
         <label class="sw" style="display:inline-flex;align-items:center;gap:10px;font-weight:700"><input type="checkbox" id="bioEnable" onchange="bioToggle(this.checked)"><span></span> تفعيل الدخول البيومتري على هذا الهاتف</label>
         <div id="bioCardMsg" style="font-size:.85rem;color:var(--muted);margin-top:8px"></div>
+        <hr style="border:0;border-top:1px solid var(--border);margin:14px 0">
+        <label class="sw" id="appLockRow" style="display:none;align-items:center;gap:10px;font-weight:700"><input type="checkbox" id="appLock" onchange="appLockToggle(this.checked)"><span></span> قفل فتح التطبيق بالبصمة (يُطلب التحقق كلما فُتح التطبيق)</label>
       </div>
       <div class="card">
         <div class="card-title"><i class="fas fa-building" aria-hidden="true"></i> بيانات المؤسسة</div>

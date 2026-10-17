@@ -66,7 +66,7 @@ function maRender() {
   document.getElementById('maTable').innerHTML = rows.map(r => `
     <tr><td><input type="checkbox" class="row-check" data-id="${r.id}" onchange="maCount()"></td>
       <td><a href="#" onclick="openEmployeeCard(${r.id});return false" style="font-weight:800;color:var(--primary-dark)">${mEsc(r.name)}</a>${r.active ? '' : ' <span class="badge badge-absent">معلّق</span>'}${r.device_uid ? `<br><small style="color:var(--muted)">بصمة ${mEsc(r.device_uid)}</small>` : ''}</td>
-      <td>${mEsc(r.dept || '—')}</td><td><small>${MODE_LABEL[r.attendance_mode || 'both']}</small></td>
+      <td>${mEsc(r.dept || '—')}</td><td><small>${MODE_LABEL[r.attendance_mode || 'both']}</small>${r.bio_mode === 'required' ? '<br><small style="color:#0a6640">بصمة إلزامية</small>' : r.bio_mode === 'optional' ? '<br><small style="color:var(--muted)">بصمة اختيارية</small>' : r.bio_mode === 'off' ? '<br><small style="color:var(--muted)">بلا بصمة</small>' : ''}</td>
       <td dir="ltr" style="text-align:right">${r.has_account ? mEsc(r.username) : '<span style="color:var(--muted)">—</span>'}</td>
       <td>${r.device_label ? `${mEsc(r.device_label)}<br><small style="color:var(--muted)">${mEsc(r.bound_at || '')}</small>` : (r.has_account ? '<span class="badge badge-late">لم يُربط بعد</span>' : '—')}</td>
       <td><small>${mEsc(r.last_move || '—')}</small></td>
@@ -90,7 +90,7 @@ async function maBulk(action) {
   const ids = maChecked();
   if (!ids.length) { toast('حدّد موظفاً واحداً على الأقل', true); return; }
   if (action === 'notify') { ecNotifyDialog(ids); return; }
-  if (action.startsWith('emp:') || action.startsWith('mode:') || action.startsWith('presence:')) {
+  if (action.startsWith('emp:') || action.startsWith('mode:') || action.startsWith('presence:') || action.startsWith('bio:')) {
     const [kind, value] = action.split(':');
     const label = document.querySelector(`#maMore option[value="${action}"]`).textContent;
     if (!confirm(`${label}؟\n(${ids.length} موظف)`)) return;
@@ -575,7 +575,7 @@ async function openEmployeeCard(id) {
     <h4 style="margin:14px 0 6px;color:var(--primary-dark)">الإشعارات المرسلة</h4>
     <ul style="list-style:none;padding:0">${d.notifications.map(n => `<li style="border-bottom:1px dashed var(--border);padding:7px 0"><b>${mEsc(n.title)}</b> <small style="color:var(--muted)">${mEsc(n.created_at)} · ${mEsc(n.created_by || '')} · ${n.read_at ? 'قُرئ ' + mEsc(n.read_at) : 'لم يُقرأ'}</small>${n.body ? '<div style="white-space:pre-line;color:var(--muted)">' + mEsc(n.body) + '</div>' : ''}</li>`).join('') || '<li style="color:var(--muted)">لا توجد</li>'}</ul>`;
   ec$('ec-log').innerHTML = `<div class="table-wrap"><table><thead><tr><th>الوقت</th><th>المستخدم</th><th>العملية</th><th>التفاصيل</th></tr></thead><tbody>
-    ${d.audit.map(x => `<tr><td>${mEsc(x.timestamp)}</td><td>${mEsc(x.username || '')}</td><td>${mEsc(AUDIT_ACTION_LABELS[x.action_type] || x.action_type)}</td><td><small>${x.old_value ? mEsc(x.old_value) + ' ← ' : ''}${mEsc(x.new_value || '')}${x.reason ? ' — ' + mEsc(x.reason) : ''}</small></td></tr>`).join('') || '<tr><td colspan="4" style="color:var(--muted)">لا توجد عمليات مسجّلة على هذا الموظف</td></tr>'}
+    ${d.audit.map(x => `<tr><td>${mEsc(x.timestamp)}</td><td>${mEsc(x.username || '')}</td><td>${mEsc(AUDIT_ACTION_LABELS[x.action_type] || x.action_type)}</td><td><small>${x.old_value ? mEsc(x.old_value) + ' ← ' : ''}${mEsc(x.new_value || '')}${x.reason ? ' — ' + mEsc(x.reason) : ''}</td></tr>`).join('') || '<tr><td colspan="4" style="color:var(--muted)">لا توجد عمليات مسجّلة على هذا الموظف</td></tr>'}
     </tbody></table></div>`;
   ecTab('info');
   ec$('ecModal').classList.add('open');
@@ -896,7 +896,7 @@ function lvRender() {
     <td dir="ltr" style="text-align:right">${mEsc(r.out_time || '—')}</td><td dir="ltr" style="text-align:right">${mEsc(r.back_time || '—')}</td>
     <td>${r.minutes != null ? r.minutes + ' د' : '—'}</td><td>${r.late_min ? '<b style="color:#c0392b">' + r.late_min + ' د</b>' : '—'}</td>
     <td><span class="pr-dot" style="background:${LV_COLOR[r.status] || '#999'}"></span>${mEsc(r.status_label)}${r.source === 'direct' ? ' <small style="color:var(--muted)">(مباشر)</small>' : ''}</td>
-    <td><small>${mEsc(r.reason || '')}${r.decision_note ? ' — ' + mEsc(r.decision_note) : ''}</small></td></tr>`).join('')
+    <td><small>${mEsc(r.reason || '')}${r.decision_note ? ' — ' + mEsc(r.decision_note) : ''}</td></tr>`).join('')
     || '<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:14px">لا توجد سجلات في هذه الفترة</td></tr>';
   lvCount();
 }
