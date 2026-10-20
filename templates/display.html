@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>{% if d %}{{ d.name }} — {% endif %}{{ settings.org_name }}</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+{% if d and d.kind == 'tracking' %}<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">{% endif %}
+<style>
+:root{--bg:#0d1b22;--card:#13262f;--line:#22404d;--txt:#eef6f9;--muted:#8fb0bd;--pri:#4fa3c0;--ok:#2ecc71;--warn:#f0a43a;--bad:#ef5b4c;--blue:#4c8dff}
+:root[data-theme="light"]{--bg:#eef3f6;--card:#fff;--line:#d5e2e8;--txt:#12303b;--muted:#5d7783;--pri:#1b6e8c;--ok:#0a8a4a;--warn:#c27a10;--bad:#c0392b;--blue:#1d4ed8}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font-family:'Tajawal',Tahoma,sans-serif}
+header{display:flex;align-items:center;gap:14px;padding:12px 20px;border-bottom:1px solid var(--line)}
+header img{height:46px;border-radius:8px;background:#fff;padding:3px}
+header .t{flex:1;min-width:0}
+header h1{margin:0;font-size:clamp(1.1rem,2.2vw,1.9rem);font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header .sub{color:var(--muted);font-size:clamp(.8rem,1.2vw,1.05rem)}
+.clock{text-align:left;direction:ltr}
+.clock b{display:block;font-size:clamp(1.6rem,3.4vw,3rem);font-weight:800;line-height:1}
+.clock span{color:var(--muted);font-size:.9rem}
+.tools{display:flex;gap:6px}
+.tools button{background:var(--card);color:var(--txt);border:1px solid var(--line);border-radius:10px;width:40px;height:40px;cursor:pointer;font-size:16px}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:.85rem;color:var(--muted)}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--ok);animation:p 1.6s infinite}
+.dot.off{background:var(--bad);animation:none}
+@keyframes p{0%{box-shadow:0 0 0 0 rgba(46,204,113,.6)}70%{box-shadow:0 0 0 9px rgba(46,204,113,0)}100%{box-shadow:0 0 0 0 rgba(46,204,113,0)}}
+@media (prefers-reduced-motion:reduce){.dot{animation:none}}
+main{padding:16px 20px}
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:14px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px}
+.kpi b{display:block;font-size:clamp(2rem,5vw,4.2rem);font-weight:800;line-height:1.05}
+.kpi span{color:var(--muted);font-size:clamp(.85rem,1.3vw,1.15rem);font-weight:700}
+.kpi.ok b{color:var(--ok)}.kpi.warn b{color:var(--warn)}.kpi.bad b{color:var(--bad)}.kpi.blue b{color:var(--blue)}
+.bar{height:10px;border-radius:6px;background:var(--line);overflow:hidden;margin-top:8px}.bar i{display:block;height:100%;background:var(--ok)}
+.grid{display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr;gap:12px}
+.box{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 14px;min-height:120px;overflow:hidden}
+.box h2{margin:0 0 8px;font-size:clamp(.95rem,1.4vw,1.25rem);display:flex;justify-content:space-between;gap:8px}
+.box h2 small{color:var(--muted);font-weight:700}
+.list{list-style:none;margin:0;padding:0;max-height:calc(100vh - 360px);overflow:hidden}
+.list li{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:clamp(.85rem,1.2vw,1.1rem)}
+.list li small{color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:clamp(.82rem,1.15vw,1.05rem)}
+th,td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:center}
+th{color:var(--muted);font-weight:700}td:first-child,th:first-child{text-align:right}
+.banner{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 16px;margin-bottom:12px;color:var(--muted);font-weight:700}
+.off{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;text-align:center;color:var(--muted);padding:20px}
+.off i{font-size:64px;margin-bottom:14px}
+/* الرصد */
+.trk{display:grid;grid-template-columns:1fr 320px;height:calc(100vh - 72px)}
+#map{height:100%;width:100%}
+.side{border-inline-start:1px solid var(--line);overflow:auto;padding:10px}
+.emp{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:8px;cursor:pointer}
+.emp.on{outline:2px solid var(--blue)}
+.emp b{font-size:1.05rem}.emp .m{color:var(--muted);font-size:.85rem;margin-top:3px}
+.tag{display:inline-block;border-radius:10px;padding:1px 8px;font-size:.75rem;font-weight:700}
+.tag.l{background:rgba(76,141,255,.18);color:var(--blue)}.tag.s{background:rgba(240,164,58,.18);color:var(--warn)}.tag.n{background:var(--line);color:var(--muted)}
+.leaflet-control-layers{font:600 .85rem 'Tajawal',sans-serif;direction:rtl;text-align:right}
+@media (max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.trk{grid-template-columns:1fr;grid-template-rows:60vh auto;height:auto}.list{max-height:none}}
+</style>
+</head>
+<body>
+{% if off %}
+<div class="off"><i class="fas fa-tv" aria-hidden="true"></i><h2>هذه الشاشة غير متاحة</h2><p>الرابط غير صحيح أو أوقفته الإدارة.</p></div>
+{% else %}
+<header>
+  {% if logo_url %}<img src="{{ logo_url }}" alt="">{% endif %}
+  <div class="t"><h1>{{ d.name }}</h1><div class="sub">{{ settings.org_name }} — {{ kind_label }} <span class="live"><span class="dot" id="dot"></span><span id="upd">…</span></span></div></div>
+  <div class="clock"><b id="clock">--:--</b><span id="date"></span></div>
+  <div class="tools">
+    <button onclick="toggleTheme()" title="فاتح/داكن" aria-label="فاتح/داكن"><i class="fas fa-circle-half-stroke" aria-hidden="true"></i></button>
+    <button onclick="fullscreen()" title="ملء الشاشة" aria-label="ملء الشاشة"><i class="fas fa-expand" aria-hidden="true"></i></button>
+  </div>
+</header>
+{% if d.kind == 'attendance' %}
+<main>
+  <div class="banner" id="dayBanner" style="display:none"></div>
+  <div class="kpis">
+    <div class="kpi ok"><b id="kPresent">–</b><span>حاضرون من <span id="kExpected">–</span></span><div class="bar"><i id="kBar" style="width:0"></i></div></div>
+    <div class="kpi blue"><b id="kRate">–</b><span>نسبة الحضور</span></div>
+    <div class="kpi warn"><b id="kLate">–</b><span>متأخرون</span></div>
+    <div class="kpi bad"><b id="kAbsent">–</b><span>لم يحضروا بعد</span></div>
+    <div class="kpi"><b id="kLeave">–</b><span>إجازات واستثناءات</span></div>
+  </div>
+  <div class="grid">
+    <div class="box"><h2>الأقسام</h2><table><thead><tr><th>القسم</th><th>حاضر</th><th>متأخر</th><th>غائب</th><th>إجازة</th></tr></thead><tbody id="tDepts"></tbody></table></div>
+    <div class="box" data-names><h2>آخر الواصلين <small id="cPresent"></small></h2><ul class="list" id="lPresent"></ul></div>
+    <div class="box" data-names><h2>المتأخرون <small id="cLate"></small></h2><ul class="list" id="lLate"></ul></div>
+    <div class="box" data-names><h2>لم يحضروا بعد <small id="cAbsent"></small></h2><ul class="list" id="lAbsent"></ul>
+      <h2 style="margin-top:12px">في إجازة <small id="cLeave"></small></h2><ul class="list" id="lLeave"></ul></div>
+  </div>
+</main>
+{% else %}
+<div class="trk"><div id="map"></div><aside class="side" id="side"></aside></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+{% endif %}
+<script>
+(function () {
+  var TOKEN = {{ d.token|tojson }}, KIND = {{ d.kind|tojson }}, REFRESH = {{ (conf.refresh or 30)|int }} * 1000;
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); };
+  var offset = 0, lastOk = 0;
+  try { var th = localStorage.getItem('att_display_theme'); if (th) document.documentElement.dataset.theme = th; } catch (e) {}
+  window.toggleTheme = function () {
+    var t = document.documentElement.dataset.theme === 'light' ? '' : 'light';
+    document.documentElement.dataset.theme = t;
+    try { localStorage.setItem('att_display_theme', t); } catch (e) {}
+  };
+  window.fullscreen = function () {
+    var el = document.documentElement;
+    if (document.fullscreenElement) document.exitFullscreen(); else if (el.requestFullscreen) el.requestFullscreen().catch(function () {});
+    setTimeout(function () { if (window._map) window._map.invalidateSize(); }, 300);
+  };
+  // إبقاء الشاشة مضاءة (شاشة عرض دائمة)
+  if ('wakeLock' in navigator) { var wl = function () { navigator.wakeLock.request('screen').catch(function () {}); }; wl(); document.addEventListener('visibilitychange', function () { if (!document.hidden) wl(); }); }
+  function tick() {
+    var n = new Date(Date.now() + offset);
+    $('clock').textContent = ('0' + n.getHours()).slice(-2) + ':' + ('0' + n.getMinutes()).slice(-2);
+    var ago = lastOk ? Math.round((Date.now() - lastOk) / 1000) : null;
+    $('upd').textContent = ago == null ? 'جارٍ التحميل…' : (ago > Math.max(60, REFRESH / 1000 * 3) ? 'انقطع الاتصال — آخر تحديث قبل ' + ago + ' ث' : 'مباشر');
+    $('dot').className = 'dot' + (ago == null || ago > Math.max(60, REFRESH / 1000 * 3) ? ' off' : '');
+  }
+  setInterval(tick, 1000);
+  function load() {
+    fetch('/display/' + encodeURIComponent(TOKEN) + '/data', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d || !d.ok) { if (d && d.off) location.reload(); return; }
+      lastOk = Date.now();
+      var srv = new Date(d.now.replace(' ', 'T')); offset = srv.getTime() - Date.now();
+      $('date').textContent = srv.toLocaleDateString('ar', { weekday: 'long', day: 'numeric', month: 'long' });
+      if (d.kind === 'attendance') renderAtt(d); else renderTrk(d);
+      tick();
+    }).catch(function () { tick(); }).then(function () { setTimeout(load, REFRESH); });
+  }
+
+  // ===== لوحة الحضور =====
+  function renderAtt(d) {
+    var c = d.counts;
+    $('kPresent').textContent = c.present; $('kExpected').textContent = c.expected; $('kRate').textContent = c.rate + '%';
+    $('kLate').textContent = c.late; $('kAbsent').textContent = c.absent; $('kLeave').textContent = c.leave;
+    $('kBar').style.width = c.rate + '%';
+    var b = $('dayBanner'); b.style.display = d.work_day ? 'none' : 'block'; b.textContent = 'اليوم ليس يوم عمل (عطلة أسبوعية أو رسمية)';
+    $('tDepts').innerHTML = d.depts.map(function (x) {
+      return '<tr><td><b>' + esc(x.dept) + '</b></td><td>' + x.present + '/' + x.expected + '</td><td>' + (x.late || '–') + '</td><td>' + (x.absent || '–') + '</td><td>' + (x.leave || '–') + '</td></tr>';
+    }).join('') || '<tr><td colspan="5">—</td></tr>';
+    document.querySelectorAll('[data-names]').forEach(function (e) { e.style.display = d.show_names ? '' : 'none'; });
+    if (!d.show_names) return;
+    var li = function (a, b) { return '<li><span>' + a + '</span><small>' + b + '</small></li>'; };
+    $('cPresent').textContent = c.present; $('cLate').textContent = c.late; $('cAbsent').textContent = c.absent; $('cLeave').textContent = c.leave;
+    $('lPresent').innerHTML = d.present.map(function (x) { return li(esc(x.name), '<span dir="ltr">' + esc(x.time) + '</span>'); }).join('') || '<li><small>لا أحد بعد</small></li>';
+    $('lLate').innerHTML = d.late.map(function (x) { return li(esc(x.name), x.late + ' د — <span dir="ltr">' + esc(x.time) + '</span>'); }).join('') || '<li><small>لا يوجد</small></li>';
+    $('lAbsent').innerHTML = d.absent.map(function (x) { return li(esc(x.name), esc(x.dept)); }).join('') || '<li><small>الجميع حضروا</small></li>';
+    $('lLeave').innerHTML = d.leave.map(function (x) { return li(esc(x.name), esc(x.why)); }).join('') || '<li><small>لا يوجد</small></li>';
+  }
+
+  // ===== الرصد المباشر =====
+  var map, layer, follow = null, fitted = false;
+  function ensureMap() {
+    if (map || typeof L === 'undefined') return;
+    var esri = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
+    var sat = function () { return L.tileLayer(esri + 'World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Imagery &copy; Esri' }); };
+    var layers = {
+      'شوارع': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }),
+      'قمر صناعي': sat(),
+      'قمر صناعي + أسماء': L.layerGroup([sat(), L.tileLayer(esri + 'Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 }),
+        L.tileLayer(esri + 'Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, opacity: .8 })]),
+      'تضاريس': L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17, attribution: '&copy; OpenTopoMap' }),
+      'داكن': L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap &copy; CARTO' })
+    };
+    var pick = 'شوارع'; try { var v = localStorage.getItem('att_display_layer'); if (v && layers[v]) pick = v; } catch (e) {}
+    map = window._map = L.map('map').setView([31.95, 35.91], 12);
+    layers[pick].addTo(map);
+    L.control.layers(layers, null, { position: 'topleft' }).addTo(map);
+    L.control.scale({ imperial: false }).addTo(map);
+    map.on('baselayerchange', function (e) { try { localStorage.setItem('att_display_layer', e.name); } catch (x) {} });
+    layer = L.layerGroup().addTo(map);
+  }
+  var ago = function (a) { return a == null ? '' : a < 60 ? 'قبل ' + a + ' ث' : a < 3600 ? 'قبل ' + Math.round(a / 60) + ' د' : 'قبل ' + Math.round(a / 3600) + ' س'; };
+  window.focusEmp = function (id) { follow = follow === id ? null : id; load1(); };
+  var lastData = null;
+  function load1() { if (lastData) renderTrk(lastData); }
+  function renderTrk(d) {
+    lastData = d; ensureMap(); if (!map) return;
+    layer.clearLayers();
+    var b = [];
+    d.sites.forEach(function (s) { L.circle([s.lat, s.lng], { radius: s.radius, color: '#4fa3c0', weight: 1, fillOpacity: .08 }).addTo(layer); });
+    d.rows.forEach(function (r) {
+      if (r.lat == null) return;
+      var stale = !r.live || r.age_s > 180;
+      if (r.tail && r.tail.length > 1) L.polyline(r.tail, { color: '#4c8dff', weight: 4, opacity: .6 }).addTo(layer);
+      if (r.live && r.accuracy && r.accuracy < 500) L.circle([r.lat, r.lng], { radius: r.accuracy, color: '#4c8dff', weight: 1, fillOpacity: .08 }).addTo(layer);
+      L.circleMarker([r.lat, r.lng], { radius: r.id === follow ? 12 : 10, color: '#fff', weight: 3, fillColor: r.live ? (stale ? '#f0a43a' : '#4c8dff') : '#8a9aa3', fillOpacity: 1 })
+        .bindTooltip(esc(r.name) + (r.live ? '' : ' (غير مباشر)'), { permanent: true, direction: 'top', offset: [0, -10] })
+        .on('click', function () { window.focusEmp(r.id); }).addTo(layer);
+      b.push([r.lat, r.lng]);
+    });
+    var f = follow && d.rows.filter(function (r) { return r.id === follow && r.lat != null; })[0];
+    if (f) map.setView([f.lat, f.lng], Math.max(map.getZoom(), 16));
+    else if (b.length && !fitted) { map.fitBounds(L.latLngBounds(b).pad(.3), { maxZoom: 17 }); fitted = true; }
+    $('side').innerHTML = d.rows.map(function (r) {
+      var tag = r.live ? (r.age_s > 180 ? '<span class="tag s">مباشر — متأخر التحديث</span>' : '<span class="tag l">● مباشر</span>') : '<span class="tag n">غير مباشر</span>';
+      return '<div class="emp' + (r.id === follow ? ' on' : '') + '" onclick="focusEmp(' + r.id + ')"><b>' + esc(r.name) + '</b> ' + tag
+        + '<div class="m">' + esc(r.dept) + (r.state ? ' — ' + esc(r.state) + (r.state_time ? ' <span dir="ltr">' + esc(r.state_time) + '</span>' : '') : '') + '</div>'
+        + '<div class="m">' + (r.lat == null ? 'لا يوجد موقع بعد' : 'آخر موقع ' + ago(r.age_s)) + '</div></div>';
+    }).join('') + '<div class="m" style="color:var(--muted);font-size:.8rem;margin-top:6px">اضغط على اسم لتتبّعه، واضغط مرة أخرى لعرض الجميع.</div>';
+  }
+  load(); tick();
+})();
+</script>
+{% endif %}
+</body>
+</html>

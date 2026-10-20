@@ -46,6 +46,7 @@
       <div class="nav-group-items">
       <button class="nav-item active" data-tab="dashboard" onclick="showTab('dashboard')"><i class="fas fa-chart-pie" aria-hidden="true"></i> لوحة التحكم</button>
       <button class="nav-item" data-tab="mobile-moves" onclick="showTab('mobile-moves')"><i class="fas fa-satellite-dish" aria-hidden="true"></i> المتابعة المباشرة</button>
+      <button class="nav-item" data-tab="displays" onclick="showTab('displays')"><i class="fas fa-tv" aria-hidden="true"></i> شاشات العرض</button>
       </div>
     </div>
     <div class="nav-group" data-group="reports">
@@ -762,6 +763,39 @@
     </div>
 
     {% include '_mobile_tabs.html' %}
+
+    <!-- ============ شاشات العرض (مشاهدة فقط) ============ -->
+    <div class="tab-panel" id="tab-displays">
+      <div class="card">
+        <div class="card-title"><i class="fas fa-tv" aria-hidden="true"></i> إنشاء شاشة عرض (مشاهدة فقط)</div>
+        <p style="font-size:.84rem;color:var(--muted);margin-bottom:10px;line-height:1.8">رابط سري يُفتح على شاشة تلفاز أو جهاز لوحي أو هاتف مدير <b>دون تسجيل دخول ودون أي إمكانية تعديل</b>، ويتحدّث تلقائياً.
+          يعرض فقط ما تحدده هنا. يمكنك إيقافه أو تغيير رابطه (فيتوقف القديم فوراً) في أي وقت.</p>
+        <input type="hidden" id="dsId">
+        <div class="form-grid trio">
+          <div class="form-group"><label>اسم الشاشة</label><input type="text" id="dsName" placeholder="مثال: شاشة الإدارة" maxlength="80"></div>
+          <div class="form-group"><label>النوع</label><select id="dsKind" onchange="dsKindUi()"><option value="attendance">لوحة الحضور اليومية</option><option value="tracking">الرصد المباشر لموظفين/أجهزة محددين</option></select></div>
+          <div class="form-group"><label>التحديث كل (ثانية)</label><input type="number" id="dsRefresh" min="1" max="300" value="30"></div>
+        </div>
+        <div id="dsAttBox">
+          <label style="font-weight:600">الأقسام المعروضة <small style="color:var(--muted)">(بلا تحديد = كل الأقسام)</small></label>
+          <div id="dsDepts" class="m-chips" style="margin-top:6px"></div>
+          <label style="display:flex;gap:8px;align-items:center;font-weight:600;margin:6px 0 10px"><input type="checkbox" id="dsNames" checked> عرض أسماء الحاضرين والمتأخرين والغائبين (أطفئه لعرض الأرقام فقط)</label>
+        </div>
+        <div id="dsTrkBox" style="display:none">
+          <label style="font-weight:600">الموظفون/الأجهزة المراد رصدهم فقط</label>
+          <input type="search" id="dsEmpSearch" class="search-input" placeholder="بحث…" oninput="dsEmpRender()" style="margin:6px 0">
+          <div id="dsEmps" style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:10px;padding:8px"></div>
+          <label style="display:flex;gap:8px;align-items:center;font-weight:600;margin:8px 0 10px"><input type="checkbox" id="dsTrail" checked> رسم المسار خلال اليوم</label>
+          <p style="font-size:.8rem;color:var(--muted);margin:-4px 0 10px">تتحرك النقطة بقدر ما يُرسل هاتف الموظف — لمتابعة شبه لحظية فعّل له «التتبع المستمر» بفاصل قصير من «المواقع المشاركة».</p>
+        </div>
+        <button class="btn btn-primary" onclick="dsSave()"><i class="fas fa-save" aria-hidden="true"></i> <span id="dsSaveLbl">إنشاء الشاشة</span></button>
+        <button class="btn btn-outline" id="dsCancel" style="display:none" onclick="dsReset()">إلغاء التعديل</button>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-list" aria-hidden="true"></i> الشاشات</div>
+        <div class="table-wrap"><table><thead><tr><th>الشاشة</th><th>النوع</th><th>المعروض</th><th>آخر مشاهدة</th><th>الحالة</th><th>الرابط والإجراءات</th></tr></thead><tbody id="dsTable"></tbody></table></div>
+      </div>
+    </div>
 
     <!-- ============ الإجازات وأرصدتها ============ -->
     <div class="tab-panel" id="tab-vacations">
@@ -1562,6 +1596,7 @@
 <script src="{{ url_for('static', filename='js/mobile_admin.js') }}"></script>
 <script src="{{ url_for('static', filename='js/admin_extra.js') }}"></script>
 <script src="{{ url_for('static', filename='js/vacations_admin.js') }}"></script>
+<script src="{{ url_for('static', filename='js/displays_admin.js') }}"></script>
 <script>
 function toggleTheme(){var r=document.documentElement,d=r.getAttribute('data-theme')==='dark';r.setAttribute('data-theme',d?'light':'dark');try{localStorage.setItem('att_theme',d?'light':'dark');}catch(e){}var b=document.getElementById('themeIcon');if(b)b.className=d?'fas fa-moon':'fas fa-sun';}
 document.addEventListener('DOMContentLoaded',function(){var b=document.getElementById('themeIcon');if(b)b.className=document.documentElement.getAttribute('data-theme')==='dark'?'fas fa-sun':'fas fa-moon';});

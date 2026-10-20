@@ -177,7 +177,7 @@ function _disableContainer(selector) {
 
 function applyRolePermissions() {
   if (CURRENT_ROLE !== 'admin') {
-    document.querySelectorAll('[data-tab="users"], [data-tab="maintenance"]').forEach(el => { el.style.display = 'none'; });
+    document.querySelectorAll('[data-tab="users"], [data-tab="maintenance"], [data-tab="displays"]').forEach(el => { el.style.display = 'none'; });
   }
   if (!PERMS.can_manage_employees) {
     _disableContainer('#empAddCard');

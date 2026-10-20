@@ -96,6 +96,8 @@ import corrections as _corrections  # noqa: E402 — طلبات تصحيح ال�
 app.register_blueprint(_corrections.bp)
 import vacations as _vacations  # noqa: E402 — الإجازات وأرصدتها
 app.register_blueprint(_vacations.bp)
+import displays as _displays  # noqa: E402 — شاشات العرض (مشاهدة فقط برابط سري)
+app.register_blueprint(_displays.bp)
 try:
     _c = db.get_db()
     _adms.init_tables(_c)
@@ -103,6 +105,7 @@ try:
     _shares.init_tables(_c)
     _corrections.init_tables(_c)
     _vacations.init_tables(_c)
+    _displays.init_tables(_c)
     _c.commit()
     _c.close()
 except Exception:
