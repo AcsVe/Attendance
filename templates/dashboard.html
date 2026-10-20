@@ -66,6 +66,7 @@
       <button class="nav-item" data-tab="manual" onclick="showTab('manual')"><i class="fas fa-edit" aria-hidden="true"></i> الإدخال اليدوي <span class="nav-badge hide" id="crNavBadge"></span></button>
       <button class="nav-item" data-tab="permissions" onclick="showTab('permissions')"><i class="fas fa-user-clock" aria-hidden="true"></i> أذونات التأخير والمغادرة</button>
       <button class="nav-item" data-tab="leaves" onclick="showTab('leaves')"><i class="fas fa-person-walking-arrow-right" aria-hidden="true"></i> الخروج المؤقت <span class="nav-badge hide" id="lvNavBadge"></span></button>
+      <button class="nav-item" data-tab="vacations" onclick="showTab('vacations')"><i class="fas fa-umbrella-beach" aria-hidden="true"></i> الإجازات <span class="nav-badge hide" id="vaNavBadge"></span></button>
       <button class="nav-item" data-tab="absence-reasons" onclick="showTab('absence-reasons')"><i class="fas fa-comment-medical" aria-hidden="true"></i> أسباب الغياب</button>
       <button class="nav-item" data-tab="exceptions" onclick="showTab('exceptions')"><i class="fas fa-user-slash" aria-hidden="true"></i> استثناءات التواريخ</button>
       <button class="nav-item" data-tab="holidays" onclick="showTab('holidays')"><i class="fas fa-umbrella-beach" aria-hidden="true"></i> العطل الرسمية</button>
@@ -228,6 +229,7 @@
           <button class="filter-btn" data-rt="sat_present" onclick="setReportType('sat_present')">حاضرو السبت</button>
           <button class="filter-btn" data-rt="no_out" onclick="setReportType('no_out')">بدون سجل انصراف</button>
           <button class="filter-btn" data-rt="early" onclick="setReportType('early')">المغادرة المبكرة</button>
+          <button class="filter-btn" data-rt="vacation" onclick="setReportType('vacation')">الإجازات</button>
         </div>
         <div class="filter-bar">
           <select id="repDept" class="search-input" onchange="loadReports(1)"><option value="">كل الأقسام</option></select>
@@ -761,6 +763,56 @@
 
     {% include '_mobile_tabs.html' %}
 
+    <!-- ============ الإجازات وأرصدتها ============ -->
+    <div class="tab-panel" id="tab-vacations">
+      <div class="card">
+        <div class="card-title"><i class="fas fa-umbrella-beach" aria-hidden="true"></i> الإجازات — طلبات الموظفين (<span id="vaPending">0</span> بانتظار القرار)</div>
+        <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:10px;font-size:.88rem;font-weight:600">
+          <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="vaEnabled" onchange="vaSetting('vacations_enabled', this.checked)"> تفعيل وحدة الإجازات</label>
+          <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="vaEmpReq" onchange="vaSetting('vacations_employee_request', this.checked)"> السماح بطلب الإجازة من تطبيق الموظف</label>
+        </div>
+        <div class="filter-bar" style="margin-bottom:8px">
+          <select id="vaStatus" class="search-input" style="width:auto;min-width:0" onchange="vaLoad()">
+            <option value="pending">بانتظار القرار</option><option value="approved">المعتمدة</option><option value="rejected">المرفوضة</option><option value="cancelled">الملغاة</option><option value="">الكل</option></select>
+          <select id="vaType" class="search-input" style="width:auto;min-width:0" onchange="vaLoad()"><option value="">كل الأنواع</option></select>
+          <input type="date" id="vaFrom" class="search-input" style="min-width:140px" onchange="vaLoad()" title="من">
+          <input type="date" id="vaTo" class="search-input" style="min-width:140px" onchange="vaLoad()" title="إلى">
+          <input type="text" id="vaNote" class="search-input" placeholder="ملاحظة للموظف (اختياري)" maxlength="300">
+          <button class="btn btn-primary btn-sm" onclick="vaDecide('approve')"><i class="fas fa-check" aria-hidden="true"></i> موافقة</button>
+          <button class="btn btn-red btn-sm" onclick="vaDecide('reject')"><i class="fas fa-xmark" aria-hidden="true"></i> رفض</button>
+          <button class="btn btn-outline btn-sm" onclick="vaDecide('cancel')"><i class="fas fa-ban" aria-hidden="true"></i> إلغاء إجازة معتمدة</button>
+        </div>
+        <div class="table-wrap" style="max-height:360px"><table>
+          <thead><tr><th class="no-filter"><input type="checkbox" aria-label="تحديد الكل" onchange="document.querySelectorAll('.va-check').forEach(c => { c.checked = this.checked; })"></th>
+            <th>الموظف</th><th>النوع</th><th>من</th><th>إلى</th><th>أيام العمل</th><th>السبب</th><th>الحالة</th><th>المصدر</th></tr></thead>
+          <tbody id="vaTable"></tbody></table></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-plus" aria-hidden="true"></i> تسجيل إجازة لموظف (معتمدة مباشرة)</div>
+        <div class="form-grid quad">
+          <div class="form-group"><label>الموظف</label><input type="text" id="vaEmp" list="vaEmpList" placeholder="اكتب الاسم"><datalist id="vaEmpList"></datalist></div>
+          <div class="form-group"><label>النوع</label><select id="vaAddType"></select></div>
+          <div class="form-group"><label>من</label><input type="date" id="vaAddFrom"></div>
+          <div class="form-group"><label>إلى</label><input type="date" id="vaAddTo"></div>
+        </div>
+        <div class="form-group"><label>السبب / ملاحظة</label><input type="text" id="vaAddReason" maxlength="300"></div>
+        <button class="btn btn-primary" onclick="vaAdd()"><i class="fas fa-save" aria-hidden="true"></i> تسجيل الإجازة</button>
+        <span style="font-size:.8rem;color:var(--muted);margin-inline-start:8px">تُحسب أيام العمل فقط (بلا الجمعة والعطل الرسمية، والسبت إن لم يكن له دوام).</span>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-scale-balanced" aria-hidden="true"></i> الأرصدة لسنة <input type="number" id="vaYear" class="search-input" style="width:90px;min-width:0;display:inline-block" onchange="vaBalances()"></div>
+        <p style="font-size:.8rem;color:var(--muted);margin-bottom:6px">كل خانة: المستخدم / الرصيد (والمعلّق بين قوسين). اضغط على خانة لتحديد رصيد خاص لهذا الموظف (مدير النظام).</p>
+        <input type="search" id="vaBalSearch" class="search-input" placeholder="بحث بالاسم أو القسم…" oninput="vaBalRender()" style="margin-bottom:8px">
+        <div class="table-wrap" style="max-height:420px"><table><thead id="vaBalHead"></thead><tbody id="vaBalBody"></tbody></table></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-list" aria-hidden="true"></i> أنواع الإجازات</div>
+        <p style="font-size:.8rem;color:var(--muted);margin-bottom:6px">الرصيد السنوي بالأيام (0 = بلا حد). «مدفوعة» معلومة للتقارير فقط — لا يوجد أي احتساب مالي. اضبط الأرصدة حسب سياستكم وقانون العمل.</p>
+        <div class="table-wrap"><table><thead><tr><th>الاسم</th><th>الرصيد السنوي</th><th>مدفوعة</th><th>تحتاج موافقة</th><th>يطلبها الموظف</th><th>مفعّل</th><th>حفظ</th></tr></thead>
+          <tbody id="vaTypes"></tbody></table></div>
+      </div>
+    </div>
+
     <!-- ============ DEVICE MANAGEMENT (ZKTeco) ============ -->
     <div class="tab-panel" id="tab-devices">
       <div class="subtab-nav">
@@ -1007,6 +1059,13 @@
         </div>
         <label style="display:flex;gap:8px;align-items:center;font-weight:600;margin-bottom:10px"><input type="checkbox" id="dtOpen" onchange="dtOpenUi()">
           دوام مفتوح على مدار اليوم (بلا وقت حضور أو انصراف) — مناسب للأجهزة المتنقلة ومن يعمل بلا أوقات محددة: لا يُحتسب تأخير</label>
+        <div class="form-grid trio" style="align-items:end">
+          <div class="form-group"><label>استراحة الغداء لهذا القسم</label>
+            <select id="dtLunchMode" onchange="dtLunchUi()"><option value="">تتبع الإعداد العام</option><option value="custom">وقت خاص بالقسم</option><option value="none">بلا استراحة غداء</option></select></div>
+          <div class="form-group"><label>بداية الاستراحة</label><input type="time" id="dtLunchStart"></div>
+          <div class="form-group"><label>نهاية الاستراحة</label><input type="time" id="dtLunchEnd"></div>
+        </div>
+        <p style="font-size:.8rem;color:var(--muted);margin:-4px 0 10px">تعمل استراحة الغداء فقط إذا فُعّل خيار «استثناء استراحة الغداء» في الإعدادات العامة.</p>
         <button class="btn btn-primary" onclick="saveDeptTime()"><i class="fas fa-save" aria-hidden="true"></i> حفظ/تحديث</button>
       </div>
       <div class="card">
@@ -1014,7 +1073,7 @@
         <button class="btn btn-red btn-sm" style="margin-bottom:8px" onclick="bulkDeleteSelected('deptTimesTable', id => '/api/dept-times/' + id, loadDeptTimes)"><i class="fas fa-trash" aria-hidden="true"></i> حذف المحدد</button>
         <div class="table-wrap">
           <table class="dt-filterable">
-            <thead><tr><th class="no-filter"><input type="checkbox" onchange="toggleSelectAll('deptTimesTable', this.checked)"></th><th>القسم</th><th>وقت الحضور الخاص</th><th>وقت الانصراف الخاص</th><th>حذف</th></tr></thead>
+            <thead><tr><th class="no-filter"><input type="checkbox" onchange="toggleSelectAll('deptTimesTable', this.checked)"></th><th>القسم</th><th>وقت الحضور الخاص</th><th>وقت الانصراف الخاص</th><th>استراحة الغداء</th><th>تعديل / حذف</th></tr></thead>
             <tbody id="deptTimesTable"></tbody>
           </table>
         </div>
@@ -1067,6 +1126,32 @@
           <span>احتساب البصمات الوسطى في جهاز البصمة خروجاً وعودة
             <small style="display:block;font-weight:400;color:var(--muted)">أول بصمة في اليوم حضور وآخرها انصراف، وما بينهما أزواج «خروج ← عودة» تُخصم مدتها من ساعات العمل وتظهر في التقارير. البصمتان خلال دقيقتين تُعدّان ضغطة مكررة، والبصمة الوسطى المنفردة تُهمَل. لا يُخصم ما يغطيه إذن مغادرة مرتين.</small></span>
         </label>
+        <label style="display:flex;align-items:flex-start;gap:8px;font-weight:600;margin-top:10px;line-height:1.7">
+          <input type="checkbox" id="setLunchEnabled" style="margin-top:6px" onchange="document.getElementById('lunchTimes').style.opacity = this.checked ? 1 : .5">
+          <span>استثناء استراحة الغداء
+            <small style="display:block;font-weight:400;color:var(--muted)">الخروج والعودة أثناء استراحة الغداء (بالبصمة أو بالتطبيق) لا يُخصم من ساعات العمل. الوقت أدناه عام، ولكل قسم وقت خاص أو «بلا استراحة» من صفحة «أوقات الأقسام».</small></span>
+        </label>
+        <div class="form-grid quad" id="lunchTimes" style="margin-top:6px">
+          <div class="form-group"><label>بداية استراحة الغداء (عام)</label><input type="time" id="setLunchStart"></div>
+          <div class="form-group"><label>نهاية استراحة الغداء (عام)</label><input type="time" id="setLunchEnd"></div>
+        </div>
+        <label style="display:flex;align-items:flex-start;gap:8px;font-weight:600;margin-top:10px;line-height:1.7">
+          <input type="checkbox" id="setDevOffline" style="margin-top:6px">
+          <span>تنبيه إذا توقف جهاز البصمة عن الاتصال أثناء الدوام
+            <small style="display:block;font-weight:400;color:var(--muted)">للأجهزة المتصلة عبر الإنترنت (ADMS): إشعار على تطبيق الإدارة إذا لم يتصل الجهاز خلال المدة أدناه في أوقات الدوام، وإشعار آخر عند عودته.</small></span>
+        </label>
+        <div class="form-grid quad" style="margin-top:6px">
+          <div class="form-group"><label>مدة الانقطاع قبل التنبيه (دقيقة)</label><input type="number" id="setDevOfflineMin" min="5" max="600"></div>
+        </div>
+        <label style="display:flex;align-items:flex-start;gap:8px;font-weight:600;margin-top:10px;line-height:1.7">
+          <input type="checkbox" id="setDailySummary" style="margin-top:6px">
+          <span>الملخص اليومي على تطبيق الإدارة
+            <small style="display:block;font-weight:400;color:var(--muted)">صباحاً: من حضر ومن لم يحضر بعد والمتأخرون. مساءً: من نسي تسجيل الانصراف (إن وُجد). يُرسل في أيام العمل فقط. اترك الوقت فارغاً ليُحسب تلقائياً (بعد الحضور بنصف ساعة، وبعد الانصراف بساعة ونصف).</small></span>
+        </label>
+        <div class="form-grid quad" style="margin-top:6px">
+          <div class="form-group"><label>وقت الملخص الصباحي</label><input type="time" id="setSumMorning"></div>
+          <div class="form-group"><label>وقت الملخص المسائي</label><input type="time" id="setSumEvening"></div>
+        </div>
       </div>
       <div class="card">
         <div class="card-title"><i class="fas fa-sync-alt" aria-hidden="true"></i> نظام المناوبتين</div>
@@ -1476,6 +1561,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="{{ url_for('static', filename='js/mobile_admin.js') }}"></script>
 <script src="{{ url_for('static', filename='js/admin_extra.js') }}"></script>
+<script src="{{ url_for('static', filename='js/vacations_admin.js') }}"></script>
 <script>
 function toggleTheme(){var r=document.documentElement,d=r.getAttribute('data-theme')==='dark';r.setAttribute('data-theme',d?'light':'dark');try{localStorage.setItem('att_theme',d?'light':'dark');}catch(e){}var b=document.getElementById('themeIcon');if(b)b.className=d?'fas fa-moon':'fas fa-sun';}
 document.addEventListener('DOMContentLoaded',function(){var b=document.getElementById('themeIcon');if(b)b.className=document.documentElement.getAttribute('data-theme')==='dark'?'fas fa-sun':'fas fa-moon';});

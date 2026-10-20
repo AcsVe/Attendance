@@ -155,8 +155,14 @@ def _tick():
     try:
         import adms
         adms.flush()      # تحليل ما وصل من الأجهزة عبر الإنترنت ولم يُحلَّل بعد
+        adms.offline_check()   # تنبيه توقف جهاز بصمة عن الاتصال أثناء الدوام
     except Exception:   # noqa: BLE001
-        logger.exception('adms flush failed')
+        logger.exception('adms flush/offline check failed')
+    try:
+        import daily_summary
+        daily_summary.tick()   # الملخص اليومي للإدارة (صباحاً ومساءً)
+    except Exception:   # noqa: BLE001
+        logger.exception('daily summary failed')
     # إعادة تحليل كل ساعة (الدقيقة 5): يُظهر «بدون سجل انصراف» / الإغلاق التلقائي بعد انتهاء دوام اليوم
     # دون انتظار حركة جديدة
     try:

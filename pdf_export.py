@@ -160,7 +160,7 @@ def build_report_pdf(rows, org_name, filters_desc, stats, generated_by, times_de
             r.get('time_in', '') or '—',
             (ar('بدون انصراف') if r.get('out_flag') == 'missing' else
              ar(f"{r.get('time_out', '')} (تلقائي)") if r.get('out_flag') == 'auto' else (r.get('time_out', '') or '—')),
-            ar(r.get('status', '') + (f" / مبكر {r.get('early_minutes')} د" if r.get('early_minutes') else '')
+            ar((f"إجازة: {r.get('day_note')}" if r.get('day_note') else r.get('status', '')) + (f" / مبكر {r.get('early_minutes')} د" if r.get('early_minutes') else '')
                + (f" / خروج {r.get('break_minutes')} د" if r.get('break_minutes') else '')),
             str(r.get('late_minutes', 0) or 0),
             str(r.get('working_hours', 0) or 0),

@@ -649,6 +649,7 @@ function _reportOutCell(r) {
 }
 
 function _reportStatusCell(r) {
+  if (r.day_note) return `<span class="badge badge-exception">إجازة: ${escapeHtml(r.day_note)}</span>`;
   const badge = `<span class="badge ${STATUS_BADGE[r.status] || 'badge-none'}">${escapeHtml(r.status)}</span>`;
   const kind = _CLICKABLE_REPORT_STATUSES[r.status];
   if (!kind) return badge;
@@ -2133,8 +2134,11 @@ async function saveDeptTime() {
   const dep = document.getElementById('dtDep').value;
   const open_hours = document.getElementById('dtOpen').checked;
   if (!dept) { toast('اسم القسم إجباري', true); return; }
+  const lunch_mode = document.getElementById('dtLunchMode').value;
+  const lunch_start = document.getElementById('dtLunchStart').value, lunch_end = document.getElementById('dtLunchEnd').value;
   try {
-    await api('/api/dept-times', { method: 'POST', body: JSON.stringify({ dept, attendance_time: att, departure_time: dep, open_hours }) });
+    await api('/api/dept-times', { method: 'POST', body: JSON.stringify({ dept, attendance_time: att, departure_time: dep, open_hours, lunch_mode, lunch_start, lunch_end }) });
+    document.getElementById('dtLunchMode').value = ''; dtLunchUi();
     document.getElementById('dtOpen').checked = false; dtOpenUi();
     toast('تم الحفظ');
     document.getElementById('dtDept').value = '';
@@ -2142,6 +2146,21 @@ async function saveDeptTime() {
     document.getElementById('dtDep').value = '';
     loadDeptTimes();
   } catch (e) {}
+}
+
+function dtLunchUi() {
+  const custom = document.getElementById('dtLunchMode').value === 'custom';
+  ['dtLunchStart', 'dtLunchEnd'].forEach(id => { const e = document.getElementById(id); e.disabled = !custom; if (!custom) e.value = ''; });
+}
+let dtRowsCache = [];
+function editDeptTime(deptEncoded) {
+  const r = dtRowsCache.find(x => x.dept === decodeURIComponent(deptEncoded)); if (!r) return;
+  document.getElementById('dtDept').value = r.dept;
+  document.getElementById('dtOpen').checked = !!r.open_hours; dtOpenUi();
+  if (!r.open_hours) { document.getElementById('dtAtt').value = r.attendance_time || ''; document.getElementById('dtDep').value = r.departure_time || ''; }
+  document.getElementById('dtLunchMode').value = r.lunch_mode || ''; dtLunchUi();
+  document.getElementById('dtLunchStart').value = r.lunch_start || ''; document.getElementById('dtLunchEnd').value = r.lunch_end || '';
+  document.getElementById('dtDept').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function dtOpenUi() {
@@ -2153,10 +2172,15 @@ async function loadDeptTimes() {
   const data = await api('/api/dept-times');
   if (!data) return;
   const tbody = document.getElementById('deptTimesTable');
+  dtRowsCache = data.rows;
+  const lunchTxt = r => r.lunch_mode === 'none' ? 'بلا استراحة' : r.lunch_mode === 'custom' ? `<span dir="ltr">${escapeHtml(r.lunch_start || '')}–${escapeHtml(r.lunch_end || '')}</span>` : '<span style="color:var(--muted)">العام</span>';
   tbody.innerHTML = data.rows.map(r => `
     <tr><td><input type="checkbox" class="row-check" data-id="${encodeURIComponent(r.dept)}"></td><td>${escapeHtml(r.dept)}</td>${r.open_hours ? '<td colspan="2"><b style="color:var(--primary)">دوام مفتوح على مدار اليوم</b></td>' : `<td>${escapeHtml(r.attendance_time || '—')}</td><td>${escapeHtml(r.departure_time || '—')}</td>`}
-    <td><button class="btn btn-red btn-sm" onclick="deleteDeptTime('${encodeURIComponent(r.dept)}')" aria-label="حذف" title="حذف"><i class="fas fa-trash" aria-hidden="true"></i></button></td></tr>
-  `).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">لا توجد أقسام مخصَّصة</td></tr>';
+    <td>${lunchTxt(r)}</td>
+    <td style="white-space:nowrap"><button class="btn btn-outline btn-sm" onclick="editDeptTime('${encodeURIComponent(r.dept)}')" aria-label="تعديل" title="تعديل"><i class="fas fa-pen" aria-hidden="true"></i></button>
+      <button class="btn btn-red btn-sm" onclick="deleteDeptTime('${encodeURIComponent(r.dept)}')" aria-label="حذف" title="حذف"><i class="fas fa-trash" aria-hidden="true"></i></button></td></tr>
+  `).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">لا توجد أقسام مخصَّصة</td></tr>';
+  dtLunchUi();
 }
 
 async function deleteDeptTime(deptEncoded) {
@@ -2187,6 +2211,15 @@ async function loadSettings() {
   document.getElementById('setSatDep').value = s.sat_departure_time;
   document.getElementById('setAutoCheckout').checked = s.auto_checkout === '1';
   document.getElementById('setDeviceBreaks').checked = s.device_breaks !== '0';
+  document.getElementById('setLunchEnabled').checked = s.lunch_enabled === '1';
+  document.getElementById('setDevOffline').checked = s.device_offline_alert !== '0';
+  document.getElementById('setDevOfflineMin').value = s.device_offline_min || '30';
+  document.getElementById('setDailySummary').checked = s.daily_summary_enabled !== '0';
+  document.getElementById('setSumMorning').value = s.summary_morning_time || '';
+  document.getElementById('setSumEvening').value = s.summary_evening_time || '';
+  document.getElementById('setLunchStart').value = s.lunch_start || '';
+  document.getElementById('setLunchEnd').value = s.lunch_end || '';
+  document.getElementById('lunchTimes').style.opacity = s.lunch_enabled === '1' ? 1 : .5;
   renderLogoPreview(s.org_logo_filename);
   document.getElementById('setSyncUrl').value = s.sync_central_url || '';
   document.getElementById('setSyncKey').value = s.sync_api_key || '';
@@ -2226,6 +2259,14 @@ async function saveSettings() {
     sat_departure_time: document.getElementById('setSatDep').value,
     auto_checkout: document.getElementById('setAutoCheckout').checked ? '1' : '0',
     device_breaks: document.getElementById('setDeviceBreaks').checked ? '1' : '0',
+    lunch_enabled: document.getElementById('setLunchEnabled').checked ? '1' : '0',
+    device_offline_alert: document.getElementById('setDevOffline').checked ? '1' : '0',
+    device_offline_min: document.getElementById('setDevOfflineMin').value || '30',
+    daily_summary_enabled: document.getElementById('setDailySummary').checked ? '1' : '0',
+    summary_morning_time: document.getElementById('setSumMorning').value,
+    summary_evening_time: document.getElementById('setSumEvening').value,
+    lunch_start: document.getElementById('setLunchStart').value,
+    lunch_end: document.getElementById('setLunchEnd').value,
     sync_central_url: syncRole() === 'branch' ? document.getElementById('setSyncUrl').value.trim() : '',
     sync_api_key: syncRole() === 'none' ? '' : document.getElementById('setSyncKey').value.trim(),
   };

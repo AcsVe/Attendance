@@ -111,6 +111,20 @@
       <button class="btn btn-p" id="lrSend" style="width:100%;margin-top:10px">إرسال الطلب</button>
       <ul class="tl" id="lrList" style="margin-top:10px"></ul>
     </div>
+    <div class="card hide" id="vacCard">
+      <b style="color:var(--pd)"><i class="fas fa-umbrella-beach" aria-hidden="true"></i> إجازاتي — <span id="vacYear"></span></b>
+      <div id="vacBal" style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0"></div>
+      <div id="vacForm">
+        <label for="vacType">نوع الإجازة</label><select id="vacType"></select>
+        <div style="display:flex;gap:8px">
+          <label style="flex:1">من<input type="date" id="vacFrom"></label>
+          <label style="flex:1">إلى<input type="date" id="vacTo"></label>
+        </div>
+        <label for="vacReason">السبب (اختياري)</label><input id="vacReason" maxlength="300">
+        <button class="btn btn-p" id="vacSend" style="width:100%;margin-top:10px">إرسال طلب الإجازة</button>
+      </div>
+      <ul class="tl" id="vacList" style="margin-top:10px"></ul>
+    </div>
     <div class="card" id="corrCard">
       <b style="color:var(--pd)"><i class="fas fa-pen-to-square" aria-hidden="true"></i> طلب تصحيح حضور / انصراف</b>
       <p class="muted" style="margin:4px 0 8px;font-size:.85rem">نسيت تسجيل الانصراف أو الحضور؟ أرسل الوقت الصحيح والسبب، وتعتمده الإدارة.</p>
@@ -583,9 +597,44 @@
   });
   setTimeout(corrLoad, 1500);
 
+  // ===== الإجازات وأرصدتها =====
+  function vacLoad() {
+    api('/me/api/vacations').then(function (d) {
+      if (!d || !d.ok) return;
+      $('vacCard').classList.toggle('hide', !d.enabled);
+      if (!d.enabled) return;
+      $('vacYear').textContent = d.year;
+      $('vacBal').innerHTML = d.balances.map(function (b) {
+        return '<span class="tag" style="background:#eef4f7;color:var(--pd);padding:4px 10px">' + esc(b.name) + ': <b>'
+          + (b.unlimited ? 'بلا حد' : 'متبقٍ ' + b.left + ' من ' + b.quota) + '</b>' + (b.pending ? ' <span class="muted">(معلّق ' + b.pending + ')</span>' : '') + '</span>';
+      }).join('');
+      var keep = $('vacType').value;
+      $('vacType').innerHTML = d.balances.filter(function (b) { return b.employee_request; }).map(function (b) { return '<option value="' + b.type_id + '">' + esc(b.name) + '</option>'; }).join('');
+      if (keep) $('vacType').value = keep;
+      $('vacForm').classList.toggle('hide', !d.can_request || !$('vacType').options.length);
+      $('vacList').innerHTML = d.rows.map(function (r) {
+        return '<li><span>' + esc(r.type_name) + ' <b dir="ltr">' + esc(r.date_from.slice(5)) + (r.date_to !== r.date_from ? ' → ' + esc(r.date_to.slice(5)) : '') + '</b> <span class="muted">(' + r.days + ' يوم)'
+          + (r.decision_note ? ' — ' + esc(r.decision_note) : '') + '</span></span><span>' + esc(r.status_label)
+          + (r.status === 'pending' ? ' <a href="#" onclick="vacCancel(' + r.id + ');return false">إلغاء</a>' : '') + '</span></li>';
+      }).join('') || '<li class="muted">لا توجد إجازات</li>';
+    }).catch(function () {});
+  }
+  window.vacCancel = function (id) {
+    if (!confirm('إلغاء طلب الإجازة؟')) return;
+    api('/me/api/vacations/cancel', { method: 'POST', body: JSON.stringify({ id: id }) }).then(function (d) { toast(d.ok ? 'أُلغي الطلب' : d.error, d.ok); vacLoad(); });
+  };
+  $('vacSend').addEventListener('click', function () {
+    var btn = $('vacSend'); btn.disabled = true;
+    api('/me/api/vacations', { method: 'POST', body: JSON.stringify({ type_id: $('vacType').value, date_from: $('vacFrom').value,
+      date_to: $('vacTo').value || $('vacFrom').value, reason: $('vacReason').value }) })
+      .then(function (d) { btn.disabled = false; toast(d.ok ? d.message : d.error, d.ok); if (d.ok) { $('vacReason').value = ''; $('vacFrom').value = $('vacTo').value = ''; vacLoad(); } })
+      .catch(function () { btn.disabled = false; toast('تعذّر الإرسال — تحقق من الإنترنت'); });
+  });
+  setTimeout(vacLoad, 1800);
+
   document.querySelectorAll('.tabs button').forEach(function (b) {
     b.addEventListener('click', function () {
-      if (b.dataset.t === 'month') corrLoad();
+      if (b.dataset.t === 'month') { corrLoad(); vacLoad(); }
       document.querySelectorAll('.tabs button').forEach(function (x) { x.classList.toggle('on', x === b); });
       ['today', 'month', 'notes', 'acc'].forEach(function (t) { $('t-' + t).classList.toggle('hide', t !== b.dataset.t); });
       if (b.dataset.t === 'notes' && S && S.unread) { api('/me/api/notifications/read', { method: 'POST' }).then(load); }

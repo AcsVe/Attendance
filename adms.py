@@ -260,3 +260,54 @@ def api_adms_bulk():
         return jsonify({'ok': True})
     finally:
         conn.close()
+
+
+# ===== تنبيه توقف جهاز البصمة عن الإرسال أثناء الدوام =====
+def offline_check():
+    """كل دقيقة من المجدول: جهاز معتمد لم يتصل منذ N دقيقة خلال الدوام ← تنبيه للإدارة، ثم تنبيه عند عودته.
+    (أجهزة ADMS تتصل كل نصف دقيقة تقريباً حتى بلا بصمات، فانقطاعها يعني توقف الجهاز أو شبكته)"""
+    if db.get_setting('device_offline_alert', '1') != '1':
+        return
+    try:
+        limit = max(5, int(db.get_setting('device_offline_min', '30') or 30))
+    except ValueError:
+        limit = 30
+    import admin_notes
+    import mobile
+    conn = db.get_db()
+    try:
+        cols = {r['name'] for r in conn.execute("PRAGMA table_info(adms_devices)")}
+        if 'offline_alerted' not in cols:
+            conn.execute("ALTER TABLE adms_devices ADD COLUMN offline_alerted INTEGER NOT NULL DEFAULT 0")
+        if mobile.outage_hold(conn):
+            conn.commit()
+            return      # الخادم نفسه كان متوقفاً/بلا إنترنت: ليس عطلاً في الأجهزة
+        now = datetime.now()
+        cfg = db.get_all_settings()
+        wd = now.weekday()
+        work_day = wd != 4 and not (wd == 5 and cfg.get('sat_time_enabled') != '1') and \
+            not conn.execute("SELECT 1 FROM official_holidays WHERE date = ?", (now.strftime('%Y-%m-%d'),)).fetchone()
+        sat = wd == 5 and cfg.get('sat_time_enabled') == '1'
+        start = (cfg.get('sat_attendance_time') if sat else '') or cfg.get('attendance_time') or '08:00'
+        end = (cfg.get('sat_departure_time') if sat else '') or cfg.get('departure_time') or '15:00'
+        in_hours = work_day and start <= now.strftime('%H:%M') <= end
+        for d in conn.execute("SELECT * FROM adms_devices WHERE approved = 1").fetchall():
+            try:
+                gap = (now - datetime.strptime((d['last_seen'] or '')[:19], '%Y-%m-%d %H:%M:%S')).total_seconds() / 60
+            except ValueError:
+                continue
+            name = d['name'] or d['sn']
+            if gap >= limit and in_hours and not d['offline_alerted']:
+                conn.execute("UPDATE adms_devices SET offline_alerted = 1 WHERE sn = ?", (d['sn'],))
+                admin_notes.add_alert(conn, 'device_offline', f'جهاز البصمة «{name}» لا يتصل',
+                                      f"آخر اتصال {d['last_seen'][11:16]} (قبل {int(gap)} دقيقة) — تحقق من كهرباء الجهاز وشبكته. "
+                                      "البصمات محفوظة فيه وتصل عند عودته.", '/dashboard#devices')
+                conn.execute("INSERT INTO audit_log (username, action_type, target_type, new_value, timestamp) VALUES (?, ?, ?, ?, ?)",
+                             ('النظام', 'device_offline', 'device', f"{name}: آخر اتصال {d['last_seen']}", now.strftime('%Y-%m-%d %H:%M:%S')))
+            elif gap < 3 and d['offline_alerted']:
+                conn.execute("UPDATE adms_devices SET offline_alerted = 0 WHERE sn = ?", (d['sn'],))
+                admin_notes.add_alert(conn, 'device_online', f'عاد جهاز البصمة «{name}» للاتصال',
+                                      'تصل البصمات المحفوظة فيه تلقائياً.', '/dashboard#devices')
+        conn.commit()
+    finally:
+        conn.close()

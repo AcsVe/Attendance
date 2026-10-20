@@ -94,12 +94,15 @@ import shares as _shares  # noqa: E402 — مشاركة الموقع من تطب
 app.register_blueprint(_shares.bp)
 import corrections as _corrections  # noqa: E402 — طلبات تصحيح الحضور/الانصراف من تطبيق الموظف
 app.register_blueprint(_corrections.bp)
+import vacations as _vacations  # noqa: E402 — الإجازات وأرصدتها
+app.register_blueprint(_vacations.bp)
 try:
     _c = db.get_db()
     _adms.init_tables(_c)
     _admin_notes.init_tables(_c)
     _shares.init_tables(_c)
     _corrections.init_tables(_c)
+    _vacations.init_tables(_c)
     _c.commit()
     _c.close()
 except Exception:
@@ -161,7 +164,7 @@ def log_audit(conn, action_type, target_type, employee_name=None, date_affected=
 RT_LABELS = {
     'all': 'الكامل', 'late': 'المتأخرون', 'absent': 'الغائبون',
     'ontime': 'في الوقت', 'shift': 'المناوبون', 'sat_present': 'حاضرو السبت',
-    'holiday': 'عطلة أسبوعية', 'no_out': 'بدون سجل انصراف', 'early': 'المغادرة المبكرة',
+    'holiday': 'عطلة أسبوعية', 'no_out': 'بدون سجل انصراف', 'early': 'المغادرة المبكرة', 'vacation': 'الإجازات',
 }
 
 
@@ -882,6 +885,8 @@ def _apply_common_filters(rows, args):
             continue
         elif rt == 'holiday' and r['status'] != 'عطلة أسبوعية':
             continue
+        elif rt == 'vacation' and not r.get('day_note'):
+            continue
         elif rt == 'no_out' and not r.get('out_flag'):
             continue
         elif rt == 'early' and not (r.get('early_minutes') or 0):
@@ -958,7 +963,7 @@ def api_reports_export_csv():
                         'دقائق المغادرة المبكرة', 'ملاحظة الانصراف', 'خروج مؤقت من البصمة (د)']))
     for r in filtered:
         writer.writerow([r['name'], r['dept'] or '', r['date'], r['time_in'] or '', r['time_out'] or '',
-                          L(r['status'] or ''), r['late_minutes'], r['working_hours'], r['shift'] or '',
+                          L(_status_text(r)), r['late_minutes'], r['working_hours'], r['shift'] or '',
                           r.get('early_minutes') or 0, L(OUT_FLAG_LABELS.get(r.get('out_flag') or '', '')), r.get('break_minutes') or 0])
     mem = io.BytesIO(buf.getvalue().encode('utf-8'))
     return send_file(mem, mimetype='text/csv', as_attachment=True,
@@ -972,7 +977,8 @@ _MONTHLY_COLS = [
     ('name', 'الموظف'), ('dept', 'القسم'), ('present', 'أيام الحضور'), ('absent', 'أيام الغياب'),
     ('late_days', 'أيام التأخير'), ('late_minutes', 'دقائق التأخير'), ('early_days', 'أيام المغادرة المبكرة'),
     ('early_minutes', 'دقائق المغادرة المبكرة'), ('no_out', 'بدون سجل انصراف'), ('auto_out', 'انصراف تلقائي'),
-    ('break_minutes', 'خروج من البصمة (د)'), ('exceptions', 'استثناءات/إجازات'), ('weekend_work', 'أيام عمل في العطلة'),
+    ('break_minutes', 'خروج من البصمة (د)'), ('vacation_days', 'أيام الإجازات'), ('exceptions', 'استثناءات أخرى'),
+    ('weekend_work', 'أيام عمل في العطلة'),
     ('hours', 'ساعات العمل'), ('ot_minutes', 'دقائق العمل الإضافي'),
 ]
 
@@ -1024,7 +1030,9 @@ def _monthly_summary(args):
         elif r.get('out_flag') == 'auto':
             x['auto_out'] += 1
         x['break_minutes'] += int(r.get('break_minutes') or 0)
-        if r['status'] == 'استثناء':
+        if r.get('day_note'):
+            x['vacation_days'] += 1
+        elif r['status'] == 'استثناء':
             x['exceptions'] += 1
         x['hours'] += float(r['working_hours'] or 0)
     for name, x in out.items():
@@ -2165,6 +2173,20 @@ def api_upload():
     return jsonify(result)
 
 
+def _lunch_map(conn, settings):
+    """استراحة الغداء لكل قسم (للتحليل): {} إن كان الخيار معطّلاً"""
+    if settings.get('lunch_enabled') != '1':
+        return {}
+    m = {'_default': (settings.get('lunch_start'), settings.get('lunch_end'))
+         if settings.get('lunch_start') and settings.get('lunch_end') else None}
+    for r in conn.execute("SELECT dept, lunch_mode, lunch_start, lunch_end FROM dept_attendance_settings"):
+        if r['lunch_mode'] == 'none':
+            m[r['dept']] = None
+        elif r['lunch_mode'] == 'custom' and r['lunch_start'] and r['lunch_end']:
+            m[r['dept']] = (r['lunch_start'], r['lunch_end'])
+    return m
+
+
 DEVICE_DOUBLE_TAP_SEC = 120   # بصمتان خلال دقيقتين = ضغطة مكررة (تُحسب بصمة واحدة)
 
 
@@ -2217,6 +2239,11 @@ def run_full_analysis(conn):
     _depts = {r['name']: r['dept'] for r in conn.execute("SELECT name, dept FROM employees")}
     _extra = [{'name': r['name'], 'date': r['date'], 'dept': _depts.get(r['name'], ''), 'time_in': None, 'time_out': None}
               for r in conn.execute("SELECT name, date FROM manual_time_entries") if (r['name'], r['date']) not in _have]
+    # أيام الإجازات المعتمدة: تظهر في التقارير باسم نوع الإجازة حتى بلا بصمة (وتُعامل كاستثناء لا كغياب)
+    vac_days = _vacations.approved_days(conn)
+    _seen = _have | {(x['name'], x['date']) for x in _extra}
+    _extra += [{'name': n, 'date': d, 'dept': _depts.get(n, ''), 'time_in': None, 'time_out': None}
+               for (n, d) in vac_days if (n, d) not in _seen]
     if _extra:
         punches_df = pd.concat([punches_df, pd.DataFrame(_extra)], ignore_index=True)
 
@@ -2232,7 +2259,7 @@ def run_full_analysis(conn):
     manual_entries = {(r['name'], r['date']): (r['time_in'], r['time_out']) for r in manual_rows}
 
     exc_rows = conn.execute("SELECT name, date FROM date_exceptions").fetchall()
-    date_exceptions = {(r['name'], r['date']) for r in exc_rows}
+    date_exceptions = {(r['name'], r['date']) for r in exc_rows} | set(vac_days)
 
     hol_rows = conn.execute("SELECT date FROM official_holidays").fetchall()
     official_holidays = {r['date'] for r in hol_rows}
@@ -2245,7 +2272,7 @@ def run_full_analysis(conn):
     late_permissions = {(r['name'], r['date']): dict(r) for r in late_perm_rows}
 
     dep_perm_rows = conn.execute(
-        "SELECT name, date, departure_time, return_time FROM departure_permissions").fetchall()
+        "SELECT name, date, departure_time, return_time, reason FROM departure_permissions").fetchall()
     departure_permissions = {(r['name'], r['date']): dict(r) for r in dep_perm_rows}
 
     device_breaks = _device_breaks(conn) if db.get_setting('device_breaks', '1') == '1' else {}
@@ -2254,12 +2281,13 @@ def run_full_analysis(conn):
     forced_set = {(r['name'], r['date']) for r in forced_rows}
 
     cache_cols = ['name', 'dept', 'date', 'weekday', 'time_in', 'time_out', 'status', 'late_minutes', 'working_hours', 'shift',
-                  'early_minutes', 'out_flag', 'break_minutes']
+                  'early_minutes', 'out_flag', 'break_minutes', 'day_note']
     if punches_df.empty:
         result = pd.DataFrame(columns=cache_cols)
     else:
         settings = dict(settings)
         settings['_open_depts'] = [r['dept'] for r in conn.execute("SELECT dept FROM dept_attendance_settings WHERE open_hours = 1")]
+        settings['_lunch'] = _lunch_map(conn, settings)
         try:   # «الآن» بتوقيت النظام (Asia/Amman) لمعرفة هل انتهى دوام اليوم (نسيان الانصراف)
             from mobile import now_local as _now_local
             settings['_now'] = _now_local().strftime('%Y-%m-%d %H:%M')
@@ -2313,16 +2341,17 @@ def run_full_analysis(conn):
         (r.name, r.dept, r.date, int(r.weekday) if pd.notna(r.weekday) else None, r.time_in, r.time_out,
          r.status, int(r.late_minutes), float(r.working_hours), r.shift,
          int(r.early_minutes or 0) if pd.notna(r.early_minutes) else 0, r.out_flag or '',
-         int(r.break_minutes or 0) if pd.notna(r.break_minutes) else 0) for r in result.itertuples()
+         int(r.break_minutes or 0) if pd.notna(r.break_minutes) else 0,
+         vac_days.get((r.name, r.date), '')) for r in result.itertuples()
     ] + [
         (r['name'], r['dept'], r['date'], r['weekday'], r['time_in'], r['time_out'],
-         r['status'], r['late_minutes'], r['working_hours'], r['shift'], 0, '', 0) for r in extra_rows
+         r['status'], r['late_minutes'], r['working_hours'], r['shift'], 0, '', 0, '') for r in extra_rows
     ]
 
     conn.execute("DELETE FROM report_cache")
     conn.executemany(
         "INSERT INTO report_cache (name, dept, date, weekday, time_in, time_out, status, late_minutes, working_hours, shift, "
-        "early_minutes, out_flag, break_minutes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "early_minutes, out_flag, break_minutes, day_note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         rows_to_insert
     )
     conn.commit()
@@ -2428,19 +2457,34 @@ def api_dept_times():
         att = (data.get('attendance_time') or '').strip() or None
         dep = (data.get('departure_time') or '').strip() or None
         open_hours = 1 if data.get('open_hours') else 0
+        lunch_mode = data.get('lunch_mode') if data.get('lunch_mode') in ('', 'custom', 'none') else ''
+        l_start = (data.get('lunch_start') or '').strip() or None
+        l_end = (data.get('lunch_end') or '').strip() or None
+        if lunch_mode == 'custom' and not (l_start and l_end and l_end > l_start):
+            conn.close()
+            return jsonify({'ok': False, 'error': 'حدّد بداية ونهاية استراحة الغداء للقسم (النهاية بعد البداية)'}), 400
+        if lunch_mode != 'custom':
+            l_start = l_end = None
         if open_hours:      # دوام مفتوح على مدار اليوم (مثل الأجهزة المتنقلة): بلا تأخير، والتحقق والمشاركة حتى نهاية اليوم
             att, dep = '00:00', '23:59'
         if not dept:
             conn.close()
             return jsonify({'ok': False, 'error': 'اسم القسم إجباري'}), 400
         conn.execute(
-            "INSERT INTO dept_attendance_settings (dept, attendance_time, departure_time, open_hours) VALUES (?, ?, ?, ?) "
+            "INSERT INTO dept_attendance_settings (dept, attendance_time, departure_time, open_hours, lunch_mode, lunch_start, lunch_end) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(dept) DO UPDATE SET attendance_time = excluded.attendance_time, departure_time = excluded.departure_time, "
-            "open_hours = excluded.open_hours",
-            (dept, att, dep, open_hours)
+            "open_hours = excluded.open_hours, lunch_mode = excluded.lunch_mode, lunch_start = excluded.lunch_start, "
+            "lunch_end = excluded.lunch_end",
+            (dept, att, dep, open_hours, lunch_mode, l_start, l_end)
         )
         conn.commit()
         conn.close()
+        try:   # الأوقات والاستراحة تغيّر نتائج التقارير
+            from mobile import schedule_analysis as _sched
+            _sched(1)
+        except Exception:
+            pass
         return jsonify({'ok': True})
 
     rows = [dict(r) for r in conn.execute("SELECT * FROM dept_attendance_settings ORDER BY dept").fetchall()]
@@ -2469,6 +2513,9 @@ def api_settings():
         allowed_keys = {
             'org_name', 'org_name_en', 'attendance_time', 'departure_time', 'late_threshold',
             'shift_enabled', 'shift1_start', 'shift1_end', 'shift2_start', 'shift2_end', 'auto_checkout', 'device_breaks',
+            'lunch_enabled', 'lunch_start', 'lunch_end', 'device_offline_alert', 'device_offline_min',
+            'vacations_enabled', 'vacations_employee_request',
+            'daily_summary_enabled', 'summary_morning_time', 'summary_evening_time',
             'sat_time_enabled', 'sat_attendance_time', 'sat_departure_time', 'excluded_depts',
             'sync_central_url', 'sync_api_key',
         }
@@ -3344,6 +3391,11 @@ _EXCEL_SHEETS = [
     ('بدون سجل انصراف', 'no_out'),
     ('المغادرة المبكرة', 'early'),
 ]
+def _status_text(r):
+    """الحالة كما تُعرض: يوم الإجازة المعتمدة باسم نوعها بدل «استثناء»"""
+    return f"إجازة: {r['day_note']}" if r.get('day_note') else (r['status'] or '')
+
+
 OUT_FLAG_LABELS = {'missing': 'بدون سجل انصراف', 'auto': 'أُغلق تلقائياً بنهاية الدوام — للمراجعة'}
 
 _EXCEL_HEADERS = ['الاسم', 'القسم', 'التاريخ', 'وقت الحضور', 'وقت الانصراف', 'الحالة',
@@ -3353,7 +3405,7 @@ _EXCEL_HEADERS = ['الاسم', 'القسم', 'التاريخ', 'وقت الحض
 
 def _excel_row(r):
     return [r['name'], r['dept'] or '', r['date'], r['time_in'] or '', r['time_out'] or '',
-            L(r['status'] or ''), r['late_minutes'], r['working_hours'], r['shift'] or '',
+            L(_status_text(r)), r['late_minutes'], r['working_hours'], r['shift'] or '',
             r.get('early_minutes') or 0, L(OUT_FLAG_LABELS.get(r.get('out_flag') or '', '')), r.get('break_minutes') or 0]
 
 

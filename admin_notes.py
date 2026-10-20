@@ -36,6 +36,21 @@ def init_tables(conn):
         conn.execute("ALTER TABLE user_notify_tokens ADD COLUMN last_share_id INTEGER")
     if 'last_corr_id' not in cols:
         conn.execute("ALTER TABLE user_notify_tokens ADD COLUMN last_corr_id INTEGER")
+    if 'last_alert_id' not in cols:
+        conn.execute("ALTER TABLE user_notify_tokens ADD COLUMN last_alert_id INTEGER")
+    # تنبيهات عامة يولّدها النظام (توقف جهاز بصمة، الملخص اليومي، …) — تصل لتطبيق الإدارة
+    conn.execute('''CREATE TABLE IF NOT EXISTS admin_alerts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind TEXT NOT NULL, title TEXT NOT NULL, body TEXT, url TEXT,
+        audience TEXT NOT NULL DEFAULT 'admin',   -- admin / staff (من يدير الموظفين أيضاً)
+        created_at TEXT DEFAULT (datetime('now'))
+    )''')
+
+
+def add_alert(conn, kind, title, body='', url='/dashboard', audience='admin'):
+    """تنبيه للإدارة يصل لتطبيق Att Dashboard مع السحب التالي"""
+    conn.execute("INSERT INTO admin_alerts (kind, title, body, url, audience) VALUES (?, ?, ?, ?, ?)",
+                 (kind, title, body, url, audience))
 
 
 def _h(t):
@@ -59,10 +74,11 @@ def api_notify_token():
     try:
         # نبدأ من «الآن» حتى لا تصل دفعة إشعارات قديمة عند أول تشغيل
         conn.execute("INSERT INTO user_notify_tokens (token_hash, user_id, last_event_id, last_leave_id, last_reset_id, last_adms_at, "
-                     "last_share_id, last_corr_id) VALUES (?, ?, ?, ?, ?, datetime('now'), ?, ?)",
+                     "last_share_id, last_corr_id, last_alert_id) VALUES (?, ?, ?, ?, ?, datetime('now'), ?, ?, ?)",
                      (_h(tok), session['user_id'], _max(conn, "SELECT MAX(id) FROM presence_events"),
                       _max(conn, "SELECT MAX(id) FROM leave_requests"), _max(conn, "SELECT MAX(id) FROM password_reset_requests"),
-                      _max(conn, "SELECT MAX(id) FROM location_shares"), _max(conn, "SELECT MAX(id) FROM correction_requests")))
+                      _max(conn, "SELECT MAX(id) FROM location_shares"), _max(conn, "SELECT MAX(id) FROM correction_requests"),
+                      _max(conn, "SELECT MAX(id) FROM admin_alerts")))
         conn.commit()
         return jsonify({'ok': True, 'token': tok})
     finally:
@@ -111,6 +127,11 @@ def api_admin_notes_pull():
         rr_max = _max(conn, "SELECT MAX(id) FROM password_reset_requests")
         sh_max = _max(conn, "SELECT MAX(id) FROM location_shares")
         cr_max = _max(conn, "SELECT MAX(id) FROM correction_requests")
+        al_max = _max(conn, "SELECT MAX(id) FROM admin_alerts")
+        for r in conn.execute("SELECT * FROM admin_alerts WHERE id > ? AND id <= ? ORDER BY id DESC LIMIT 6",
+                              (t['last_alert_id'] if t['last_alert_id'] is not None else al_max, al_max)).fetchall():
+            if is_admin or (r['audience'] == 'staff' and can_emp):
+                notes.append({'id': 300000 + r['id'] % 100000, 'title': r['title'], 'body': r['body'] or '', 'url': r['url'] or '/dashboard'})
         if can_emp:
             rows = conn.execute("SELECT name, date, kind FROM correction_requests WHERE id > ? AND id <= ? AND status = 'pending' ORDER BY id",
                                 (t['last_corr_id'] or 0, cr_max)).fetchall()
@@ -155,8 +176,9 @@ def api_admin_notes_pull():
                               'body': '، '.join(names) + (f" و{len(rows) - 4} غيرها" if len(rows) > 4 else ''),
                               'url': '/dashboard#leaves'})
         conn.execute("UPDATE user_notify_tokens SET last_pull_at = datetime('now'), last_event_id = ?, last_leave_id = ?, "
-                     "last_reset_id = ?, last_adms_at = datetime('now'), last_share_id = ?, last_corr_id = ? WHERE token_hash = ?",
-                     (ev_max, lv_max, rr_max, sh_max, cr_max, t['token_hash']))
+                     "last_reset_id = ?, last_adms_at = datetime('now'), last_share_id = ?, last_corr_id = ?, last_alert_id = ? "
+                     "WHERE token_hash = ?",
+                     (ev_max, lv_max, rr_max, sh_max, cr_max, al_max, t['token_hash']))
         conn.commit()
         return jsonify({'ok': True, 'notes': notes})
     finally:

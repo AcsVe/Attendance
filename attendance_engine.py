@@ -112,6 +112,8 @@ def merge_same_day(df):
     return df.loc[keep].drop(columns=['_k']).reset_index(drop=True)
 
 
+APP_LEAVE_REASON = 'خروج مؤقت عبر تطبيق الهاتف'   # نفس LEAVE_REASON في mobile.py
+
 OUT_COLS = ['name', 'dept', 'date', 'weekday', 'time_in', 'time_out', 'status', 'late_minutes',
             'working_hours', 'shift', 'early_minutes', 'out_flag', 'break_minutes']
 
@@ -174,6 +176,8 @@ def analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
     excluded_depts = {d.strip() for d in settings.get('excluded_depts', '').split(',') if d.strip()}
     open_depts = set(settings.get('_open_depts') or [])   # أقسام بدوام مفتوح (بلا وقت حضور): لا يُحتسب تأخير
     auto_checkout = settings.get('auto_checkout', '0') == '1'
+    # استراحة الغداء: {'_default': (من، إلى) أو None, قسم: (من، إلى) أو None} — None = بلا استراحة لهذا القسم
+    lunch = settings.get('_lunch') or {}
     shift1_end = parse_time_str(settings.get('shift1_end')) if settings.get('shift1_end') else None
     shift2_end = parse_time_str(settings.get('shift2_end')) if settings.get('shift2_end') else None
     # «الآن» (بتوقيت النظام) لمعرفة هل انتهى دوام اليوم — اليوم الجاري لا يُعدّ نسياناً قبل نهاية الدوام
@@ -271,11 +275,47 @@ def analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
             if b2 > a2:
                 lst.append((a2, b2))
         perm = departure_permissions.get((row['name'], row_date_str(row)))
+        app_leave = bool(perm and perm.get('reason') == APP_LEAVE_REASON)
         if perm and perm.get('departure_time') and perm.get('return_time'):
             add(perm_iv, perm['departure_time'], perm['return_time'])
         for a, b in device_breaks.get((row['name'], row_date_str(row)), []):
             add(brk_iv, a, b)
+        # استراحة الغداء المسموحة لا تُخصم من الخروج المسجّل بالبصمة أو بالتطبيق (الإذن الذي تُدخله الإدارة يبقى كما هو)
+        lw = _lunch_window(row, start, end)
+        if lw:
+            brk_iv = _minus(brk_iv, lw)
+            if app_leave:
+                perm_iv = _minus(perm_iv, lw)
         return perm_iv, brk_iv
+
+    def _lunch_window(row, start, end):
+        if not lunch:
+            return None
+        dept = row.get('dept')
+        win = lunch[dept] if dept in lunch else lunch.get('_default')
+        if not win:
+            return None
+        try:
+            l1, l2 = to_minutes(parse_time_str(win[0])), to_minutes(parse_time_str(win[1]))
+        except (ValueError, TypeError, AttributeError):
+            return None
+        if l2 <= l1:
+            return None
+        if end > 24 * 60 and l1 < start:
+            l1, l2 = l1 + 24 * 60, l2 + 24 * 60
+        return l1, l2
+
+    def _minus(ivs, w):
+        out = []
+        for a, b in ivs:
+            if b <= w[0] or a >= w[1]:
+                out.append((a, b))
+                continue
+            if a < w[0]:
+                out.append((a, w[0]))
+            if b > w[1]:
+                out.append((w[1], b))
+        return out
 
     def _union_len(ivs):
         total, cur_a, cur_b = 0, None, None

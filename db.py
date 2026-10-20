@@ -120,6 +120,11 @@ def init_db():
 
     if 'open_hours' not in {r['name'] for r in cur.execute("PRAGMA table_info(dept_attendance_settings)").fetchall()}:
         cur.execute("ALTER TABLE dept_attendance_settings ADD COLUMN open_hours INTEGER NOT NULL DEFAULT 0")   # دوام مفتوح بلا أوقات
+    _dcols = {r['name'] for r in cur.execute("PRAGMA table_info(dept_attendance_settings)").fetchall()}
+    # استراحة الغداء للقسم: '' = تتبع الإعداد العام، custom = وقت خاص، none = بلا استراحة
+    for _c, _t in (('lunch_mode', "TEXT NOT NULL DEFAULT ''"), ('lunch_start', 'TEXT'), ('lunch_end', 'TEXT')):
+        if _c not in _dcols:
+            cur.execute(f"ALTER TABLE dept_attendance_settings ADD COLUMN {_c} {_t}")
     cur.execute('''CREATE TABLE IF NOT EXISTS manual_time_entries (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
@@ -260,6 +265,8 @@ def init_db():
         cur.execute("ALTER TABLE report_cache ADD COLUMN out_flag TEXT DEFAULT ''")
     if 'break_minutes' not in existing_cols:   # خروج مؤقت من البصمات الوسطى في جهاز البصمة (دقائق)
         cur.execute("ALTER TABLE report_cache ADD COLUMN break_minutes INTEGER DEFAULT 0")
+    if 'day_note' not in existing_cols:        # اسم نوع الإجازة المعتمدة لذلك اليوم
+        cur.execute("ALTER TABLE report_cache ADD COLUMN day_note TEXT DEFAULT ''")
     # كل بصمات أجهزة البصمة بأوقاتها (لا أول/آخر بصمة فقط) — لاحتساب الخروج والعودة من البصمات الوسطى
     cur.execute('''CREATE TABLE IF NOT EXISTS device_punch_times (
         name TEXT NOT NULL, date TEXT NOT NULL, time TEXT NOT NULL, source TEXT,
@@ -602,6 +609,15 @@ def get_all_settings():
         'mobile_bind_device': '1',        # ربط حساب الموظف بهاتف واحد فقط
         'mobile_max_accuracy': '150',     # أقصى خطأ مقبول في دقة الموقع (متر)
         'mobile_require_geofence': '1',   # منع التسجيل خارج مواقع العمل
+        'daily_summary_enabled': '1',     # ملخص يومي على تطبيق الإدارة
+        'summary_morning_time': '', 'summary_evening_time': '',   # فارغ = بعد الحضور بنصف ساعة / بعد الانصراف بساعة ونصف
+        'summary_morning_sent': '', 'summary_evening_sent': '',   # آخر يوم أُرسل فيه كل ملخص (داخلي)
+        'vacations_enabled': '1',         # وحدة الإجازات وأرصدتها
+        'vacations_employee_request': '1',   # طلب الإجازة من تطبيق الموظف
+        'device_offline_alert': '1',      # تنبيه الإدارة إذا توقف جهاز بصمة (ADMS) عن الاتصال أثناء الدوام
+        'device_offline_min': '30',
+        'lunch_enabled': '0',             # استثناء استراحة الغداء من خصم الخروج (بالبصمة/التطبيق)
+        'lunch_start': '13:00', 'lunch_end': '13:30',
         'device_breaks': '1',             # البصمات الوسطى في جهاز البصمة = خروج ← عودة (يُخصم من ساعات العمل)
         'auto_checkout': '0',             # إغلاق الانصراف المنسي تلقائياً بوقت نهاية الدوام (يُعلَّم للمراجعة)
         'mobile_leave_deduct': '1',       # الخروج المؤقت يُخصم من ساعات العمل
