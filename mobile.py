@@ -1503,6 +1503,13 @@ def api_live():
         emps = [dict(r) for r in conn.execute(
             "SELECT e.id, e.name, e.dept FROM employees e JOIN employee_accounts a ON a.employee_id = e.id "
             "WHERE e.active = 1 AND a.active = 1 ORDER BY e.dept, e.name").fetchall()]
+        # الموقع المباشر: من يشارك موقعه الآن (أو مفعّل له التتبع المستمر) يظهر في مكانه الحالي مع مساره،
+        # وليس في مكان آخر حركة حضور فقط — وإلا تبقى النقطة ثابتة على الخريطة رغم تحرّك الموظف
+        now_s = now_local().strftime('%Y-%m-%d %H:%M:%S')
+        live = {}
+        for r in conn.execute("SELECT id, employee_id, lat, lng, accuracy, updated_at FROM location_shares WHERE kind = 'live' "
+                              "AND stopped_at IS NULL AND ends_at > ? AND lat IS NOT NULL ORDER BY id", (now_s,)):
+            live[r['employee_id']] = dict(r)
         out, state = [], {'in': 0, 'out': 0, 'leave': 0, 'none': 0}
         for e in emps:
             if not _employee_scope_ok(e['dept']):
@@ -1510,10 +1517,24 @@ def api_live():
             m = last.get(e['id'])
             st = 'none' if not m else ('out' if m['kind'] == 'out' else 'leave' if m['kind'] == 'leave_out' else 'in')
             state[st] += 1
-            out.append({**e, 'state': st, 'kind_label': KINDS.get(m['kind']) if m else '', 'time': m['time'][:5] if m else '',
-                        'site': m['site_name'] if m else '', 'lat': m['lat'] if m else None, 'lng': m['lng'] if m else None})
+            row = {**e, 'state': st, 'kind_label': KINDS.get(m['kind']) if m else '', 'time': m['time'][:5] if m else '',
+                   'site': m['site_name'] if m else '', 'lat': m['lat'] if m else None, 'lng': m['lng'] if m else None,
+                   'live': False}
+            s = live.get(e['id'])
+            if s:
+                try:
+                    age = max(0, int((now_local() - datetime.strptime((s['updated_at'] or '')[:19], '%Y-%m-%d %H:%M:%S')).total_seconds()))
+                except ValueError:
+                    age = None
+                tail = [[p['lat'], p['lng']] for p in conn.execute(
+                    "SELECT lat, lng FROM (SELECT lat, lng, ts FROM location_share_points WHERE share_id = ? AND ts >= ? "
+                    "ORDER BY ts DESC LIMIT 40) ORDER BY ts", (s['id'], today + ' 00:00:00'))]
+                row.update({'live': True, 'share_id': s['id'], 'lat': s['lat'], 'lng': s['lng'], 'accuracy': s['accuracy'],
+                            'live_at': (s['updated_at'] or '')[11:19], 'age_s': age, 'tail': tail})
+            out.append(row)
         sites = site_rows(conn, True)
         return jsonify({'ok': True, 'date': today, 'rows': out, 'state': state, 'total': len(out),
+                        'live': sum(1 for r in out if r['live']), 'server_time': now_s[11:19],
                         'sites': [{'name': s['name'], 'lat': s['lat'], 'lng': s['lng'], 'radius': s['radius_m']} for s in sites]})
     finally:
         conn.close()

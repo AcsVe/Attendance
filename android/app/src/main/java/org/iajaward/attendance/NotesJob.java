@@ -128,12 +128,17 @@ public class NotesJob extends JobService {
         if (Build.VERSION.SDK_INT >= 26) {
             nm.createNotificationChannel(new NotificationChannel(CHANNEL_NOTES, "إشعارات الحضور", NotificationManager.IMPORTANCE_HIGH));
         }
-        Intent open = new Intent(ctx, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        PendingIntent pi = PendingIntent.getActivity(ctx, 2, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         for (int i = 0; i < notes.length(); i++) {
             JSONObject x = notes.optJSONObject(i);
             if (x == null) continue;
             String title = x.optString("title", BuildConfig.EMPLOYEE ? "Check-in" : "Att Dashboard"), body = x.optString("body", "");
+            int nid = 10000 + (int) (x.optLong("id", i) % 100000);
+            // لكل إشعار وجهته الخاصة (الشاشة المتعلقة به) — requestCode مختلف لكل إشعار حتى لا تتشارك الإشعارات وجهة واحدة
+            Intent open = new Intent(ctx, MainActivity.class)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            String url = x.optString("url", "");
+            if (MainActivity.isSafePath(url)) open.putExtra(MainActivity.EXTRA_URL, url);
+            PendingIntent pi = PendingIntent.getActivity(ctx, nid, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
             Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(ctx, CHANNEL_NOTES) : new Notification.Builder(ctx);
             Notification nt = b.setContentTitle(title)
                     .setContentText(body)
@@ -142,7 +147,7 @@ public class NotesJob extends JobService {
                     .setAutoCancel(true)
                     .setContentIntent(pi)
                     .build();
-            nm.notify(10000 + (int) (x.optLong("id", i) % 100000), nt);
+            nm.notify(nid, nt);
         }
     }
 

@@ -10,7 +10,7 @@ Object.assign(PAGE_TITLES, {
 window.EXTRA_LOADERS = Object.assign(window.EXTRA_LOADERS || {}, {
   'mobile-accounts': () => { loadAccounts(); loadMobileSettings(); },
   'mobile-sites': () => { loadSites(); loadKiosks(); },
-  'mobile-moves': () => { loadLive(); loadMoves(); },
+  'mobile-moves': () => { liveRtUi(); loadLive(); liveRt.movesAt = Date.now(); loadMoves(); },
   presence: prLoad,
   shares: () => { trLoad(); shLoad(); },
   leaves: () => { lvSettings(); lvLoad(); lvReport(); },
@@ -128,25 +128,61 @@ function maShowCreds(list) {
   document.getElementById('maModal').classList.add('open');
 }
 
-function maPrint() {
-  // داخل تطبيق أندرويد (WebView) لا يعمل window.open — نطبع عبر إطار مخفي داخل الصفحة نفسها
-  const html = `<!doctype html><html dir="rtl"><head><meta charset="utf-8"><title>بيانات دخول تطبيق الموظف</title><style>body{font-family:Tahoma,Arial;padding:20px;margin:0}
-    .c{display:inline-block;width:46%;margin:1%;border:1px dashed #999;border-radius:10px;padding:12px;vertical-align:top;page-break-inside:avoid}
-    .c b{font-size:1.05rem}.m{font-family:Consolas,monospace;direction:ltr;font-size:1.1rem}</style></head><body>` +
-    maCredsCache.map(c => `<div class="c"><b>${mEsc(c.name)}</b><br><small>${mEsc(c.dept)}</small><br>الرابط: <span class="m">${location.origin}/me</span><br>
+function maCredsHtml() {
+  return `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>بيانات دخول تطبيق الموظف</title><style>body{font-family:Tahoma,Arial;padding:16px;margin:0;color:#000}
+    .c{display:inline-block;width:46%;margin:1%;border:1px dashed #999;border-radius:10px;padding:12px;vertical-align:top;page-break-inside:avoid;break-inside:avoid;line-height:1.8}
+    .c b{font-size:1.05rem}.m{font-family:Consolas,monospace;direction:ltr;unicode-bidi:embed;font-size:1.1rem}
+    @page{size:A4;margin:12mm}</style></head><body>` +
+    maCredsCache.map(c => `<div class="c"><b>${mEsc(c.name)}</b><br><small>${mEsc(c.dept)}</small><br>الرابط: <span class="m">${mEsc(location.origin)}/me</span><br>
     المستخدم: <span class="m">${mEsc(c.username)}</span><br>كلمة المرور: <span class="m">${mEsc(c.password)}</span></div>`).join('') +
     `</body></html>`;
+}
+
+/* معاينة داخل الصفحة أولاً (تظهر دائماً، في التطبيق والمتصفح)، ثم الطباعة:
+   • تطبيق أندرويد: خدمة الطباعة في الهاتف (معاينة + طابعة أو «حفظ PDF») عبر AttNative.printHtml
+   • المتصفح: إطار مخفي ثم print() */
+function maPrint() {
+  if (!maCredsCache.length) { toast('لا توجد بيانات للطباعة', true); return; }
+  let m = document.getElementById('maPrintModal');
+  if (!m) {
+    m = document.createElement('div');
+    m.className = 'modal-overlay';
+    m.id = 'maPrintModal';
+    m.innerHTML = `<div class="modal" style="max-width:820px"><div class="modal-title"><i class="fas fa-print" aria-hidden="true"></i> معاينة الطباعة — بيانات الدخول</div>
+      <div class="cred-preview" id="maPrintPreview"></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="maPrintNow()"><i class="fas fa-print" aria-hidden="true"></i> طباعة / حفظ PDF</button>
+        <button class="btn btn-outline" onclick="document.getElementById('maPrintModal').classList.remove('open')">إغلاق</button>
+      </div></div>`;
+    document.body.appendChild(m);
+  }
+  document.getElementById('maPrintPreview').innerHTML = maCredsCache.map(c => `<div class="c"><b>${mEsc(c.name)}</b><br><small>${mEsc(c.dept)}</small><br>الرابط: <span class="m">${mEsc(location.origin)}/me</span><br>
+    المستخدم: <span class="m">${mEsc(c.username)}</span><br>كلمة المرور: <span class="m"><b>${mEsc(c.password)}</b></span></div>`).join('');
+  m.classList.add('open');
+}
+
+function maPrintNow() {
+  const html = maCredsHtml();
+  if (window.AttNative && typeof AttNative.printHtml === 'function') {   // تطبيق الإدارة (الإصدار الجديد)
+    try { AttNative.printHtml(html, 'employee-app-logins'); return; } catch (e) {}
+  } else if (window.AttNative) {   // إصدار قديم من التطبيق لا يدعم الطباعة
+    toast('حدّث تطبيق الإدارة لآخر إصدار للطباعة من الهاتف — أو نزّل CSV، أو اطبع من المتصفح', true);
+    return;
+  }
   const old = document.getElementById('printFrame'); if (old) old.remove();
   const f = document.createElement('iframe');
   f.id = 'printFrame';
-  f.style.cssText = 'position:fixed;right:-10000px;top:0;width:800px;height:600px;border:0';
+  f.setAttribute('aria-hidden', 'true');
+  f.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0';
   document.body.appendChild(f);
-  f.onload = () => {
-    try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { toast('تعذّرت الطباعة من التطبيق — افتح الرابط من المتصفح للطباعة', true); }
-    setTimeout(() => f.remove(), 60000);
-  };
   const d = f.contentWindow.document;
   d.open(); d.write(html); d.close();
+  // ننتظر رسم الإطار (onload لا يُطلق دائماً بعد document.write)
+  setTimeout(() => {
+    try { f.contentWindow.focus(); f.contentWindow.print(); }
+    catch (e) { toast('تعذّرت الطباعة — نزّل CSV واطبعه', true); }
+    setTimeout(() => f.remove(), 60000);
+  }, 250);
 }
 
 function maEdit(id) {
@@ -350,14 +386,70 @@ async function siteToggle(id, active) {
 let liveMap = null, liveLayer = null, liveTimer = null, mvKind = '', mvStatus = '', mvFlag = false, mvRowsCache = [];
 const ST_LABEL = { in: 'في الدوام', out: 'انصرف', leave: 'خروج مؤقت', none: 'لم يسجّل' };
 
-async function loadLive() {
-  const d = await api('/api/mobile/live');
-  if (!d) return;
+/* ===== التحديث اللحظي (Realtime): تشغيل/إيقاف + فاصل يختاره المستخدم (يُحفظ على هذا الجهاز) ===== */
+const LIVE_RT_STEPS = [5, 10, 15, 30, 60];
+let liveRt = { on: true, every: 10, busy: false, lastOk: 0, movesAt: 0, followId: null, fitted: false, rows: [] };
+(function () {
+  try {
+    const v = JSON.parse(localStorage.getItem('att_live_rt') || 'null');
+    if (v) { liveRt.on = v.on !== false; if (LIVE_RT_STEPS.includes(+v.every)) liveRt.every = +v.every; }
+  } catch (e) {}
+})();
+function liveRtSave() { try { localStorage.setItem('att_live_rt', JSON.stringify({ on: liveRt.on, every: liveRt.every })); } catch (e) {} }
+function liveRtUi() {
+  const b = document.getElementById('liveRtBtn'); if (!b) return;
+  b.className = 'btn btn-sm ' + (liveRt.on ? 'btn-red' : 'btn-primary');
+  b.innerHTML = liveRt.on ? '<i class="fas fa-pause" aria-hidden="true"></i> إيقاف التحديث اللحظي' : '<i class="fas fa-play" aria-hidden="true"></i> تشغيل التحديث اللحظي';
+  document.getElementById('liveRtEvery').value = String(liveRt.every);
+  const ago = liveRt.lastOk ? Math.max(0, Math.round((Date.now() - liveRt.lastOk) / 1000)) : null;
+  document.getElementById('liveRtState').innerHTML = `<span class="live-dot ${liveRt.on ? 'on' : ''}"></span>` +
+    (liveRt.on ? `مباشر — كل ${liveRt.every} ث` : 'متوقف') + (ago != null ? ` · آخر تحديث قبل ${ago} ث` : '');
+}
+function liveRtToggle() { liveRt.on = !liveRt.on; liveRtSave(); liveRtUi(); if (liveRt.on) loadLive(); else clearTimeout(liveTimer); }
+function liveRtSetEvery(v) { v = +v; if (!LIVE_RT_STEPS.includes(v)) return; liveRt.every = v; liveRtSave(); liveRtUi(); if (liveRt.on) loadLive(); }
+function liveRtSchedule() {
+  clearTimeout(liveTimer);
+  if (!liveRt.on) return;
+  liveTimer = setTimeout(() => {
+    if (currentTab !== 'mobile-moves') return;          // يُستأنف عند فتح التبويب من جديد
+    if (document.hidden) { liveRtSchedule(); return; }  // الصفحة في الخلفية: لا طلبات
+    loadLive(true);
+    // سجل الحركات أثقل: يتحدّث مع التحديث اللحظي لكن ليس أسرع من كل 30 ثانية
+    if (Date.now() - liveRt.movesAt >= 30000) { liveRt.movesAt = Date.now(); loadMoves(true); }
+  }, liveRt.every * 1000);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && liveRt.on && typeof currentTab !== 'undefined' && currentTab === 'mobile-moves') loadLive(true); });
+setInterval(() => { if (typeof currentTab !== 'undefined' && currentTab === 'mobile-moves') liveRtUi(); }, 1000);
+
+function liveAgeText(a) { return a == null ? '' : a < 60 ? `قبل ${a} ث` : a < 3600 ? `قبل ${Math.round(a / 60)} د` : `قبل ${Math.round(a / 3600)} س`; }
+function liveFollow(id) {
+  liveRt.followId = id;
+  document.getElementById('liveFollowOff').classList.toggle('hide', !id);
+  document.querySelectorAll('#liveTable tr.live-row').forEach(tr => tr.classList.toggle('following', +tr.dataset.id === id));
+  const r = id && liveRt.rows.find(x => x.id === id);
+  if (r && liveMap && r.lat != null) { liveMap.setView([r.lat, r.lng], Math.max(liveMap.getZoom(), 16)); document.getElementById('liveMap').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+}
+
+async function loadLive(quiet) {
+  if (liveRt.busy) return;
+  liveRt.busy = true;
+  let d = null;
+  try { d = await api('/api/mobile/live'); } catch (e) { d = null; }
+  liveRt.busy = false;
+  liveRtSchedule();
+  if (!d) { liveRtUi(); return; }
+  liveRt.lastOk = Date.now();
+  liveRt.rows = d.rows;
+  liveRtUi();
   document.getElementById('liveDate').textContent = d.date;
   document.getElementById('liveChips').innerHTML = `<button>الكل <b>${d.total}</b></button>` +
+    `<button style="color:#1d4ed8">🔵 مباشر الآن <b>${d.live || 0}</b></button>` +
     ['in', 'leave', 'out', 'none'].map(k => `<button>${ST_LABEL[k]} <b>${d.state[k]}</b></button>`).join('');
-  document.getElementById('liveTable').innerHTML = d.rows.map(r => `<tr><td><a href="#" onclick="openEmployeeCard(${r.id});return false"><b>${mEsc(r.name)}</b></a></td><td>${mEsc(r.dept || '')}</td>
-    <td><span class="m-state m-st-${r.state}">${ST_LABEL[r.state]}</span></td><td>${r.time ? `${mEsc(r.kind_label)} <b dir="ltr">${r.time}</b>` : '—'}</td><td>${mEsc(r.site || '')}</td></tr>`).join('')
+  const rows = d.rows.slice().sort((a, b) => (b.live === true) - (a.live === true));
+  document.getElementById('liveTable').innerHTML = rows.map(r => `<tr class="${r.live ? 'live-row' : ''}${r.live && r.id === liveRt.followId ? ' following' : ''}" data-id="${r.id}" ${r.live ? `onclick="if(event.target.tagName!=='A')liveFollow(${r.id})"` : ''}>
+    <td><a href="#" onclick="openEmployeeCard(${r.id});return false"><b>${mEsc(r.name)}</b></a></td><td>${mEsc(r.dept || '')}</td>
+    <td><span class="m-state m-st-${r.state}">${ST_LABEL[r.state]}</span>${r.live ? `<span class="live-badge ${r.age_s > 180 ? 'stale' : ''}" title="آخر موقع ${mEsc(r.live_at)}">● مباشر ${liveAgeText(r.age_s)}</span>` : ''}</td>
+    <td>${r.time ? `${mEsc(r.kind_label)} <b dir="ltr">${r.time}</b>` : '—'}</td><td>${mEsc(r.site || '')}</td></tr>`).join('')
     || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">لا يوجد موظفون لهم حسابات تطبيق بعد</td></tr>';
   setTimeout(() => {
     if (typeof L === 'undefined') return;
@@ -371,17 +463,23 @@ async function loadLive() {
     const b = [];
     d.sites.forEach(s => { L.circle([s.lat, s.lng], { radius: s.radius, color: '#1B6E8C', fillOpacity: .08, weight: 1 }).addTo(liveLayer); b.push([s.lat, s.lng]); });
     const color = { in: '#0a6640', leave: '#d9822b', out: '#6c757d' };
-    d.rows.filter(r => r.lat != null).forEach(r => {
-      L.circleMarker([r.lat, r.lng], { radius: 8, color: '#fff', weight: 2, fillColor: color[r.state] || '#333', fillOpacity: 1 })
-        .bindTooltip(`${r.name} — ${r.kind_label} ${r.time}`).addTo(liveLayer);
+    d.rows.filter(r => r.lat != null && !r.live).forEach(r => {
+      L.circleMarker([r.lat, r.lng], { radius: 7, color: '#fff', weight: 2, fillColor: color[r.state] || '#333', fillOpacity: .9 })
+        .bindTooltip(`${mEsc(r.name)} — ${mEsc(r.kind_label)} ${r.time}`).addTo(liveLayer);
       b.push([r.lat, r.lng]);
     });
-    if (b.length && !liveMap._fitted) { liveMap.fitBounds(L.latLngBounds(b).pad(0.3), { maxZoom: 17 }); liveMap._fitted = true; }
+    d.rows.filter(r => r.live && r.lat != null).forEach(r => {   // الموقع المباشر: المسار + دائرة الدقة + النقطة الحالية
+      if (r.tail && r.tail.length > 1) L.polyline(r.tail, { color: '#1d4ed8', weight: 4, opacity: .55 }).addTo(liveLayer);
+      if (r.accuracy && r.accuracy < 500) L.circle([r.lat, r.lng], { radius: r.accuracy, color: '#1d4ed8', weight: 1, fillOpacity: .07 }).addTo(liveLayer);
+      L.circleMarker([r.lat, r.lng], { radius: r.id === liveRt.followId ? 11 : 9, color: '#fff', weight: 3, fillColor: r.age_s > 180 ? '#b45309' : '#1d4ed8', fillOpacity: 1 })
+        .bindTooltip(`${mEsc(r.name)} — مباشر ${liveAgeText(r.age_s)}`, { permanent: r.id === liveRt.followId, direction: 'top', offset: [0, -8] })
+        .on('click', () => liveFollow(r.id)).addTo(liveLayer);
+      b.push([r.lat, r.lng]);
+    });
+    const f = liveRt.followId && d.rows.find(r => r.id === liveRt.followId && r.lat != null);
+    if (f) liveMap.panTo([f.lat, f.lng]);
+    else if (b.length && !liveRt.fitted) { liveMap.fitBounds(L.latLngBounds(b).pad(0.3), { maxZoom: 17 }); liveRt.fitted = true; }
   }, 60);
-  clearTimeout(liveTimer);
-  liveTimer = setTimeout(() => {
-    if (currentTab === 'mobile-moves' && document.getElementById('liveAuto').checked && !document.hidden) { loadLive(); loadMoves(true); }
-  }, 30000);
 }
 
 function mvParams() {

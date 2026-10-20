@@ -4,6 +4,20 @@
      ===================================================================== -->
 <style>
 .m-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.live-rt{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:4px 0 6px}
+.live-rt-state{font-size:.8rem;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
+.live-dot{width:9px;height:9px;border-radius:50%;background:#9aa;display:inline-block}
+.live-dot.on{background:#16a34a;animation:livePulse 1.6s infinite}
+@keyframes livePulse{0%{box-shadow:0 0 0 0 rgba(22,163,74,.55)}70%{box-shadow:0 0 0 8px rgba(22,163,74,0)}100%{box-shadow:0 0 0 0 rgba(22,163,74,0)}}
+@media (prefers-reduced-motion:reduce){.live-dot.on{animation:none}}
+.live-badge{display:inline-block;font-size:.72rem;font-weight:700;color:#1d4ed8;background:#e8efff;border-radius:10px;padding:1px 7px;margin-inline-start:4px;white-space:nowrap}
+.live-badge.stale{color:#b45309;background:#fff4e5}
+#liveTable tr.live-row{cursor:pointer}
+#liveTable tr.live-row.following{background:rgba(29,78,216,.07)}
+.cred-preview{background:#fff;color:#111;border:1px solid var(--border);border-radius:10px;padding:10px;max-height:60vh;overflow:auto}
+.cred-preview .c{display:inline-block;width:46%;margin:1%;border:1px dashed #999;border-radius:10px;padding:10px;vertical-align:top;line-height:1.7;font-size:.88rem}
+.cred-preview .m{font-family:Consolas,monospace;direction:ltr;unicode-bidi:embed}
+@media (max-width:600px){.cred-preview .c{width:98%}}
 .m-chips button{border:1px solid var(--border);background:#fff;border-radius:20px;padding:6px 12px;font:700 .84rem 'Tajawal',sans-serif;color:var(--primary-dark);cursor:pointer}
 .m-chips button b{background:#eef4f6;border-radius:12px;padding:0 7px;margin-inline-start:4px}
 .m-chips button.on{background:var(--primary);color:#fff;border-color:var(--primary)}.m-chips button.on b{background:rgba(255,255,255,.25)}
@@ -339,8 +353,18 @@
 
 <div class="tab-panel" id="tab-mobile-moves">
   <div class="card">
-    <div class="card-title"><i class="fas fa-satellite" aria-hidden="true"></i> المتابعة المباشرة — اليوم <span id="liveDate" style="font-weight:600;color:var(--muted)"></span>
-      <label style="margin-inline-start:auto;font-size:.82rem;font-weight:600;display:flex;gap:6px;align-items:center"><input type="checkbox" id="liveAuto" checked> تحديث تلقائي كل 30 ثانية</label></div>
+    <div class="card-title"><i class="fas fa-satellite" aria-hidden="true"></i> المتابعة المباشرة — اليوم <span id="liveDate" style="font-weight:600;color:var(--muted)"></span></div>
+    <div class="live-rt" id="liveRt">
+      <button class="btn btn-sm" id="liveRtBtn" onclick="liveRtToggle()"></button>
+      <label for="liveRtEvery" style="font-size:.82rem;font-weight:600">التحديث كل</label>
+      <select id="liveRtEvery" class="search-input" style="min-width:0;width:auto;padding:4px 8px" onchange="liveRtSetEvery(this.value)">
+        <option value="5">5 ثوانٍ</option><option value="10">10 ثوانٍ</option><option value="15">15 ثانية</option>
+        <option value="30">30 ثانية</option><option value="60">دقيقة</option>
+      </select>
+      <span class="live-rt-state" id="liveRtState"></span>
+      <button class="btn btn-outline btn-sm hide" id="liveFollowOff" onclick="liveFollow(null)"><i class="fas fa-xmark" aria-hidden="true"></i> إلغاء التتبع</button>
+    </div>
+    <div style="font-size:.78rem;color:var(--muted);margin:2px 0 6px">النقطة الزرقاء = موقع مباشر من هاتف الموظف (مشاركة الموقع أو التتبع المستمر) مع مساره، والنقاط الأخرى = مكان آخر حركة حضور. يتحرك الموظف على الخريطة بقدر ما يُرسل هاتفه (كل 15–60 ثانية).</div>
     <div class="m-chips" id="liveChips"></div>
     <div id="liveMap" class="m-map"></div>
     <div class="table-wrap" style="max-height:320px;overflow:auto"><table>

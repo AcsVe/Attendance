@@ -263,7 +263,7 @@
     });
   }
   // ===== مشاركة الموقع (بمبادرة الموظف) =====
-  var shareTimer = null, sharePingAt = 0;
+  var shareTimer = null, sharePingAt = 0, shareStartedKey = '';
   function shareSync() {
     var sh = S.share, box = $('shareLive');
     box.classList.toggle('hide', !sh);
@@ -275,7 +275,9 @@
     $('shareStop').classList.toggle('hide', !!sh.forced);
     if (NATIVE && NATIVE.presenceStart) {
       var running = false; try { running = NATIVE.presenceRunning(); } catch (e) {}
-      if (!running) { try { NATIVE.presenceStart(sh.interval || 60, sh.remaining_ms); } catch (e) {} }
+      // تشغيل الخدمة، أو إعادة ضبطها مرة واحدة لكل مشاركة جديدة إن كانت تعمل بفاصل التحقق من التواجد (قد يكون 10 دقائق)
+      var key = sh.id + ':' + (sh.interval || 60);
+      if (!running || shareStartedKey !== key) { shareStartedKey = key; try { NATIVE.presenceStart(sh.interval || 60, sh.remaining_ms); } catch (e) {} }
     }
     // والصفحة مفتوحة (آيفون/المتصفح، وأيضاً أندرويد للتحديث الفوري): نقطة كل 30 ثانية
     shareTimer = setInterval(function () {

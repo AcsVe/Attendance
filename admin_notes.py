@@ -4,6 +4,7 @@
 • عند فتح لوحة التحكم داخل تطبيق الإدارة، تطلب الصفحة «رمز إشعارات» لهذا المستخدم وتسلّمه للتطبيق.
 • يسأل التطبيق الخادم في الخلفية (كل ربع ساعة تقريباً، حتى وهو مغلق) عن الجديد منذ آخر مرة:
   تنبيهات التواجد، طلبات الخروج المؤقت بانتظار الموافقة، طلبات نسيان كلمة المرور، وأجهزة بصمة جديدة.
+• كل إشعار يحمل «url» (مثل /dashboard#presence): الضغط عليه يفتح الشاشة المتعلقة به مباشرة في التطبيق.
 • الطلب موقّع بمفتاح التطبيق، والرمز يُحفظ في الخادم مشفّراً (hash) ويُلغى بحذف المستخدم.
 """
 import hashlib
@@ -113,30 +114,33 @@ def api_admin_notes_pull():
                 names = [f"{r['name']} ({_KIND.get(r['kind'], r['kind'])})" for r in rows[:4]]
                 more = f" و{len(rows) - 4} غيرهم" if len(rows) > 4 else ''
                 notes.append({'id': 900000 + ev_max % 100000, 'title': f'تنبيهات التواجد: {len(rows)}',
-                              'body': '، '.join(names) + more})
+                              'body': '، '.join(names) + more, 'url': '/dashboard#presence'})
             rr = conn.execute("SELECT COUNT(*) FROM password_reset_requests WHERE id > ? AND id <= ? AND status = 'pending'",
                               (t['last_reset_id'] or 0, rr_max)).fetchone()[0]
             if rr:
                 notes.append({'id': 800000 + rr_max % 100000, 'title': 'طلبات نسيان كلمة المرور',
-                              'body': f'{rr} طلب جديد بانتظار المعالجة'})
+                              'body': f'{rr} طلب جديد بانتظار المعالجة', 'url': '/dashboard#reset-requests'})
             ad = conn.execute("SELECT COUNT(*) FROM adms_devices WHERE approved = 0 AND created_at > ?",
                               (t['last_adms_at'] or '',)).fetchone()[0] if conn.execute(
                 "SELECT 1 FROM sqlite_master WHERE name = 'adms_devices'").fetchone() else 0
             if ad:
-                notes.append({'id': 700001, 'title': 'جهاز بصمة جديد', 'body': f'{ad} جهاز يرسل عبر الإنترنت بانتظار الموافقة'})
+                notes.append({'id': 700001, 'title': 'جهاز بصمة جديد', 'body': f'{ad} جهاز يرسل عبر الإنترنت بانتظار الموافقة',
+                              'url': '/dashboard#devices'})
             sh = conn.execute("SELECT name, kind, note FROM location_shares WHERE id > ? AND id <= ? ORDER BY id",
                               (t['last_share_id'] or 0, sh_max)).fetchall()
             for r in sh[:5]:
                 what = 'يشارك موقعه المباشر' if r['kind'] == 'live' else 'أرسل موقعه الحالي'
                 notes.append({'id': 500000 + (sh_max - len(sh) + 1 + sh.index(r)) % 100000, 'title': f"{r['name']} {what}",
-                              'body': (r['note'] or 'افتح «المواقع المشاركة» لعرضه على الخريطة')})
+                              'body': (r['note'] or 'افتح «المواقع المشاركة» لعرضه على الخريطة'),
+                              'url': '/dashboard#shares'})
         if can_emp:
             rows = conn.execute("SELECT name, from_time, to_time FROM leave_requests WHERE id > ? AND id <= ? AND status = 'pending' ORDER BY id",
                                 (t['last_leave_id'] or 0, lv_max)).fetchall()
             if rows:
                 names = [f"{r['name']} {r['from_time']}–{r['to_time']}" for r in rows[:4]]
                 notes.append({'id': 600000 + lv_max % 100000, 'title': f'طلبات خروج مؤقت: {len(rows)}',
-                              'body': '، '.join(names) + (f" و{len(rows) - 4} غيرها" if len(rows) > 4 else '')})
+                              'body': '، '.join(names) + (f" و{len(rows) - 4} غيرها" if len(rows) > 4 else ''),
+                              'url': '/dashboard#leaves'})
         conn.execute("UPDATE user_notify_tokens SET last_pull_at = datetime('now'), last_event_id = ?, last_leave_id = ?, "
                      "last_reset_id = ?, last_adms_at = datetime('now'), last_share_id = ? WHERE token_hash = ?",
                      (ev_max, lv_max, rr_max, sh_max, t['token_hash']))

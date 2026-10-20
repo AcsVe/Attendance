@@ -22,6 +22,9 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.os.Environment;
+import android.print.PrintAttributes;
+import android.print.PrintDocumentAdapter;
+import android.print.PrintManager;
 import android.provider.MediaStore;
 import android.provider.Settings;
 import android.util.Base64;
@@ -69,6 +72,9 @@ public class MainActivity extends Activity {
     private static final int REQ_CONFIRM = 14;
     private static final int REQ_NOTIF = 15;
     private static final int REQ_LOCK = 16;
+    /** مسار الشاشة التي يفتحها الإشعار، مثل /dashboard#presence */
+    static final String EXTRA_URL = "att_url";
+    private WebView printView;   // نافذة خفية تُحمَّل فيها صفحة الطباعة (يجب إبقاؤها حيّة حتى تنتهي الطباعة)
 
     private WebView web;
     private LocationManager locationManager;
@@ -118,10 +124,14 @@ public class MainActivity extends Activity {
         web.setDownloadListener(this::onDownload);
 
         if (savedInstanceState != null) {
-            web.restoreState(savedInstanceState);
+            String target = targetOf(getIntent());
+            if (target != null) web.loadUrl(BuildConfig.BASE_URL + target);
+            else web.restoreState(savedInstanceState);
         } else {
-            web.loadUrl(BuildConfig.BASE_URL + BuildConfig.START_PATH);
+            String target = targetOf(getIntent());
+            web.loadUrl(BuildConfig.BASE_URL + (target != null ? target : BuildConfig.START_PATH));
         }
+        if (getIntent() != null) getIntent().removeExtra(EXTRA_URL);   // لا نعيد فتح الوجهة نفسها عند إعادة إنشاء الشاشة
         if (appLockEnabled) lockShow();
         if (BuildConfig.EMPLOYEE) {
             NotesJob.schedule(this);   // إشعارات النظام في شريط الإشعارات حتى والتطبيق مغلق
@@ -134,6 +144,66 @@ public class MainActivity extends Activity {
             askedFine = true;
             requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_LOCATION);
         }
+    }
+
+    // =====================================================
+    //   فتح الشاشة المتعلقة بالإشعار
+    // =====================================================
+    /** الضغط على إشعار والتطبيق مفتوح: لا نعيد تحميل اللوحة من البداية، بل ننتقل للشاشة المطلوبة */
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        String target = targetOf(intent);
+        if (target != null) openTarget(target);
+    }
+
+    /** مسار نسبي آمن داخل النظام فقط (يبدأ بـ / وليس // ولا يحوي مخطط رابط) */
+    static boolean isSafePath(String p) {
+        return p != null && p.length() > 1 && p.length() < 300 && p.startsWith("/") && !p.startsWith("//")
+                && !p.contains("\\") && !p.contains(":") && !p.contains("\n") && !p.contains("'");
+    }
+
+    private static String targetOf(Intent i) {
+        if (i == null) return null;
+        String u = i.getStringExtra(EXTRA_URL);
+        return isSafePath(u) ? u : null;
+    }
+
+    /** إن كانت الصفحة المطلوبة مفتوحة أصلاً نبدّل التبويب فقط (أسرع ولا يفقد الحالة)، وإلا نحمّلها */
+    private void openTarget(String target) {
+        String js = "(function(){var u=" + quote(target) + ",p=u.split('#');"
+                + "if(location.pathname===p[0]&&window.attOpenTarget){window.attOpenTarget(p[1]||'');}"
+                + "else{location.href=u;}})()";
+        runOnUiThread(() -> {
+            String cur = web.getUrl();
+            if (cur == null || !cur.startsWith(BuildConfig.BASE_URL)) web.loadUrl(BuildConfig.BASE_URL + target);
+            else web.evaluateJavascript(js, null);
+        });
+    }
+
+    // =====================================================
+    //   الطباعة (WebView لا يدعم window.print — نستخدم خدمة الطباعة في أندرويد: معاينة + طابعة أو حفظ PDF)
+    // =====================================================
+    private void printWebView(WebView v, String title) {
+        try {
+            PrintManager pm = (PrintManager) getSystemService(Context.PRINT_SERVICE);
+            if (pm == null) { Toast.makeText(this, "الطباعة غير مدعومة على هذا الهاتف", Toast.LENGTH_LONG).show(); return; }
+            String name = (title == null || title.trim().isEmpty()) ? "Attendance" : title.trim();
+            PrintDocumentAdapter ad = v.createPrintDocumentAdapter(name);
+            pm.print(name, ad, new PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).build());
+        } catch (Exception e) {
+            Toast.makeText(this, "تعذّرت الطباعة", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void printHtmlNow(String html, String title) {
+        if (printView != null) { try { printView.destroy(); } catch (Exception ignored) { } }
+        printView = new WebView(this);
+        printView.getSettings().setJavaScriptEnabled(false);
+        printView.setWebViewClient(new WebViewClient() {
+            @Override public void onPageFinished(WebView view, String url) { printWebView(view, title); }
+        });
+        printView.loadDataWithBaseURL(BuildConfig.BASE_URL, html, "text/html", "utf-8", null);
     }
 
     // =====================================================
@@ -422,6 +492,17 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public String version() { return BuildConfig.VERSION_NAME; }
+
+        /** طباعة صفحة HTML جاهزة (بيانات الدخول…): تفتح معاينة الطباعة في أندرويد مع الطابعة أو «حفظ PDF» */
+        @JavascriptInterface
+        public void printHtml(String html, String title) {
+            if (html == null || html.isEmpty()) return;
+            runOnUiThread(() -> printHtmlNow(html, title));
+        }
+
+        /** طباعة الصفحة الحالية كما هي (بديل window.print داخل التطبيق) */
+        @JavascriptInterface
+        public void printPage(String title) { runOnUiThread(() -> printWebView(web, title)); }
 
         /** تطبيق الإدارة: هل حُفظ رمز الإشعارات؟ */
         @JavascriptInterface

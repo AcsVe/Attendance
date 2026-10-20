@@ -222,7 +222,13 @@ public class PresenceService extends Service implements LocationListener {
             long iv = r.optLong("interval_s", 0) * 1000L;
             if (iv >= 15000L && iv != intervalMs) {   // تغيّر الفاصل (مثلاً تتبع مستمر كل 15 ثانية): نعيد ضبط قراءات الموقع
                 intervalMs = iv;
-                handler.post(this::startLocation);
+                getSharedPreferences("presence", MODE_PRIVATE).edit().putLong("interval", intervalMs).apply();
+                handler.post(() -> {
+                    startLocation();
+                    // الدورة التالية كانت مجدولة بالفاصل القديم (قد يكون 10 دقائق) — نعيد جدولتها بالفاصل الجديد فوراً
+                    handler.removeCallbacks(tick);
+                    handler.postDelayed(tick, intervalMs);
+                });
             }
             long rem = r.optLong("remaining_ms", 0);
             if (rem > 0) stopAtElapsed = SystemClock.elapsedRealtime() + rem;

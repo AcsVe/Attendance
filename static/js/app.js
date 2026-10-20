@@ -199,6 +199,11 @@ function toast(msg, isError) {
   setTimeout(() => { el.className = 'toast'; }, 3000);
 }
 
+/* داخل تطبيق أندرويد لا يعمل window.print (أزرار «طباعة» في التقارير والنظرة الشاملة): نحوّله لخدمة الطباعة في الهاتف */
+if (window.AttNative && typeof window.AttNative.printPage === 'function') {
+  window.print = function () { try { window.AttNative.printPage(document.title || 'Attendance'); } catch (e) {} };
+}
+
 async function api(url, opts) {
   const res = await fetch(url, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opts || {}));
   if (res.status === 401) { window.location.href = '/login'; return null; }
@@ -282,6 +287,18 @@ function showTab(tab, opts) {
   }
   refreshCurrentTab();
 }
+
+/* ===== فتح الشاشة المتعلقة بإشعار تطبيق الإدارة (#presence، #leaves، #reset-requests …) ===== */
+const HASH_ACTIONS = {
+  // طلبات نسيان كلمة المرور ليست تبويباً: نافذة تظهر فوق لوحة التحكم
+  'reset-requests': () => { showTab('dashboard', { skipHistory: true }); if (typeof rrLoad === 'function') Promise.resolve(rrLoad()).then(() => { if (typeof rrOpen === 'function') rrOpen(); }); },
+};
+window.attOpenTarget = function (hash) {
+  const t = decodeURIComponent(String(hash || '').replace('#', '')) || 'dashboard';
+  document.querySelectorAll('.modal-overlay.open').forEach(m => m.classList.remove('open'));
+  if (HASH_ACTIONS[t]) { history.replaceState({ tab: 'dashboard' }, '', '#dashboard'); HASH_ACTIONS[t](); return; }
+  showTab(t);
+};
 
 window.addEventListener('popstate', (e) => {
   const tab = (e.state && e.state.tab) || (window.location.hash || '').replace('#', '') || 'dashboard';
@@ -2669,8 +2686,11 @@ document.addEventListener('DOMContentLoaded', () => {
   if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
   let initialTab = decodeURIComponent((window.location.hash || '').replace('#', '')) || '';
   if (!initialTab) { try { initialTab = sessionStorage.getItem('att_last_tab') || 'dashboard'; } catch (e) { initialTab = 'dashboard'; } }
-  history.replaceState({ tab: initialTab }, '', '#' + initialTab);
-  showTab(initialTab, { skipHistory: true });
+  if (HASH_ACTIONS[initialTab]) { window.attOpenTarget(initialTab); }
+  else {
+    history.replaceState({ tab: initialTab }, '', '#' + initialTab);
+    showTab(initialTab, { skipHistory: true });
+  }
 
   // ===== تسجيل Service Worker لتفعيل "تثبيت التطبيق" (PWA) على أندرويد/
   // ويندوز - راجع static/sw.js لتفاصيل نطاق التخزين المؤقت المحدود عمداً =====
