@@ -158,7 +158,7 @@ def log_audit(conn, action_type, target_type, employee_name=None, date_affected=
 RT_LABELS = {
     'all': 'الكامل', 'late': 'المتأخرون', 'absent': 'الغائبون',
     'ontime': 'في الوقت', 'shift': 'المناوبون', 'sat_present': 'حاضرو السبت',
-    'holiday': 'عطلة أسبوعية',
+    'holiday': 'عطلة أسبوعية', 'no_out': 'بدون سجل انصراف', 'early': 'المغادرة المبكرة',
 }
 
 
@@ -879,6 +879,10 @@ def _apply_common_filters(rows, args):
             continue
         elif rt == 'holiday' and r['status'] != 'عطلة أسبوعية':
             continue
+        elif rt == 'no_out' and not r.get('out_flag'):
+            continue
+        elif rt == 'early' and not (r.get('early_minutes') or 0):
+            continue
         elif rt == 'sat_present' and not (r['weekday'] == 5 and r['status'] not in ('غائب', 'عطلة أسبوعية', 'عطلة رسمية', 'استثناء')):
             continue
         out.append(r)
@@ -903,12 +907,14 @@ def api_stats():
     avg_hours = round(sum(hours) / len(hours), 1) if hours else 0
     lates = [r['late_minutes'] for r in filtered if r['late_minutes']]
     avg_late = round(sum(lates) / len(lates), 1) if lates else 0
+    no_out = sum(1 for r in filtered if r.get('out_flag'))
+    early = sum(1 for r in filtered if r.get('early_minutes'))
 
     return jsonify({
         'ok': True,
         'total': total, 'ontime': ontime, 'late': late, 'absent': absent,
         'holiday': holiday, 'sat_present': sat_present,
-        'avg_hours': avg_hours, 'avg_late': avg_late,
+        'avg_hours': avg_hours, 'avg_late': avg_late, 'no_out': no_out, 'early': early,
     })
 
 
@@ -945,10 +951,12 @@ def api_reports_export_csv():
     buf = io.StringIO()
     buf.write('﻿')  # BOM حتى يفتح إكسل الملف بترميز عربي صحيح
     writer = csv.writer(buf)
-    writer.writerow(LL(['الاسم', 'القسم', 'التاريخ', 'وقت الحضور', 'وقت الانصراف', 'الحالة', 'دقائق التأخير', 'ساعات العمل', 'المناوبة']))
+    writer.writerow(LL(['الاسم', 'القسم', 'التاريخ', 'وقت الحضور', 'وقت الانصراف', 'الحالة', 'دقائق التأخير', 'ساعات العمل', 'المناوبة',
+                        'دقائق المغادرة المبكرة', 'ملاحظة الانصراف']))
     for r in filtered:
         writer.writerow([r['name'], r['dept'] or '', r['date'], r['time_in'] or '', r['time_out'] or '',
-                          L(r['status'] or ''), r['late_minutes'], r['working_hours'], r['shift'] or ''])
+                          L(r['status'] or ''), r['late_minutes'], r['working_hours'], r['shift'] or '',
+                          r.get('early_minutes') or 0, L(OUT_FLAG_LABELS.get(r.get('out_flag') or '', ''))])
     mem = io.BytesIO(buf.getvalue().encode('utf-8'))
     return send_file(mem, mimetype='text/csv', as_attachment=True,
                       download_name=f"attendance_report_{datetime.now().strftime('%Y%m%d_%H%M')}.csv")
@@ -2082,12 +2090,18 @@ def run_full_analysis(conn):
     forced_rows = conn.execute("SELECT name, date FROM forced_absences").fetchall()
     forced_set = {(r['name'], r['date']) for r in forced_rows}
 
-    cache_cols = ['name', 'dept', 'date', 'weekday', 'time_in', 'time_out', 'status', 'late_minutes', 'working_hours', 'shift']
+    cache_cols = ['name', 'dept', 'date', 'weekday', 'time_in', 'time_out', 'status', 'late_minutes', 'working_hours', 'shift',
+                  'early_minutes', 'out_flag']
     if punches_df.empty:
         result = pd.DataFrame(columns=cache_cols)
     else:
         settings = dict(settings)
         settings['_open_depts'] = [r['dept'] for r in conn.execute("SELECT dept FROM dept_attendance_settings WHERE open_hours = 1")]
+        try:   # «الآن» بتوقيت النظام (Asia/Amman) لمعرفة هل انتهى دوام اليوم (نسيان الانصراف)
+            from mobile import now_local as _now_local
+            settings['_now'] = _now_local().strftime('%Y-%m-%d %H:%M')
+        except Exception:
+            settings['_now'] = datetime.now().strftime('%Y-%m-%d %H:%M')
         result = analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
                           official_holidays, shift1_names, shift2_names,
                           late_permissions, departure_permissions)
@@ -2112,6 +2126,8 @@ def run_full_analysis(conn):
                 result.loc[mask, 'status'] = 'غائب'
                 result.loc[mask, 'late_minutes'] = 0
                 result.loc[mask, 'working_hours'] = 0.0
+                result.loc[mask, 'early_minutes'] = 0
+                result.loc[mask, 'out_flag'] = ''
 
         emp_dept = {r['name']: r['dept'] for r in conn.execute("SELECT name, dept FROM employees").fetchall()}
         for (name, date_str) in forced_set:
@@ -2126,20 +2142,22 @@ def run_full_analysis(conn):
             extra_rows.append({
                 'name': name, 'dept': emp_dept.get(name, ''), 'date': date_str, 'weekday': weekday,
                 'time_in': '', 'time_out': '', 'status': 'غائب', 'late_minutes': 0, 'working_hours': 0.0, 'shift': '',
+                'early_minutes': 0, 'out_flag': '',
             })
 
     rows_to_insert = [
         (r.name, r.dept, r.date, int(r.weekday) if pd.notna(r.weekday) else None, r.time_in, r.time_out,
-         r.status, int(r.late_minutes), float(r.working_hours), r.shift) for r in result.itertuples()
+         r.status, int(r.late_minutes), float(r.working_hours), r.shift,
+         int(r.early_minutes or 0) if pd.notna(r.early_minutes) else 0, r.out_flag or '') for r in result.itertuples()
     ] + [
         (r['name'], r['dept'], r['date'], r['weekday'], r['time_in'], r['time_out'],
-         r['status'], r['late_minutes'], r['working_hours'], r['shift']) for r in extra_rows
+         r['status'], r['late_minutes'], r['working_hours'], r['shift'], 0, '') for r in extra_rows
     ]
 
     conn.execute("DELETE FROM report_cache")
     conn.executemany(
-        "INSERT INTO report_cache (name, dept, date, weekday, time_in, time_out, status, late_minutes, working_hours, shift) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO report_cache (name, dept, date, weekday, time_in, time_out, status, late_minutes, working_hours, shift, "
+        "early_minutes, out_flag) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         rows_to_insert
     )
     conn.commit()
@@ -2285,7 +2303,7 @@ def api_settings():
         data = request.get_json(force=True)
         allowed_keys = {
             'org_name', 'org_name_en', 'attendance_time', 'departure_time', 'late_threshold',
-            'shift_enabled', 'shift1_start', 'shift1_end', 'shift2_start', 'shift2_end',
+            'shift_enabled', 'shift1_start', 'shift1_end', 'shift2_start', 'shift2_end', 'auto_checkout',
             'sat_time_enabled', 'sat_attendance_time', 'sat_departure_time', 'excluded_depts',
             'sync_central_url', 'sync_api_key',
         }
@@ -2301,6 +2319,11 @@ def api_settings():
             log_audit(c, 'update', 'settings', new_value=' | '.join(changed)[:1000])
             c.commit()
             c.close()
+            try:   # الأوقات/حد التأخير/الإغلاق التلقائي تغيّر نتائج التقارير: إعادة تحليل في الخلفية
+                from mobile import schedule_analysis as _sched
+                _sched(1)
+            except Exception:
+                pass
         return jsonify({'ok': True})
     return jsonify({'ok': True, 'settings': mask_secrets(db.get_all_settings())})
 
@@ -3153,15 +3176,19 @@ _EXCEL_SHEETS = [
     ('الغائبون', ('غائب',)),
     ('في الوقت', ('في الوقت',)),
     ('عطلة أسبوعية', ('عطلة أسبوعية',)),
+    ('بدون سجل انصراف', 'no_out'),
+    ('المغادرة المبكرة', 'early'),
 ]
+OUT_FLAG_LABELS = {'missing': 'بدون سجل انصراف', 'auto': 'أُغلق تلقائياً بنهاية الدوام — للمراجعة'}
 
 _EXCEL_HEADERS = ['الاسم', 'القسم', 'التاريخ', 'وقت الحضور', 'وقت الانصراف', 'الحالة',
-                  'دقائق التأخير', 'ساعات العمل', 'المناوبة']
+                  'دقائق التأخير', 'ساعات العمل', 'المناوبة', 'دقائق المغادرة المبكرة', 'ملاحظة الانصراف']
 
 
 def _excel_row(r):
     return [r['name'], r['dept'] or '', r['date'], r['time_in'] or '', r['time_out'] or '',
-            L(r['status'] or ''), r['late_minutes'], r['working_hours'], r['shift'] or '']
+            L(r['status'] or ''), r['late_minutes'], r['working_hours'], r['shift'] or '',
+            r.get('early_minutes') or 0, L(OUT_FLAG_LABELS.get(r.get('out_flag') or '', ''))]
 
 
 @app.route('/api/export/excel')
@@ -3188,7 +3215,12 @@ def api_export_excel():
     header_align = Alignment(horizontal='center')
 
     for sheet_name, statuses in _EXCEL_SHEETS:
-        sheet_rows = base_filtered if statuses is None else [r for r in base_filtered if r['status'] in statuses]
+        if statuses == 'no_out':
+            sheet_rows = [r for r in base_filtered if r.get('out_flag')]
+        elif statuses == 'early':
+            sheet_rows = [r for r in base_filtered if r.get('early_minutes')]
+        else:
+            sheet_rows = base_filtered if statuses is None else [r for r in base_filtered if r['status'] in statuses]
         ws = wb.create_sheet(title=L(sheet_name)[:31])
         ws.sheet_view.rightToLeft = _ui_lang(request) != 'en'
         ws.append(LL(_EXCEL_HEADERS))
@@ -3198,7 +3230,7 @@ def api_export_excel():
             cell.alignment = header_align
         for r in sheet_rows:
             ws.append(_excel_row(r))
-        widths = [18, 16, 12, 12, 12, 14, 10, 10, 10]
+        widths = [18, 16, 12, 12, 12, 14, 10, 10, 10, 12, 26]
         for i, w in enumerate(widths, start=1):
             ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
         if not sheet_rows:

@@ -139,6 +139,9 @@ def _record_run(conn, success, message):
     conn.commit()
 
 
+_last_hourly = ''
+
+
 def _tick():
     """يُستدعى كل دقيقة من المجدول الخلفي - يتحقق هل حان وقت التشغيل
     المحدَّد بالإعدادات، وهل لم تُنفَّذ الجدولة اليوم مسبقاً بعد."""
@@ -154,6 +157,17 @@ def _tick():
         adms.flush()      # تحليل ما وصل من الأجهزة عبر الإنترنت ولم يُحلَّل بعد
     except Exception:   # noqa: BLE001
         logger.exception('adms flush failed')
+    # إعادة تحليل كل ساعة (الدقيقة 5): يُظهر «بدون سجل انصراف» / الإغلاق التلقائي بعد انتهاء دوام اليوم
+    # دون انتظار حركة جديدة
+    try:
+        global _last_hourly
+        h = datetime.now().strftime('%Y-%m-%d %H')
+        if datetime.now().minute >= 5 and _last_hourly != h:
+            _last_hourly = h
+            import mobile
+            mobile.schedule_analysis(1)
+    except Exception:   # noqa: BLE001
+        logger.exception('hourly analysis failed')
     settings = db.get_all_settings()
     if settings.get('schedule_enabled') != '1':
         return

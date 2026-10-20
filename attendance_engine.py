@@ -112,6 +112,10 @@ def merge_same_day(df):
     return df.loc[keep].drop(columns=['_k']).reset_index(drop=True)
 
 
+OUT_COLS = ['name', 'dept', 'date', 'weekday', 'time_in', 'time_out', 'status', 'late_minutes',
+            'working_hours', 'shift', 'early_minutes', 'out_flag']
+
+
 def analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
             official_holidays, shift1_names=None, shift2_names=None,
             late_permissions=None, departure_permissions=None):
@@ -135,12 +139,17 @@ def analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
           تأثير على التأخير أو تصنيف الحالة.
 
     يُرجع DataFrame فيه: name, dept, date, weekday, time_in, time_out,
-    status, late_minutes, working_hours
+    status, late_minutes, working_hours, shift, early_minutes, out_flag
+
+    نسيان الانصراف (حضور بلا انصراف بعد انتهاء الدوام):
+      out_flag = 'missing' ← «بدون سجل انصراف» (الحالة لا تتغيّر حتى لا تضيع معلومة التأخير)
+      out_flag = 'auto'    ← أُغلق تلقائياً بوقت نهاية الدوام (إن فُعّل auto_checkout) — يُراجَع
+    المغادرة المبكرة: early_minutes = نهاية الدوام المقررة − الانصراف الفعلي (بعد خصم إذن المغادرة
+      المتداخل معها)، وتُحتسب فقط إن تجاوزت حد التأخير وفي أيام العمل.
     """
     df = punches_df.copy()
     if df.empty:
-        return pd.DataFrame(columns=['name', 'dept', 'date', 'weekday', 'time_in', 'time_out',
-                                      'status', 'late_minutes', 'working_hours', 'shift'])
+        return pd.DataFrame(columns=OUT_COLS)
 
     shift1_names = set(shift1_names or [])
     shift2_names = set(shift2_names or [])
@@ -160,6 +169,13 @@ def analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
 
     excluded_depts = {d.strip() for d in settings.get('excluded_depts', '').split(',') if d.strip()}
     open_depts = set(settings.get('_open_depts') or [])   # أقسام بدوام مفتوح (بلا وقت حضور): لا يُحتسب تأخير
+    auto_checkout = settings.get('auto_checkout', '0') == '1'
+    shift1_end = parse_time_str(settings.get('shift1_end')) if settings.get('shift1_end') else None
+    shift2_end = parse_time_str(settings.get('shift2_end')) if settings.get('shift2_end') else None
+    # «الآن» (بتوقيت النظام) لمعرفة هل انتهى دوام اليوم — اليوم الجاري لا يُعدّ نسياناً قبل نهاية الدوام
+    _now = settings.get('_now') or datetime.now().strftime('%Y-%m-%d %H:%M')
+    today_s, now_min = _now[:10], to_minutes(parse_time_str(_now[11:16]))
+    AFTER_END_MIN = 60   # مهلة بعد نهاية الدوام (للعمل الإضافي) قبل اعتبار الانصراف منسياً
 
     df['date_parsed'] = pd.to_datetime(df['date'], errors='coerce')
     df['time_in_parsed'] = df['time_in'].apply(parse_time_val)
@@ -168,8 +184,7 @@ def analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
     if excluded_depts:
         df = df[~df['dept'].isin(excluded_depts)].reset_index(drop=True)
     if df.empty:
-        return pd.DataFrame(columns=['name', 'dept', 'date', 'weekday', 'time_in', 'time_out',
-                                      'status', 'late_minutes', 'working_hours', 'shift'])
+        return pd.DataFrame(columns=OUT_COLS)
 
     df = merge_same_day(df)
 
@@ -254,8 +269,78 @@ def analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
                 pass
         return round(hours, 2)
 
+    def sched_end(row):
+        """وقت نهاية الدوام المقرر لهذا الصف (None لأقسام الدوام المفتوح)"""
+        if row.get('dept') in open_depts:
+            return None
+        perm = late_permissions.get((row['name'], row_date_str(row)))
+        if perm and perm.get('custom_departure_time'):
+            try:
+                return parse_time_str(perm['custom_departure_time'])
+            except ValueError:
+                pass
+        if row.get('is_shift'):
+            return (shift2_end if row.get('shift_number') == 2 else shift1_end) or get_window(row)[1]
+        return get_window(row)[1]
+
+    def is_work_day(row):
+        d = row_date_str(row)
+        if d is None or d in official_holidays or (row['name'], d) in date_exceptions:
+            return False
+        wd = row['date_parsed'].weekday()
+        return wd != 4 and not (wd == 5 and not sat_enabled)
+
+    # ===== نسيان الانصراف: حضور بلا انصراف (أو انصراف = الحضور نفسه من بصمة واحدة/حضور الهاتف) =====
+    df['out_flag'] = ''
+    for idx, row in df.iterrows():
+        tin, tout = row.get('time_in_parsed'), row.get('time_out_parsed')
+        if not _valid_time(tin):
+            continue
+        tin_t = tin.time() if hasattr(tin, 'time') and callable(tin.time) else tin
+        tout_t = (tout.time() if hasattr(tout, 'time') and callable(tout.time) else tout) if _valid_time(tout) else None
+        if tout_t is not None and to_minutes(tout_t) != to_minutes(tin_t):
+            continue
+        d = row_date_str(row)
+        end = sched_end(row)
+        if d is None:
+            continue
+        ended = d < today_s or (d == today_s and end is not None and now_min >= to_minutes(end) + AFTER_END_MIN)
+        if not ended:
+            continue   # اليوم الجاري ولم ينتهِ الدوام بعد: الموظف ما زال في عمله
+        if auto_checkout and end is not None and to_minutes(end) > to_minutes(tin_t):
+            df.at[idx, 'time_out_parsed'] = end
+            df.at[idx, 'out_flag'] = 'auto'
+        else:
+            df.at[idx, 'time_out_parsed'] = None
+            df.at[idx, 'out_flag'] = 'missing'
+
+    def calc_early(row):
+        if row.get('out_flag') or not is_work_day(row):
+            return 0
+        tin, tout = row.get('time_in_parsed'), row.get('time_out_parsed')
+        if not _valid_time(tin) or not _valid_time(tout):
+            return 0
+        end = sched_end(row)
+        if end is None:
+            return 0
+        o, e, i = to_minutes(tout), to_minutes(end), to_minutes(tin)
+        if o <= i or o >= e:      # لا انصراف فعلي بعد (= وقت الحضور)، أو انصراف بعد منتصف الليل/بعد نهاية الدوام
+            return 0
+        if row_date_str(row) == today_s and now_min < e:
+            return 0              # اليوم الجاري قبل نهاية الدوام: قد يكون خروجاً لم يكتمل يومه بعد
+        early = e - o
+        perm = departure_permissions.get((row['name'], row_date_str(row)))
+        if perm:                  # إذن مغادرة يغطي جزءاً من الفترة [الانصراف، نهاية الدوام]
+            try:
+                p1, p2 = to_minutes(parse_time_str(perm.get('departure_time'))), to_minutes(parse_time_str(perm.get('return_time')))
+                early -= max(0, min(p2, e) - max(p1, o))
+            except (ValueError, TypeError, AttributeError):
+                pass
+        return early if early > late_th else 0
+
     df['late_minutes'] = df.apply(calc_late, axis=1)
     df['working_hours'] = df.apply(calc_hours, axis=1)
+    df['early_minutes'] = df.apply(calc_early, axis=1)
 
     def get_status(row):
         tin, tout = row.get('time_in_parsed'), row.get('time_out_parsed')
@@ -296,4 +381,4 @@ def analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
     df['time_out'] = df['time_out_parsed'].apply(fmt_time)
     df['date'] = df['date_parsed'].dt.strftime('%Y-%m-%d')
 
-    return df[['name', 'dept', 'date', 'weekday', 'time_in', 'time_out', 'status', 'late_minutes', 'working_hours', 'shift']]
+    return df[OUT_COLS]

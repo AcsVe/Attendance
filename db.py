@@ -254,6 +254,10 @@ def init_db():
     existing_cols = {r['name'] for r in cur.execute("PRAGMA table_info(report_cache)").fetchall()}
     if 'shift' not in existing_cols:
         cur.execute("ALTER TABLE report_cache ADD COLUMN shift TEXT")
+    if 'early_minutes' not in existing_cols:   # دقائق المغادرة المبكرة
+        cur.execute("ALTER TABLE report_cache ADD COLUMN early_minutes INTEGER DEFAULT 0")
+    if 'out_flag' not in existing_cols:        # '' / missing (بدون سجل انصراف) / auto (أُغلق تلقائياً)
+        cur.execute("ALTER TABLE report_cache ADD COLUMN out_flag TEXT DEFAULT ''")
 
     # ===== تطبيق الموظفين على الهاتف: حسابات دخول + ربط الهاتف + مواقع العمل (Geofence) + الحركات =====
     cur.execute('''CREATE TABLE IF NOT EXISTS employee_accounts (
@@ -591,6 +595,7 @@ def get_all_settings():
         'mobile_bind_device': '1',        # ربط حساب الموظف بهاتف واحد فقط
         'mobile_max_accuracy': '150',     # أقصى خطأ مقبول في دقة الموقع (متر)
         'mobile_require_geofence': '1',   # منع التسجيل خارج مواقع العمل
+        'auto_checkout': '0',             # إغلاق الانصراف المنسي تلقائياً بوقت نهاية الدوام (يُعلَّم للمراجعة)
         'mobile_leave_deduct': '1',       # الخروج المؤقت يُخصم من ساعات العمل
         'mobile_require_app': '0',        # التسجيل من تطبيق الموظف (APK) فقط — لا من المتصفح
         'leave_max_minutes': '60',        # أقصى مدة للخروج المؤقت (0 = بلا حد)

@@ -160,6 +160,8 @@
         <div class="stats-grid" style="margin-bottom:0">
           <div class="stat-card" style="cursor:default"><div class="stat-val" id="stAvgHours">-</div><div class="stat-label">متوسط ساعات العمل</div></div>
           <div class="stat-card" style="cursor:default"><div class="stat-val" id="stAvgLate">-</div><div class="stat-label">متوسط دقائق التأخير</div></div>
+          <div class="stat-card" onclick="goToReport('no_out')"><div class="stat-val" id="stNoOut">-</div><div class="stat-label">بدون سجل انصراف</div></div>
+          <div class="stat-card" onclick="goToReport('early')"><div class="stat-val" id="stEarly">-</div><div class="stat-label">مغادرة مبكرة</div></div>
         </div>
       </div>
     </div>
@@ -223,6 +225,8 @@
           <button class="filter-btn" data-rt="ontime" onclick="setReportType('ontime')">في الوقت</button>
           <button class="filter-btn" data-rt="holiday" onclick="setReportType('holiday')">عطلة أسبوعية</button>
           <button class="filter-btn" data-rt="sat_present" onclick="setReportType('sat_present')">حاضرو السبت</button>
+          <button class="filter-btn" data-rt="no_out" onclick="setReportType('no_out')">بدون سجل انصراف</button>
+          <button class="filter-btn" data-rt="early" onclick="setReportType('early')">المغادرة المبكرة</button>
         </div>
         <div class="filter-bar">
           <select id="repDept" class="search-input" onchange="loadReports(1)"><option value="">كل الأقسام</option></select>
@@ -399,6 +403,8 @@
             <option value="absent">الغائبون فقط</option>
             <option value="ontime">الحاضرون بالوقت فقط</option>
             <option value="holiday">عطلة أسبوعية</option>
+            <option value="no_out">بدون سجل انصراف</option>
+            <option value="early">المغادرة المبكرة</option>
           </select>
         </div>
         <div class="filter-bar">
@@ -1014,6 +1020,11 @@
           <div class="form-group"><label>حد التأخير (دقيقة)</label><input type="number" id="setLateTh" min="0"></div>
           <div class="form-group"><label>الأقسام المستثناة (مفصولة بفاصلة)</label><input type="text" id="setExcludedDepts"></div>
         </div>
+        <label style="display:flex;align-items:flex-start;gap:8px;font-weight:600;margin-top:12px;line-height:1.7">
+          <input type="checkbox" id="setAutoCheckout" style="margin-top:6px">
+          <span>إغلاق الانصراف المنسي تلقائياً بوقت نهاية الدوام
+            <small style="display:block;font-weight:400;color:var(--muted)">من سجّل حضوراً ولم يسجّل انصرافاً يُحتسب له الانصراف بوقت نهاية دوامه (بعد ساعة من انتهائه)، ويظهر في التقارير «أُغلق تلقائياً — للمراجعة». عند إطفائه: يظهر «بدون سجل انصراف» وساعات عمله صفر.</small></span>
+        </label>
       </div>
       <div class="card">
         <div class="card-title"><i class="fas fa-sync-alt" aria-hidden="true"></i> نظام المناوبتين</div>

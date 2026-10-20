@@ -502,6 +502,8 @@ async function loadStats() {
   document.getElementById('stSatPresent').textContent = data.sat_present;
   document.getElementById('stAvgHours').textContent = data.avg_hours;
   document.getElementById('stAvgLate').textContent = data.avg_late;
+  const nb = document.getElementById('stNoOut'); if (nb) nb.textContent = data.no_out ?? 0;
+  const eb = document.getElementById('stEarly'); if (eb) eb.textContent = data.early ?? 0;
 }
 
 /* ============ UPLOAD & ANALYZE ============ */
@@ -640,6 +642,12 @@ const STATUS_BADGE = {
 // النقر على هذه الحالات بجدول النتائج =====
 const _CLICKABLE_REPORT_STATUSES = { 'متأخر': 'late', 'تأخير بسيط': 'late', 'غائب': 'absent' };
 
+function _reportOutCell(r) {
+  if (r.out_flag === 'missing') return '<span class="badge badge-absent" title="سجّل حضوراً ولم يسجّل انصرافاً">بدون سجل انصراف</span>';
+  if (r.out_flag === 'auto') return `${escapeHtml(r.time_out || '')} <span class="badge badge-none" title="لم يسجّل انصرافاً — احتُسب بوقت نهاية الدوام، يُراجَع">تلقائي</span>`;
+  return escapeHtml(r.time_out || '—');
+}
+
 function _reportStatusCell(r) {
   const badge = `<span class="badge ${STATUS_BADGE[r.status] || 'badge-none'}">${escapeHtml(r.status)}</span>`;
   const kind = _CLICKABLE_REPORT_STATUSES[r.status];
@@ -752,8 +760,8 @@ async function loadReports(page) {
         <td>${escapeHtml(r.dept || '')}</td>
         <td>${escapeHtml(r.date)}</td>
         <td>${escapeHtml(r.time_in || '—')}</td>
-        <td>${escapeHtml(r.time_out || '—')}</td>
-        <td>${_reportStatusCell(r)}</td>
+        <td>${_reportOutCell(r)}</td>
+        <td>${_reportStatusCell(r)}${r.early_minutes ? ` <span class="badge badge-late" title="انصرف قبل نهاية الدوام">مغادرة مبكرة ${r.early_minutes} د</span>` : ''}</td>
         <td>${r.late_minutes || 0}</td>
         <td>${r.working_hours || 0}</td>
         <td>${escapeHtml(r.shift || '—')}</td>
@@ -2177,6 +2185,7 @@ async function loadSettings() {
   document.getElementById('setSatEnabled').checked = s.sat_time_enabled === '1';
   document.getElementById('setSatAtt').value = s.sat_attendance_time;
   document.getElementById('setSatDep').value = s.sat_departure_time;
+  document.getElementById('setAutoCheckout').checked = s.auto_checkout === '1';
   renderLogoPreview(s.org_logo_filename);
   document.getElementById('setSyncUrl').value = s.sync_central_url || '';
   document.getElementById('setSyncKey').value = s.sync_api_key || '';
@@ -2214,6 +2223,7 @@ async function saveSettings() {
     sat_time_enabled: document.getElementById('setSatEnabled').checked ? '1' : '0',
     sat_attendance_time: document.getElementById('setSatAtt').value,
     sat_departure_time: document.getElementById('setSatDep').value,
+    auto_checkout: document.getElementById('setAutoCheckout').checked ? '1' : '0',
     sync_central_url: syncRole() === 'branch' ? document.getElementById('setSyncUrl').value.trim() : '',
     sync_api_key: syncRole() === 'none' ? '' : document.getElementById('setSyncKey').value.trim(),
   };

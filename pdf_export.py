@@ -158,8 +158,9 @@ def build_report_pdf(rows, org_name, filters_desc, stats, generated_by, times_de
             ar(r.get('dept', '') or ''),
             r.get('date', '') or '',
             r.get('time_in', '') or '—',
-            r.get('time_out', '') or '—',
-            ar(r.get('status', '')),
+            (ar('بدون انصراف') if r.get('out_flag') == 'missing' else
+             ar(f"{r.get('time_out', '')} (تلقائي)") if r.get('out_flag') == 'auto' else (r.get('time_out', '') or '—')),
+            ar(r.get('status', '') + (f" / مبكر {r.get('early_minutes')} د" if r.get('early_minutes') else '')),
             str(r.get('late_minutes', 0) or 0),
             str(r.get('working_hours', 0) or 0),
             ar(r.get('shift', '') or '—'),
