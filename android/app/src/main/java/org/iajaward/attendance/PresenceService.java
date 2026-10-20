@@ -68,7 +68,7 @@ public class PresenceService extends Service implements LocationListener {
             String d = intent.getStringExtra(EXTRA_DEVICE);
             if (d != null && !d.isEmpty()) device = d;
             long iv = intent.getLongExtra(EXTRA_INTERVAL, 600) * 1000L;
-            intervalMs = Math.max(15000L, Math.min(3600000L, iv));
+            intervalMs = Math.max(5000L, Math.min(3600000L, iv));   // 5 ثوانٍ = التتبع اللحظي للموظف الميداني
             long rem = intent.getLongExtra(EXTRA_REMAINING, 0);
             if (rem > 0) stopAtElapsed = SystemClock.elapsedRealtime() + rem;
             sp.edit().putString("device", device).putLong("interval", intervalMs).apply();
@@ -128,7 +128,7 @@ public class PresenceService extends Service implements LocationListener {
         lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         if (lm == null || !hasLocationPermission()) return;
         try { lm.removeUpdates(this); } catch (Exception ignored) { }
-        long minTime = Math.max(10000L, Math.min(60000L, intervalMs / 2));
+        long minTime = Math.max(2000L, Math.min(60000L, intervalMs / 2));
         try { if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, minTime, 0, this); } catch (Exception ignored) { }
         try { if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, minTime, 0, this); } catch (Exception ignored) { }
         try {
@@ -220,7 +220,7 @@ public class PresenceService extends Service implements LocationListener {
                 return;
             }
             long iv = r.optLong("interval_s", 0) * 1000L;
-            if (iv >= 15000L && iv != intervalMs) {   // تغيّر الفاصل (مثلاً تتبع مستمر كل 15 ثانية): نعيد ضبط قراءات الموقع
+            if (iv >= 5000L && iv != intervalMs) {   // تغيّر الفاصل (مثلاً تتبع مستمر كل 15 ثانية): نعيد ضبط قراءات الموقع
                 intervalMs = iv;
                 getSharedPreferences("presence", MODE_PRIVATE).edit().putLong("interval", intervalMs).apply();
                 handler.post(() -> {

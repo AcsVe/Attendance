@@ -20,6 +20,69 @@ const OSM = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 const OSM_ATTR = '&copy; OpenStreetMap';
 const mEsc = s => escapeHtml(s == null ? '' : String(s));
 
+/* ===== طبقات الخريطة + زر ملء الشاشة (لكل خرائط الإدارة) ===== */
+function mapBaseLayers() {
+  const esri = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
+  const sat = () => L.tileLayer(esri + 'World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Imagery &copy; Esri' });
+  return {
+    'شوارع': L.tileLayer(OSM, { maxZoom: 19, attribution: OSM_ATTR }),
+    'قمر صناعي': sat(),
+    'قمر صناعي + أسماء': L.layerGroup([sat(),
+      L.tileLayer(esri + 'Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 }),
+      L.tileLayer(esri + 'Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, opacity: .8 })]),
+    'تضاريس': L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17, attribution: '&copy; OpenTopoMap (CC-BY-SA), &copy; OpenStreetMap' }),
+    'فاتح': L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap &copy; CARTO' }),
+    'داكن': L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap &copy; CARTO' }),
+  };
+}
+function mapEnhance(map, key) {
+  const layers = mapBaseLayers();
+  let pick = 'شوارع';
+  try { const v = localStorage.getItem('att_map_layer_' + key); if (v && layers[v]) pick = v; } catch (e) {}
+  layers[pick].addTo(map);
+  L.control.layers(layers, null, { position: 'topleft', collapsed: true }).addTo(map);
+  map.on('baselayerchange', e => { try { localStorage.setItem('att_map_layer_' + key, e.name); } catch (er) {} });
+  L.control.scale({ metric: true, imperial: false, position: 'bottomleft' }).addTo(map);
+  const Fs = L.Control.extend({
+    options: { position: 'topleft' },
+    onAdd() {
+      const b = L.DomUtil.create('a', 'leaflet-bar map-fs-btn');
+      b.href = '#'; b.setAttribute('role', 'button');
+      b.title = 'ملء الشاشة'; b.setAttribute('aria-label', 'ملء الشاشة');
+      b.innerHTML = '<i class="fas fa-expand" aria-hidden="true"></i>';
+      L.DomEvent.disableClickPropagation(b);
+      L.DomEvent.on(b, 'click', e => { L.DomEvent.preventDefault(e); mapFullscreen(map, b); });
+      return b;
+    },
+  });
+  map.addControl(new Fs());
+  return map;
+}
+/* ملء الشاشة: نكبّر عنصر الخريطة على كامل النافذة (يعمل داخل تطبيق أندرويد والمتصفح)،
+   وعلى الكمبيوتر نطلب أيضاً ملء الشاشة الحقيقي من المتصفح. الخروج: الزر نفسه أو Esc. */
+let mapFsActive = null;
+function mapFullscreen(map, btn) {
+  const el = map.getContainer();
+  const on = !el.classList.contains('map-fs');
+  el.classList.toggle('map-fs', on);
+  document.documentElement.classList.toggle('map-fs-open', on);
+  btn.innerHTML = `<i class="fas fa-${on ? 'compress' : 'expand'}" aria-hidden="true"></i>`;
+  btn.title = on ? 'خروج من ملء الشاشة' : 'ملء الشاشة';
+  btn.setAttribute('aria-label', btn.title);
+  mapFsActive = on ? { map, btn } : null;
+  try {
+    if (on && !window.AttNative && el.requestFullscreen) el.requestFullscreen().catch(() => {});
+    if (!on && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  } catch (e) {}
+  setTimeout(() => map.invalidateSize(), 150);
+}
+// زر الرجوع في تطبيق أندرويد: يخرج من ملء الشاشة أولاً بدل الرجوع لتبويب سابق
+window.attHandleBack = function () { if (mapFsActive) { mapFullscreen(mapFsActive.map, mapFsActive.btn); return true; } return false; };
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && mapFsActive) mapFullscreen(mapFsActive.map, mapFsActive.btn); });
+document.addEventListener('fullscreenchange', () => {   // خرج المستخدم من ملء الشاشة الحقيقي (Esc في المتصفح)
+  if (!document.fullscreenElement && mapFsActive) mapFullscreen(mapFsActive.map, mapFsActive.btn);
+});
+
 /* ================= الحسابات ================= */
 const MODE_LABEL = { both: 'البصمة + الهاتف + QR', device: 'جهاز البصمة فقط', mobile: 'الهاتف فقط', qr: 'رمز QR فقط', device_qr: 'البصمة + QR', mobile_qr: 'الهاتف + QR' };
 const MODE_PHONE = { both: 1, mobile: 1, mobile_qr: 1 };   // الطرق التي تشمل التسجيل من الهاتف بالموقع
@@ -251,7 +314,7 @@ let siteMap = null, siteLayer = null, siteDraft = null, siteRowsCache = [], site
 function siteEnsureMap() {
   if (siteMap || typeof L === 'undefined') return;
   siteMap = L.map('siteMap').setView([31.95, 35.91], 12);
-  L.tileLayer(OSM, { maxZoom: 19, attribution: OSM_ATTR }).addTo(siteMap);
+  mapEnhance(siteMap, 'site');
   siteLayer = L.layerGroup().addTo(siteMap);
   siteMap.on('click', e => {
     document.getElementById('siteLat').value = e.latlng.lat.toFixed(6);
@@ -387,7 +450,7 @@ let liveMap = null, liveLayer = null, liveTimer = null, mvKind = '', mvStatus = 
 const ST_LABEL = { in: 'في الدوام', out: 'انصرف', leave: 'خروج مؤقت', none: 'لم يسجّل' };
 
 /* ===== التحديث اللحظي (Realtime): تشغيل/إيقاف + فاصل يختاره المستخدم (يُحفظ على هذا الجهاز) ===== */
-const LIVE_RT_STEPS = [5, 10, 15, 30, 60];
+const LIVE_RT_STEPS = [2, 3, 5, 10, 15, 30, 60];
 let liveRt = { on: true, every: 10, busy: false, lastOk: 0, movesAt: 0, followId: null, fitted: false, rows: [] };
 (function () {
   try {
@@ -404,22 +467,36 @@ function liveRtUi() {
   const ago = liveRt.lastOk ? Math.max(0, Math.round((Date.now() - liveRt.lastOk) / 1000)) : null;
   document.getElementById('liveRtState').innerHTML = `<span class="live-dot ${liveRt.on ? 'on' : ''}"></span>` +
     (liveRt.on ? `مباشر — كل ${liveRt.every} ث` : 'متوقف') + (ago != null ? ` · آخر تحديث قبل ${ago} ث` : '');
+  const mini = document.getElementById('liveRtMini');
+  if (mini) {
+    const n = liveRt.rows.filter(x => x.live).length;
+    mini.innerHTML = `<span class="live-dot ${liveRt.on ? 'on' : ''}"></span> ${liveRt.on ? 'مباشر' : 'متوقف'} · ${n} ${ago != null ? '· ' + ago + ' ث' : ''}
+      <button type="button" onclick="liveRtToggle()" title="${liveRt.on ? 'إيقاف' : 'تشغيل'}" aria-label="${liveRt.on ? 'إيقاف التحديث اللحظي' : 'تشغيل التحديث اللحظي'}"><i class="fas fa-${liveRt.on ? 'pause' : 'play'}" aria-hidden="true"></i></button>`;
+  }
 }
 function liveRtToggle() { liveRt.on = !liveRt.on; liveRtSave(); liveRtUi(); if (liveRt.on) loadLive(); else clearTimeout(liveTimer); }
 function liveRtSetEvery(v) { v = +v; if (!LIVE_RT_STEPS.includes(v)) return; liveRt.every = v; liveRtSave(); liveRtUi(); if (liveRt.on) loadLive(); }
 function liveRtSchedule() {
   clearTimeout(liveTimer);
   if (!liveRt.on) return;
+  // يستمر التحديث بعد فتح «المتابعة المباشرة» مرة واحدة حتى لو انتقلت لتبويب آخر أو كانت الشاشة في الخلفية،
+  // فتجد الخريطة محدّثة لحظة العودة. لا يتوقف إلا بزر «إيقاف التحديث اللحظي».
   liveTimer = setTimeout(() => {
-    if (currentTab !== 'mobile-moves') return;          // يُستأنف عند فتح التبويب من جديد
-    if (document.hidden) { liveRtSchedule(); return; }  // الصفحة في الخلفية: لا طلبات
     loadLive(true);
-    // سجل الحركات أثقل: يتحدّث مع التحديث اللحظي لكن ليس أسرع من كل 30 ثانية
-    if (Date.now() - liveRt.movesAt >= 30000) { liveRt.movesAt = Date.now(); loadMoves(true); }
+    // سجل الحركات أثقل: يتحدّث مع التحديث اللحظي (وهو ظاهر فقط) لكن ليس أسرع من كل 30 ثانية
+    if (currentTab === 'mobile-moves' && Date.now() - liveRt.movesAt >= 30000) { liveRt.movesAt = Date.now(); loadMoves(true); }
   }, liveRt.every * 1000);
 }
-document.addEventListener('visibilitychange', () => { if (!document.hidden && liveRt.on && typeof currentTab !== 'undefined' && currentTab === 'mobile-moves') loadLive(true); });
-setInterval(() => { if (typeof currentTab !== 'undefined' && currentTab === 'mobile-moves') liveRtUi(); }, 1000);
+// العودة للصفحة بعد الخلفية: تحديث فوري (المتصفح قد يبطّئ المؤقتات في الخلفية)
+document.addEventListener('visibilitychange', () => { if (!document.hidden && liveRt.on && liveRt.started) loadLive(true); });
+setInterval(() => { if ((typeof currentTab !== 'undefined' && currentTab === 'mobile-moves') || mapFsActive) liveRtUi(); }, 1000);
+// طلب صامت: التحديث المتكرر لا يُظهر رسائل خطأ متتالية عند انقطاع الإنترنت لحظياً
+async function liveFetch() {
+  const res = await fetch('/api/mobile/live', { credentials: 'same-origin', cache: 'no-store' });
+  if (res.status === 401) { liveRt.on = false; window.location.href = '/login'; return null; }
+  const d = await res.json();
+  return d && d.ok ? d : null;
+}
 
 function liveAgeText(a) { return a == null ? '' : a < 60 ? `قبل ${a} ث` : a < 3600 ? `قبل ${Math.round(a / 60)} د` : `قبل ${Math.round(a / 3600)} س`; }
 function liveFollow(id) {
@@ -433,8 +510,9 @@ function liveFollow(id) {
 async function loadLive(quiet) {
   if (liveRt.busy) return;
   liveRt.busy = true;
+  liveRt.started = true;
   let d = null;
-  try { d = await api('/api/mobile/live'); } catch (e) { d = null; }
+  try { d = await liveFetch(); } catch (e) { d = null; }
   liveRt.busy = false;
   liveRtSchedule();
   if (!d) { liveRtUi(); return; }
@@ -455,7 +533,13 @@ async function loadLive(quiet) {
     if (typeof L === 'undefined') return;
     if (!liveMap) {
       liveMap = L.map('liveMap').setView([31.95, 35.91], 12);
-      L.tileLayer(OSM, { maxZoom: 19, attribution: OSM_ATTR }).addTo(liveMap);
+      mapEnhance(liveMap, 'live');
+      // لوحة صغيرة فوق الخريطة: حالة التحديث اللحظي وزر تشغيل/إيقاف (مفيدة خصوصاً في ملء الشاشة)
+      const Mini = L.Control.extend({ options: { position: 'topright' }, onAdd() {
+        const d = L.DomUtil.create('div', 'live-mini'); d.id = 'liveRtMini';
+        L.DomEvent.disableClickPropagation(d); return d; } });
+      liveMap.addControl(new Mini());
+      liveRtUi();
       liveLayer = L.layerGroup().addTo(liveMap);
     }
     liveMap.invalidateSize();
@@ -478,7 +562,7 @@ async function loadLive(quiet) {
     });
     const f = liveRt.followId && d.rows.find(r => r.id === liveRt.followId && r.lat != null);
     if (f) liveMap.panTo([f.lat, f.lng]);
-    else if (b.length && !liveRt.fitted) { liveMap.fitBounds(L.latLngBounds(b).pad(0.3), { maxZoom: 17 }); liveRt.fitted = true; }
+    else if (b.length && !liveRt.fitted && document.getElementById('liveMap').offsetWidth) { liveMap.fitBounds(L.latLngBounds(b).pad(0.3), { maxZoom: 17 }); liveRt.fitted = true; }
   }, 60);
 }
 
@@ -1131,7 +1215,7 @@ function shRender() {
 function shEnsureMap() {
   if (shMap || typeof L === 'undefined') return;
   shMap = L.map('shMap').setView([31.95, 35.91], 12);
-  L.tileLayer(OSM, { maxZoom: 19, attribution: OSM_ATTR }).addTo(shMap);
+  mapEnhance(shMap, 'shares');
   shLayer = L.layerGroup().addTo(shMap);
 }
 function shDrawMarkers(rows) {
@@ -1194,7 +1278,7 @@ function trRender() {
     <td><input type="checkbox" class="tr-check" data-id="${r.id}" onchange="trSelCount()"></td>
     <td><b>${mEsc(r.name)}</b></td><td>${mEsc(r.dept || '—')}</td>
     <td>${r.always_track ? '<span style="color:#0a6640;font-weight:700">مفعّل</span>' : '<span style="color:var(--muted)">غير مفعّل</span>'}</td>
-    <td>${r.track_interval == 15 ? 'كل 15 ثانية' : r.track_interval == 30 ? 'كل 30 ثانية' : 'كل دقيقة'}</td>
+    <td>${({ 5: '⚡ لحظي (5 ث)', 10: '⚡ كل 10 ثوانٍ', 15: 'كل 15 ثانية', 30: 'كل 30 ثانية' })[r.track_interval] || 'كل دقيقة'}</td>
     <td>${r.always_track ? connLabel(r.age_s, !!r.last_update) : '—'}</td></tr>`).join('') || '<tr><td colspan="6" style="color:var(--muted)">لا يوجد موظفون بحسابات تطبيق</td></tr>';
   trSelCount();
 }
@@ -1204,7 +1288,8 @@ function trCheckAll(on) { document.querySelectorAll('.tr-check').forEach(c => { 
 async function trSet(on) {
   const ids = trChecked();
   if (!ids.length) { toast('حدّد موظفاً أو جهازاً واحداً على الأقل', true); return; }
-  if (on && !confirm(`تشغيل التتبع المستمر بلا مدة لـ ${ids.length}؟ سيُرسل موقعهم كل دقيقة ولن يستطيعوا إيقافه من الهاتف.`)) return;
+  const sel = document.getElementById('trInterval');
+  if (on && !confirm(`تشغيل التتبع المستمر بلا مدة لـ ${ids.length}؟ سيُرسل موقعهم ${sel.options[sel.selectedIndex].text} ولن يستطيعوا إيقافه من الهاتف.`)) return;
   await api('/api/shares/tracking', { method: 'POST', body: JSON.stringify({ ids, on, interval: on ? +document.getElementById('trInterval').value : 0 }) });
   toast(on ? 'تم تشغيل التتبع المستمر' : 'تم إيقاف التتبع المستمر'); trLoad(); shLoad();
 }

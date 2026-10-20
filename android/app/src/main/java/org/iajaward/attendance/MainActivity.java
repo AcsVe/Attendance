@@ -311,8 +311,12 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        if (web.canGoBack()) web.goBack();
-        else super.onBackPressed();
+        // تسأل الصفحة أولاً (مثلاً: خروج من خريطة بملء الشاشة) ثم الرجوع المعتاد
+        web.evaluateJavascript("(function(){try{return !!(window.attHandleBack&&window.attHandleBack());}catch(e){return false;}})()", v -> {
+            if ("true".equals(v)) return;
+            if (web.canGoBack()) web.goBack();
+            else MainActivity.super.onBackPressed();
+        });
     }
 
     @Override

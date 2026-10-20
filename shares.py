@@ -17,6 +17,8 @@ from mobile import (_me_json, admin_required, now_local, _employee_scope_ok, _au
 bp = Blueprint('shares', __name__)
 LIVE_CHOICES = {15, 30, 60, 120, 240}
 FOREVER = '9999-12-31 23:59:59'     # مشاركة بلا مدة (حتى الإيقاف)
+# فواصل التتبع المستمر بالثواني: 5 و10 = «لحظي» للموظف الميداني/المتنقل (يستهلك بطارية وبيانات أكثر)
+TRACK_CHOICES = (5, 10, 15, 30, 60)
 
 
 def init_tables(conn):
@@ -106,7 +108,9 @@ def add_point(conn, share, lat, lng, acc, now=None):
         km = haversine_m(lat, lng, last['lat'], last['lng']) / 1000
         if km > 1 and km / (secs / 3600) > 250:
             _flag(conn, share['id'], f'قفزة غير منطقية ({km:.0f} كم خلال ' + (f'{secs / 60:.0f} دقيقة)' if secs >= 60 else 'أقل من دقيقة)'))
-    if last and (datetime.strptime(ts, '%Y-%m-%d %H:%M:%S') - datetime.strptime(last['ts'], '%Y-%m-%d %H:%M:%S')).total_seconds() < 20:
+    # نقطة جديدة في المسار كل 20 ثانية على الأقل، وفي التتبع اللحظي (5/10 ث) كل 4 ثوانٍ ليظهر المسار دقيقاً
+    min_gap = 4 if share_interval(conn, share) < 15 else 20
+    if last and (datetime.strptime(ts, '%Y-%m-%d %H:%M:%S') - datetime.strptime(last['ts'], '%Y-%m-%d %H:%M:%S')).total_seconds() < min_gap:
         conn.execute("UPDATE location_shares SET lat = ?, lng = ?, accuracy = ?, updated_at = ? WHERE id = ?", (lat, lng, acc, ts, share['id']))
         return True
     conn.execute("INSERT INTO location_share_points (share_id, ts, lat, lng, accuracy) VALUES (?, ?, ?, ?, ?)", (share['id'], ts, lat, lng, acc))
@@ -116,11 +120,11 @@ def add_point(conn, share, lat, lng, acc, now=None):
 
 
 def share_interval(conn, share):
-    """فاصل الإرسال بالثواني: التتبع المستمر حسب إعداد الجهاز (15/30/60)، وغيره كل دقيقة"""
+    """فاصل الإرسال بالثواني: التتبع المستمر حسب إعداد الجهاز (5/10/15/30/60)، وغيره كل دقيقة"""
     if share and share.get('source') == 'admin':
         r = conn.execute("SELECT track_interval FROM employee_accounts WHERE employee_id = ?", (share['employee_id'],)).fetchone()
         v = int(r['track_interval'] or 60) if r else 60
-        return v if v in (15, 30, 60) else 60
+        return v if v in TRACK_CHOICES else 60
     return 60
 
 
@@ -316,7 +320,7 @@ def api_shares_tracking():
                 iv = int(d.get('interval') or 0)
             except (TypeError, ValueError):
                 iv = 0
-            if iv in (15, 30, 60):
+            if iv in TRACK_CHOICES:
                 conn.execute(f"UPDATE employee_accounts SET track_interval = ? WHERE employee_id IN ({q})", [iv] + ids)
             if not on:     # إيقاف المشاركة الجارية التي أنشأتها الإدارة
                 conn.execute(f"UPDATE location_shares SET stopped_at = ? WHERE employee_id IN ({q}) AND source = 'admin' AND stopped_at IS NULL",

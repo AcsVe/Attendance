@@ -18,6 +18,13 @@
 .cred-preview .c{display:inline-block;width:46%;margin:1%;border:1px dashed #999;border-radius:10px;padding:10px;vertical-align:top;line-height:1.7;font-size:.88rem}
 .cred-preview .m{font-family:Consolas,monospace;direction:ltr;unicode-bidi:embed}
 @media (max-width:600px){.cred-preview .c{width:98%}}
+.m-map.map-fs,.leaflet-container.map-fs{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;height:100dvh!important;max-height:none!important;z-index:9000;border-radius:0!important;margin:0!important}
+html.map-fs-open,html.map-fs-open body{overflow:hidden!important}
+.map-fs-btn{display:flex!important;align-items:center;justify-content:center;width:34px;height:34px;background:#fff;color:#1B6E8C!important;font-size:15px;cursor:pointer}
+.leaflet-control-layers{font:600 .85rem 'Tajawal',sans-serif;direction:rtl;text-align:right}
+.leaflet-control-layers-base label{display:flex;gap:6px;align-items:center;padding:2px 0}
+.live-mini{background:rgba(255,255,255,.95);color:#123;border-radius:18px;padding:4px 6px 4px 10px;font:700 .78rem 'Tajawal',sans-serif;display:flex;align-items:center;gap:6px;box-shadow:0 1px 5px rgba(0,0,0,.25);direction:rtl}
+.live-mini button{border:0;background:#1B6E8C;color:#fff;border-radius:50%;width:26px;height:26px;cursor:pointer}
 .m-chips button{border:1px solid var(--border);background:#fff;border-radius:20px;padding:6px 12px;font:700 .84rem 'Tajawal',sans-serif;color:var(--primary-dark);cursor:pointer}
 .m-chips button b{background:#eef4f6;border-radius:12px;padding:0 7px;margin-inline-start:4px}
 .m-chips button.on{background:var(--primary);color:#fff;border-color:var(--primary)}.m-chips button.on b{background:rgba(255,255,255,.25)}
@@ -245,11 +252,13 @@
   <div class="card">
     <div class="card-title"><i class="fas fa-satellite" aria-hidden="true"></i> التتبع المستمر بلا مدة — الأجهزة المتنقلة (<span id="trOnCount">0</span> مفعّل)</div>
     <p style="font-size:.84rem;color:var(--muted);margin-bottom:8px">لجهاز يعمل كموظف ويتنقّل (أو أكثر): أضفه موظفاً بحساب تطبيق، ويُستحسن وضعه في قسم بـ«دوام مفتوح» من «أوقات الأقسام»، ثم فعّل له التتبع هنا.
-      يرسل الجهاز موقعه كل دقيقة دون مدة ولا يستطيع إيقافه من الهاتف. على الجهاز: ثبّت تطبيق Check-in، وافتحه مرة بعد كل إعادة تشغيل، واضبط البطارية على «بدون قيود».</p>
+      يرسل الجهاز موقعه بالفاصل المختار دون مدة ولا يستطيع إيقافه من الهاتف. على الجهاز: ثبّت تطبيق Check-in، وافتحه مرة بعد كل إعادة تشغيل، واضبط البطارية على «بدون قيود».
+      <br><b>⚡ التتبع اللحظي (5 أو 10 ثوانٍ)</b> للموظف الميداني أو المتنقل: تتحرك نقطته على خريطة «المتابعة المباشرة» شبه لحظياً، لكنه يستهلك بطارية الهاتف وبياناته أكثر — يُفضَّل أن يكون الهاتف على الشاحن في المركبة.</p>
     <div class="filter-bar" style="margin-bottom:8px">
       <input type="search" id="trSearch" class="search-input" placeholder="بحث بالاسم أو القسم…" oninput="trRender()">
       <div class="m-chips" id="trChips"></div>
       <select id="trInterval" class="search-input" aria-label="فاصل الإرسال" title="فاصل إرسال الموقع">
+        <option value="5">⚡ لحظي — كل 5 ثوانٍ (ميداني)</option><option value="10">⚡ كل 10 ثوانٍ (متنقل)</option>
         <option value="15">كل 15 ثانية</option><option value="30">كل 30 ثانية</option><option value="60" selected>كل دقيقة</option></select>
       <button class="btn btn-primary btn-sm" onclick="trSet(true)"><i class="fas fa-play" aria-hidden="true"></i> تشغيل / تحديث الفاصل</button>
       <button class="btn btn-outline btn-sm" onclick="trSet(false)"><i class="fas fa-stop" aria-hidden="true"></i> إيقاف التتبع</button>
