@@ -774,6 +774,8 @@ def leave_sweep(conn=None):
         cfg = settings()
         lc = _lcfg(cfg)
         now = now_local()
+        if outage_hold(conn, now):
+            return      # الخادم كان متوقفاً: لم يكن بإمكان الموظفين تسجيل العودة — ننتظر المهلة
         today, cur = now.strftime('%Y-%m-%d'), now.hour * 60 + now.minute
         # طلبات معتمدة/معلّقة فات وقتها
         for r in conn.execute("SELECT id, date, to_time FROM leave_requests WHERE status IN ('pending', 'approved')").fetchall():
@@ -2624,7 +2626,74 @@ def me_presence_ping():
         notes = _device_notes(conn, emp['id'])
         conn.commit()
         return jsonify({'ok': True, 'continue': True, 'interval_s': interval, 'end_ms': st['end_ms'],
-                        'remaining_ms': max(0, remaining), 'check': chk, 'notes': notes})
+                        'remaining_ms': max(0, remaining), 'check': chk, 'notes': notes, 'share': bool(share)})
+    finally:
+        conn.close()
+
+
+@bp.route('/me/api/share/backfill', methods=['POST'])
+def me_share_backfill():
+    """نقاط مسار حفظها هاتف الموظف أثناء انقطاع الاتصال بالخادم (توقفه أو انقطاع الإنترنت) — تُضاف للمسار بأوقاتها الأصلية"""
+    import hashlib as _h
+    import hmac as _hm
+    raw = request.get_data() or b''
+    ts = request.headers.get('X-App-Ts', '')
+    good = _hm.new(APP_KEY.encode(), raw + b'|' + ts.encode(), _h.sha256).hexdigest()
+    try:
+        fresh = abs(time.time() * 1000 - float(ts)) < 600000
+    except ValueError:
+        fresh = False
+    if not (fresh and _hm.compare_digest(good, request.headers.get('X-App-Sig', ''))):
+        return jsonify({'ok': False, 'error': 'توقيع غير صحيح'}), 403
+    try:
+        d = json.loads(raw.decode('utf-8') or '{}')
+    except ValueError:
+        return jsonify({'ok': False, 'error': 'بيانات غير صالحة'}), 400
+    conn = db.get_db()
+    try:
+        acc, emp, _t = _quick_account(conn, (d.get('device') or request.headers.get('X-Device') or '').strip())
+        if not acc:
+            return jsonify({'ok': False, 'error': 'الهاتف غير مرتبط بحساب'}), 401
+        import shares
+        try:
+            from zoneinfo import ZoneInfo
+            tz = ZoneInfo(os.environ.get('ATT_TZ', 'Asia/Amman'))
+        except Exception:
+            tz = None
+        now_ms = time.time() * 1000
+        added, cache = 0, {}
+        pts = [x for x in (d.get('points') or [])[:500] if isinstance(x, dict)]
+        for x in sorted(pts, key=lambda x: float(x.get('t') or 0)):
+            try:
+                t, lat, lng = float(x['t']), float(x['lat']), float(x['lng'])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if not (now_ms - 86400000 < t <= now_ms + 60000) or not (-90 <= lat <= 90 and -180 <= lng <= 180):
+                continue
+            when = datetime.fromtimestamp(t / 1000, tz).replace(tzinfo=None) if tz else datetime.fromtimestamp(t / 1000)
+            wts = when.strftime('%Y-%m-%d %H:%M:%S')
+            # المشاركة التي كانت سارية في ذلك الوقت
+            sh = conn.execute("SELECT * FROM location_shares WHERE employee_id = ? AND kind = 'live' AND started_at <= ? "
+                              "AND ends_at >= ? AND (stopped_at IS NULL OR stopped_at >= ?) ORDER BY id DESC LIMIT 1",
+                              (emp['id'], wts, wts, wts)).fetchone()
+            if not sh:
+                continue
+            if x.get('mock'):
+                shares._flag(conn, sh['id'], 'موقع وهمي (Fake GPS) في نقاط أُرسلت بعد انقطاع الاتصال')
+                continue
+            if conn.execute("SELECT 1 FROM location_share_points WHERE share_id = ? AND ts = ?", (sh['id'], wts)).fetchone():
+                continue
+            acc_m = x.get('accuracy')
+            conn.execute("INSERT INTO location_share_points (share_id, ts, lat, lng, accuracy) VALUES (?, ?, ?, ?, ?)",
+                         (sh['id'], wts, lat, lng, acc_m))
+            conn.execute("UPDATE location_shares SET points = points + 1 WHERE id = ?", (sh['id'],))
+            # الموقع الحالي يتحدّث فقط إن كانت النقطة أحدث مما لدى الخادم
+            conn.execute("UPDATE location_shares SET lat = ?, lng = ?, accuracy = ?, updated_at = ? WHERE id = ? "
+                         "AND (updated_at IS NULL OR updated_at < ?)", (lat, lng, acc_m, wts, sh['id'], wts))
+            cache[sh['id']] = True
+            added += 1
+        conn.commit()
+        return jsonify({'ok': True, 'added': added})
     finally:
         conn.close()
 
@@ -2667,7 +2736,60 @@ def me_presence_confirm(conn, acc, emp, cfg):
     return jsonify({'ok': ok, 'message': 'شكراً — تم تأكيد وجودك' if ok else '', 'error': '' if ok else reason})
 
 
-def presence_sweep(conn=None):
+# ===== حماية من التنبيهات الكاذبة عند توقف الخادم أو انقطاع إنترنته =====
+# إذا لم تصل الهواتفُ الخادمَ لأن الخادم نفسه كان متوقفاً (أو انقطع إنترنت المدرسة) فهذا ليس «انقطاع هاتف»:
+# • توقف الخادم: «نبضة» تُسجَّل كل دقيقة من المجدول؛ فجوة ≥ 3 دقائق عند الإقلاع = كان متوقفاً.
+# • انقطاع الإنترنت والخادم يعمل: كل الهواتف النشطة (2 أو أكثر) صامتة معاً = الخلل عند الخادم لا عند الهواتف.
+# في الحالتين تُمنح الهواتف مهلة كاملة لتتصل من جديد قبل أي تنبيه، وتُمدَّد فحوص الحضور المعلّقة، ويُسجَّل الحدث في سجل التدقيق.
+OUTAGE_MIN = 3
+
+
+def _kv_get(conn, key):
+    r = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
+    return r['value'] if r else ''
+
+
+def _kv_set(conn, key, value):
+    conn.execute("INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
+
+
+def _outage_recovered(conn, p, now, since_ts, why):
+    """بعد عودة الاتصال: مهلة للهواتف + تمديد الفحوص المعلّقة + سجل تدقيق"""
+    hold = max(p['grace'], p['interval'] * 3) + 2
+    until = (now + timedelta(minutes=hold)).strftime('%Y-%m-%d %H:%M:%S')
+    _kv_set(conn, 'presence_grace_until', until)
+    conn.execute("UPDATE presence_checks SET expires_at = ? WHERE status = 'pending' AND expires_at < ?", (until, until))
+    text = (f"{why}: من {since_ts[:16]} إلى {now.strftime('%Y-%m-%d %H:%M')} — "
+            f"أُوقفت تنبيهات الانقطاع حتى {until[11:16]} ريثما تتصل الهواتف")
+    try:   # يُستدعى من المجدول (بلا جلسة مستخدم) فنكتب سجل التدقيق مباشرة باسم «النظام»
+        conn.execute("INSERT INTO audit_log (username, action_type, target_type, new_value, timestamp) VALUES (?, ?, ?, ?, ?)",
+                     ('النظام', 'server_outage', 'system', text, now.strftime('%Y-%m-%d %H:%M:%S')))
+    except Exception:   # noqa: BLE001
+        pass
+
+
+def outage_hold(conn, now=None):
+    """هل التنبيهات الزمنية (انقطاع الهاتف، فحص فائت، تأخر العودة) معلّقة الآن بسبب توقف الخادم؟"""
+    now_s = (now or now_local()).strftime('%Y-%m-%d %H:%M:%S')
+    until = _kv_get(conn, 'presence_grace_until')
+    return bool(_kv_get(conn, 'presence_net_silent')) or bool(until and now_s < until)
+
+
+def server_heartbeat(conn, p, now):
+    """يُستدعى كل دقيقة من المجدول فقط: يكشف أن الخادم كان متوقفاً (فجوة في النبضات)"""
+    ts = now.strftime('%Y-%m-%d %H:%M:%S')
+    last = _kv_get(conn, 'server_heartbeat')
+    if last:
+        try:
+            gap = (now - datetime.strptime(last[:19], '%Y-%m-%d %H:%M:%S')).total_seconds() / 60
+        except ValueError:
+            gap = 0
+        if gap >= OUTAGE_MIN:
+            _outage_recovered(conn, p, now, last, 'توقف الخادم')
+    _kv_set(conn, 'server_heartbeat', ts)
+
+
+def presence_sweep(conn=None, tick=False):
     """فحص دوري (كل دقيقة من المجدول، وعند فتح لوحة المتابعة):
     - هاتف أرسل قراءات اليوم ثم انقطع (أُطفئ، أُغلق التطبيق، بلا إنترنت) أثناء الدوام ← تنبيه «انقطاع الإشارة» مفتوح
     - الفحوص العشوائية التي انتهت مهلتها ← «لم يردّ»
@@ -2678,11 +2800,16 @@ def presence_sweep(conn=None):
         cfg = settings()
         p = _pcfg(cfg)
         now = now_local()
-        _expire_checks(conn, now)
+        if tick:
+            server_heartbeat(conn, p, now)
+        hold = outage_hold(conn, now)
+        if not hold:
+            _expire_checks(conn, now)
         if not p['enabled']:
             conn.commit()
             return
         date, ts = now.strftime('%Y-%m-%d'), now.strftime('%Y-%m-%d %H:%M:%S')
+        thr = max(p['grace'], p['interval'] * 3)
         if p['checks'] > 0:
             # جدولة الفحوص العشوائية لكل من سجّل حضوره اليوم (حتى لو كان التطبيق مغلقاً) ثم إرسال إشعار عند حلول موعدها
             for r in conn.execute("SELECT DISTINCT employee_id FROM mobile_punches WHERE date = ? AND status = 'accepted' AND kind = 'in'", (date,)).fetchall():
@@ -2693,6 +2820,27 @@ def presence_sweep(conn=None):
             _notify_due_checks(conn, now)
         last = {r['employee_id']: r['ts'] for r in conn.execute(
             "SELECT employee_id, MAX(ts) AS ts FROM presence_pings WHERE date = ? AND source = 'app' GROUP BY employee_id", (date,))}
+        # انقطاع جماعي: كل الهواتف النشطة صامتة معاً ← الخلل في الخادم/الإنترنت لا في الهواتف
+        active_gaps = []
+        for emp_id, last_ts in last.items():
+            emp = conn.execute("SELECT * FROM employees WHERE id = ?", (emp_id,)).fetchone()
+            acc = conn.execute("SELECT * FROM employee_accounts WHERE employee_id = ?", (emp_id,)).fetchone()
+            if emp and acc and presence_state(conn, emp, acc, cfg, now)['active']:
+                active_gaps.append(((now - datetime.strptime(last_ts, '%Y-%m-%d %H:%M:%S')).total_seconds() / 60, last_ts))
+        silent = [g for g in active_gaps if g[0] >= max(OUTAGE_MIN * 2, p['interval'] * 2)]
+        since = _kv_get(conn, 'presence_net_silent')
+        if len(active_gaps) >= 2 and len(silent) == len(active_gaps):
+            if not since:
+                _kv_set(conn, 'presence_net_silent', max(g[1] for g in active_gaps))
+            conn.commit()
+            return      # لا تنبيهات أثناء الانقطاع الجماعي
+        if since:       # عاد الاتصال: هاتف واحد على الأقل وصل
+            _kv_set(conn, 'presence_net_silent', '')
+            _outage_recovered(conn, p, now, since, 'انقطع اتصال كل الهواتف بالخادم (إنترنت الخادم أو النفق)')
+            hold = True
+        if hold:
+            conn.commit()
+            return      # مهلة بعد عودة الخادم: ننتظر أن تتصل الهواتف قبل الحكم بالانقطاع
         for emp_id, last_ts in last.items():
             emp = conn.execute("SELECT * FROM employees WHERE id = ?", (emp_id,)).fetchone()
             acc = conn.execute("SELECT * FROM employee_accounts WHERE employee_id = ?", (emp_id,)).fetchone()
@@ -2704,7 +2852,7 @@ def presence_sweep(conn=None):
                 conn.execute("UPDATE presence_events SET open = 0 WHERE employee_id = ? AND date = ? AND open = 1", (emp_id, date))
                 continue
             gap = (now - datetime.strptime(last_ts, '%Y-%m-%d %H:%M:%S')).total_seconds() / 60
-            if gap >= max(p['grace'], p['interval'] * 3) and not _exempt(conn, emp, acc, cfg, now):
+            if gap >= thr and not _exempt(conn, emp, acc, cfg, now):
                 if _event_upsert(conn, emp, date, 'no_signal', last_ts, ts, 'لم تصل قراءات من الهاتف (مطفأ، بلا إنترنت، أو أُغلق التطبيق)'):
                     _alert_employee(conn, emp, 'no_signal', gap, now)
         # في الدوام ولم يصل من هاتفه أي قراءة إطلاقاً اليوم (التطبيق لم يُفتح بعد الحضور، أو بصم على الجهاز فقط)

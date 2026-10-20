@@ -148,7 +148,7 @@ def _tick():
     # مراقبة الحضور أثناء الدوام: رصد الهواتف المنقطعة والفحوص الفائتة (مستقل عن التقرير المجدول)
     try:
         import mobile
-        mobile.presence_sweep()
+        mobile.presence_sweep(tick=True)
         mobile.leave_sweep()
     except Exception:   # noqa: BLE001 — لا يعطّل بقية المهام
         logger.exception('presence sweep failed')

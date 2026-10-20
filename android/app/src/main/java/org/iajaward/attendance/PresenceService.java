@@ -20,6 +20,7 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.SystemClock;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.InputStream;
@@ -52,6 +53,12 @@ public class PresenceService extends Service implements LocationListener {
     // في التتبع كل ثانية قد يتأخر الإرسال إن كانت الشبكة بطيئة: لا نرسل طلباً جديداً قبل انتهاء السابق
     private final java.util.concurrent.atomic.AtomicBoolean posting = new java.util.concurrent.atomic.AtomicBoolean(false);
     private long lastCheckNotified = -1;
+    // مشاركة الموقع/التتبع المستمر سارية (من ردّ الخادم): عندها نخزّن نقاط المسار أثناء الانقطاع ونرسلها لاحقاً
+    private volatile boolean shareActive = false;
+    private static final String QUEUE_KEY = "share_queue";
+    private static final int QUEUE_MAX = 5000, BATCH = 300;
+    private static final long QUEUE_MIN_GAP_MS = 5000;   // نقطة كل 5 ثوانٍ على الأكثر أثناء الانقطاع (توفير مساحة)
+    private final Object qLock = new Object();
 
     private final Runnable tick = new Runnable() {
         @Override public void run() {
@@ -82,6 +89,7 @@ public class PresenceService extends Service implements LocationListener {
         }
         // أندرويد 14 يرفض خدمة الموقع دون إذن الموقع: نتوقف بهدوء (يرصد الخادم غياب القراءات)
         if (!hasLocationPermission()) { stopSelf(); return START_NOT_STICKY; }
+        shareActive = sp.getBoolean("share_active", false);
         try { startInForeground(); } catch (Exception e) { stopSelf(); return START_NOT_STICKY; }
         if (handler == null) handler = new Handler(Looper.getMainLooper());
         startLocation();
@@ -160,6 +168,7 @@ public class PresenceService extends Service implements LocationListener {
 
     private void sendPing() {
         final String body;
+        final Location snap;
         try {
             JSONObject o = new JSONObject();
             o.put("device", device);
@@ -178,14 +187,19 @@ public class PresenceService extends Service implements LocationListener {
                 o.put("mock", isMock(l));
             }
             body = o.toString();
+            snap = (enabled && l != null) ? new Location(l) : null;
         } catch (Exception e) {
             return;
         }
-        if (!posting.compareAndSet(false, true)) return;
-        new Thread(() -> { try { post(body); } finally { posting.set(false); } }).start();
+        if (!posting.compareAndSet(false, true)) {
+            enqueue(snap);    // الإرسال السابق ما زال عالقاً (شبكة بطيئة/منقطعة): لا نُضيّع النقطة
+            return;
+        }
+        new Thread(() -> { try { post(body, snap); } finally { posting.set(false); } }).start();
     }
 
-    private void post(String body) {
+    /** طلب موقّع بمفتاح التطبيق — يُرجع [رمز HTTP، نص الرد] أو يرمي استثناء عند انقطاع الاتصال */
+    private Object[] signedPost(String path, String body) throws Exception {
         HttpURLConnection c = null;
         try {
             String ts = String.valueOf(System.currentTimeMillis());
@@ -195,7 +209,7 @@ public class PresenceService extends Service implements LocationListener {
             mac.update(raw);
             mac.update(("|" + ts).getBytes(StandardCharsets.UTF_8));
             String sig = hex(mac.doFinal());
-            c = (HttpURLConnection) new URL(BuildConfig.BASE_URL + "/me/api/presence/ping").openConnection();
+            c = (HttpURLConnection) new URL(BuildConfig.BASE_URL + path).openConnection();
             c.setConnectTimeout(15000);
             c.setReadTimeout(20000);
             c.setDoOutput(true);
@@ -217,10 +231,34 @@ public class PresenceService extends Service implements LocationListener {
                 while ((n = is.read(buf)) > 0) sb.append(new String(buf, 0, n, StandardCharsets.UTF_8));
                 is.close();
             }
-            JSONObject r = new JSONObject(sb.length() > 0 ? sb.toString() : "{}");
+            return new Object[]{code, sb.toString()};
+        } finally {
+            if (c != null) c.disconnect();
+        }
+    }
+
+    private void post(String body, Location snap) {
+        JSONObject r;
+        int code;
+        try {
+            Object[] res = signedPost("/me/api/presence/ping", body);
+            code = (Integer) res[0];
+            // الخادم متوقف أو النفق يرد بصفحة خطأ (5xx) — ليس ردّاً من النظام
+            r = new JSONObject(((String) res[1]).isEmpty() ? "{}" : (String) res[1]);
+        } catch (Exception e) {
+            enqueue(snap);     // بلا اتصال بالخادم: نحفظ النقطة لنرسلها عند عودته فلا ينقطع المسار
+            return;
+        }
+        try {
             if (!r.optBoolean("continue", true) || code == 401 || code == 403) {
                 handler.post(this::stopSelf);
                 return;
+            }
+            if (code >= 500) { enqueue(snap); return; }
+            boolean sa = r.optBoolean("share", false);
+            if (sa != shareActive) {
+                shareActive = sa;
+                getSharedPreferences("presence", MODE_PRIVATE).edit().putBoolean("share_active", sa).apply();
             }
             long iv = r.optLong("interval_s", 0) * 1000L;
             if (iv >= 1000L && iv != intervalMs) {   // تغيّر الفاصل (مثلاً تتبع مستمر كل 15 ثانية): نعيد ضبط قراءات الموقع
@@ -238,10 +276,71 @@ public class PresenceService extends Service implements LocationListener {
             JSONObject chk = r.optJSONObject("check");
             if (chk != null) notifyCheck(chk.optLong("id", 0));
             NotesJob.show(this, r.optJSONArray("notes"));
-        } catch (Exception ignored) {
-            // بلا إنترنت: يرصد الخادم الفجوة عند عودة الاتصال (انقطاع الإشارة)
-        } finally {
-            if (c != null) c.disconnect();
+            flushQueue();      // عاد الاتصال: نرسل نقاط المسار المحفوظة أثناء الانقطاع
+        } catch (Exception ignored) { }
+    }
+
+    // ===== نقاط المسار المحفوظة أثناء الانقطاع (تُرسل دفعة واحدة عند عودة الاتصال) =====
+    private JSONArray readQueue() {
+        try { return new JSONArray(getSharedPreferences("presence", MODE_PRIVATE).getString(QUEUE_KEY, "[]")); }
+        catch (Exception e) { return new JSONArray(); }
+    }
+
+    private void writeQueue(JSONArray q) {
+        getSharedPreferences("presence", MODE_PRIVATE).edit().putString(QUEUE_KEY, q.toString()).apply();
+    }
+
+    private void enqueue(Location l) {
+        if (l == null || !shareActive) return;
+        synchronized (qLock) {
+            try {
+                JSONArray q = readQueue();
+                long t = l.getTime();   // وقت قراءة الموقع (من الأقمار الصناعية للـGPS)
+                if (q.length() > 0 && t - q.getJSONObject(q.length() - 1).optLong("t", 0) < QUEUE_MIN_GAP_MS) return;
+                JSONObject p = new JSONObject();
+                p.put("t", t);
+                p.put("lat", l.getLatitude());
+                p.put("lng", l.getLongitude());
+                p.put("accuracy", (double) l.getAccuracy());
+                p.put("mock", isMock(l));
+                q.put(p);
+                if (q.length() > QUEUE_MAX) {   // انقطاع طويل جداً: نُسقط الأقدم
+                    JSONArray k = new JSONArray();
+                    for (int i = q.length() - QUEUE_MAX; i < q.length(); i++) k.put(q.get(i));
+                    q = k;
+                }
+                writeQueue(q);
+            } catch (Exception ignored) { }
+        }
+    }
+
+    private void flushQueue() {
+        for (int round = 0; round < 40; round++) {
+            JSONArray batch = new JSONArray();
+            synchronized (qLock) {
+                JSONArray q = readQueue();
+                if (q.length() == 0) return;
+                for (int i = 0; i < Math.min(BATCH, q.length()); i++) batch.put(q.opt(i));
+            }
+            try {
+                JSONObject o = new JSONObject();
+                o.put("device", device);
+                o.put("points", batch);
+                Object[] res = signedPost("/me/api/share/backfill", o.toString());
+                int code = (Integer) res[0];
+                if (code == 401 || code == 403 || code == 400) {   // الحساب/الطلب مرفوض: لا فائدة من الإعادة
+                    synchronized (qLock) { writeQueue(new JSONArray()); }
+                    return;
+                }
+                if (code != 200) return;   // نعيد المحاولة مع الإرسال التالي
+            } catch (Exception e) {
+                return;
+            }
+            synchronized (qLock) {   // نحذف ما أُرسل فقط (قد تكون أُضيفت نقاط جديدة في الأثناء)
+                JSONArray q = readQueue(), k = new JSONArray();
+                for (int i = batch.length(); i < q.length(); i++) k.put(q.opt(i));
+                writeQueue(k);
+            }
         }
     }
 
