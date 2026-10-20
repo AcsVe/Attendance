@@ -113,12 +113,12 @@ def merge_same_day(df):
 
 
 OUT_COLS = ['name', 'dept', 'date', 'weekday', 'time_in', 'time_out', 'status', 'late_minutes',
-            'working_hours', 'shift', 'early_minutes', 'out_flag']
+            'working_hours', 'shift', 'early_minutes', 'out_flag', 'break_minutes']
 
 
 def analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
             official_holidays, shift1_names=None, shift2_names=None,
-            late_permissions=None, departure_permissions=None):
+            late_permissions=None, departure_permissions=None, device_breaks=None):
     """
     punches_df: أعمدة name, date (نص YYYY-MM-DD), dept, time_in, time_out
     settings: قاموس من db.get_all_settings()
@@ -134,6 +134,9 @@ def analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
           دقائق التأخير الخام (لا تقل عن صفر).
         - يُطبَّق بعد الحساب الأولي للتأخير وقبل تحديد الحالة، لذا قد يُعيد
           الحالة من "متأخر" إلى "في الوقت".
+    device_breaks: {(name, date_str): [('HH:MM:SS', 'HH:MM:SS'), ...]} — خروج/عودة من البصمات الوسطى في جهاز البصمة
+        (أول بصمة = حضور، آخر بصمة = انصراف، وما بينهما أزواج خروج ← عودة). تُخصم من ساعات العمل
+        مع إذن المغادرة دون تكرار الفترات المتداخلة، ومجموعها في break_minutes.
     departure_permissions: {(name, date_str): {'departure_time': str, 'return_time': str}}
         - تخصم مدة المغادرة المؤقتة من ساعات العمل المحسوبة فقط، بدون أي
           تأثير على التأخير أو تصنيف الحالة.
@@ -156,6 +159,7 @@ def analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
     shift_enabled = settings.get('shift_enabled', '0') == '1'
     late_permissions = late_permissions or {}
     departure_permissions = departure_permissions or {}
+    device_breaks = device_breaks or {}
 
     att_time = parse_time_str(settings.get('attendance_time', '09:00'))
     dep_time = parse_time_str(settings.get('departure_time', '15:00'))
@@ -249,32 +253,64 @@ def analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
                 pass
         return raw
 
-    def calc_hours(row):
+    def _absences(row, start, end):
+        """فترات الغياب داخل اليوم (إذن مغادرة + خروج من جهاز البصمة) بالدقائق على محور [الحضور، الانصراف]"""
+        perm_iv, brk_iv = [], []
+
+        def add(lst, a, b):
+            try:
+                p1, p2 = to_minutes(parse_time_str(str(a)[:8])), to_minutes(parse_time_str(str(b)[:8]))
+            except (ValueError, TypeError, AttributeError):
+                return
+            if p2 < p1:
+                p2 += 24 * 60
+            if end > 24 * 60 and p1 < start:   # دوام يمتد بعد منتصف الليل وفترة بعده
+                p1, p2 = p1 + 24 * 60, p2 + 24 * 60
+            # الجزء الواقع بين الحضور والانصراف فقط: إذن في أول الدوام أو آخره لم يكن ضمن المدة المحسوبة أصلاً
+            a2, b2 = max(p1, start), min(p2, end)
+            if b2 > a2:
+                lst.append((a2, b2))
+        perm = departure_permissions.get((row['name'], row_date_str(row)))
+        if perm and perm.get('departure_time') and perm.get('return_time'):
+            add(perm_iv, perm['departure_time'], perm['return_time'])
+        for a, b in device_breaks.get((row['name'], row_date_str(row)), []):
+            add(brk_iv, a, b)
+        return perm_iv, brk_iv
+
+    def _union_len(ivs):
+        total, cur_a, cur_b = 0, None, None
+        for a, b in sorted(ivs):
+            if cur_b is None or a > cur_b:
+                if cur_b is not None:
+                    total += cur_b - cur_a
+                cur_a, cur_b = a, b
+            else:
+                cur_b = max(cur_b, b)
+        return total + ((cur_b - cur_a) if cur_b is not None else 0)
+
+    def _span(row):
         tin, tout = row.get('time_in_parsed'), row.get('time_out_parsed')
         if tin is None or tout is None or pd.isna(tin) or pd.isna(tout):
-            return 0.0
+            return None
         start, end = to_minutes(tin), to_minutes(tout)
         if end < start:
             end += 24 * 60
-        hours = (end - start) / 60
-        perm = departure_permissions.get((row['name'], row_date_str(row)))
-        if perm:
-            try:
-                dep_t = parse_time_str(perm.get('departure_time'))
-                ret_t = parse_time_str(perm.get('return_time'))
-                if dep_t is not None and ret_t is not None:
-                    # يُخصم فقط الجزء من الإذن الواقع بين الحضور والانصراف: إذن في أول الدوام أو آخره
-                    # (حضر بعده أو انصرف عند بدايته) لم يكن أصلاً ضمن المدة المحسوبة فلا يُخصم مرتين
-                    p1, p2 = to_minutes(dep_t), to_minutes(ret_t)
-                    if p2 < p1:
-                        p2 += 24 * 60
-                    if end > 24 * 60 and p1 < start:   # دوام يمتد بعد منتصف الليل وإذن بعده
-                        p1, p2 = p1 + 24 * 60, p2 + 24 * 60
-                    deduct = max(0, min(p2, end) - max(p1, start))
-                    hours = max(0.0, hours - deduct / 60)
-            except ValueError:
-                pass
-        return round(hours, 2)
+        return start, end
+
+    def calc_hours(row):
+        sp = _span(row)
+        if not sp:
+            return 0.0
+        start, end = sp
+        perm_iv, brk_iv = _absences(row, start, end)
+        deduct = _union_len(perm_iv + brk_iv)   # فترة يغطيها الإذن والبصمة معاً تُخصم مرة واحدة
+        return round(max(0.0, (end - start - deduct) / 60), 2)
+
+    def calc_breaks(row):
+        sp = _span(row)
+        if not sp:
+            return 0
+        return int(_union_len(_absences(row, *sp)[1]))
 
     def sched_end(row):
         """وقت نهاية الدوام المقرر لهذا الصف (None لأقسام الدوام المفتوح)"""
@@ -348,6 +384,7 @@ def analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
     df['late_minutes'] = df.apply(calc_late, axis=1)
     df['working_hours'] = df.apply(calc_hours, axis=1)
     df['early_minutes'] = df.apply(calc_early, axis=1)
+    df['break_minutes'] = df.apply(calc_breaks, axis=1)
 
     def get_status(row):
         tin, tout = row.get('time_in_parsed'), row.get('time_out_parsed')

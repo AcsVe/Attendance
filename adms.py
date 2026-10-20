@@ -46,6 +46,15 @@ def init_tables(conn):
         UNIQUE (sn, pin, ts)
     )''')
     conn.execute("CREATE INDEX IF NOT EXISTS idx_adms_logs_ts ON adms_logs (ts)")
+    # البصمات السابقة الواصلة عبر الإنترنت → جدول أوقات البصمات (مرة واحدة؛ المكرر يُتجاهل)
+    try:
+        conn.execute('''CREATE TABLE IF NOT EXISTS device_punch_times (
+            name TEXT NOT NULL, date TEXT NOT NULL, time TEXT NOT NULL, source TEXT,
+            PRIMARY KEY (name, date, time))''')
+        conn.execute("INSERT OR IGNORE INTO device_punch_times (name, date, time, source) "
+                     "SELECT matched, substr(ts, 1, 10), substr(ts, 12, 8), 'adms' FROM adms_logs WHERE COALESCE(matched, '') != ''")
+    except Exception:   # noqa: BLE001 — الجدول يُنشأ في db.init_db
+        pass
 
 
 def _text(body, status=200):
@@ -145,6 +154,8 @@ def _store_attlog(conn, dev, raw, stamp):
         count += 1
         if cur.rowcount and name:
             by_day.setdefault((name, dt.strftime('%Y-%m-%d')), []).append(dt.strftime('%H:%M:%S'))
+            conn.execute("INSERT OR IGNORE INTO device_punch_times (name, date, time, source) VALUES (?, ?, ?, 'adms')",
+                         (name, dt.strftime('%Y-%m-%d'), dt.strftime('%H:%M:%S')))
     depts = {r['name']: r['dept'] or '' for r in conn.execute("SELECT name, dept FROM employees")}
     for (name, d), times in by_day.items():
         lo, hi = min(times), max(times)

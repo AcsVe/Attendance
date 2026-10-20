@@ -31,8 +31,11 @@ def init_tables(conn):
         last_reset_id INTEGER,
         last_adms_at TEXT
     )''')
-    if 'last_share_id' not in {r['name'] for r in conn.execute("PRAGMA table_info(user_notify_tokens)")}:
+    cols = {r['name'] for r in conn.execute("PRAGMA table_info(user_notify_tokens)")}
+    if 'last_share_id' not in cols:
         conn.execute("ALTER TABLE user_notify_tokens ADD COLUMN last_share_id INTEGER")
+    if 'last_corr_id' not in cols:
+        conn.execute("ALTER TABLE user_notify_tokens ADD COLUMN last_corr_id INTEGER")
 
 
 def _h(t):
@@ -55,11 +58,11 @@ def api_notify_token():
     conn = db.get_db()
     try:
         # نبدأ من «الآن» حتى لا تصل دفعة إشعارات قديمة عند أول تشغيل
-        conn.execute("INSERT INTO user_notify_tokens (token_hash, user_id, last_event_id, last_leave_id, last_reset_id, last_adms_at, last_share_id) "
-                     "VALUES (?, ?, ?, ?, ?, datetime('now'), ?)",
+        conn.execute("INSERT INTO user_notify_tokens (token_hash, user_id, last_event_id, last_leave_id, last_reset_id, last_adms_at, "
+                     "last_share_id, last_corr_id) VALUES (?, ?, ?, ?, ?, datetime('now'), ?, ?)",
                      (_h(tok), session['user_id'], _max(conn, "SELECT MAX(id) FROM presence_events"),
                       _max(conn, "SELECT MAX(id) FROM leave_requests"), _max(conn, "SELECT MAX(id) FROM password_reset_requests"),
-                      _max(conn, "SELECT MAX(id) FROM location_shares")))
+                      _max(conn, "SELECT MAX(id) FROM location_shares"), _max(conn, "SELECT MAX(id) FROM correction_requests")))
         conn.commit()
         return jsonify({'ok': True, 'token': tok})
     finally:
@@ -107,6 +110,16 @@ def api_admin_notes_pull():
         lv_max = _max(conn, "SELECT MAX(id) FROM leave_requests")
         rr_max = _max(conn, "SELECT MAX(id) FROM password_reset_requests")
         sh_max = _max(conn, "SELECT MAX(id) FROM location_shares")
+        cr_max = _max(conn, "SELECT MAX(id) FROM correction_requests")
+        if can_emp:
+            rows = conn.execute("SELECT name, date, kind FROM correction_requests WHERE id > ? AND id <= ? AND status = 'pending' ORDER BY id",
+                                (t['last_corr_id'] or 0, cr_max)).fetchall()
+            if rows:
+                kinds = {'in': 'حضور', 'out': 'انصراف', 'both': 'حضور وانصراف'}
+                names = [f"{r['name']} ({kinds.get(r['kind'], '')} {r['date'][5:]})" for r in rows[:4]]
+                notes.append({'id': 400000 + cr_max % 100000, 'title': f'طلبات تصحيح: {len(rows)}',
+                              'body': '، '.join(names) + (f" و{len(rows) - 4} غيرها" if len(rows) > 4 else ''),
+                              'url': '/dashboard#manual'})
         if is_admin:
             rows = conn.execute("SELECT name, kind FROM presence_events WHERE id > ? AND id <= ? ORDER BY id",
                                 (t['last_event_id'] or 0, ev_max)).fetchall()
@@ -142,8 +155,8 @@ def api_admin_notes_pull():
                               'body': '، '.join(names) + (f" و{len(rows) - 4} غيرها" if len(rows) > 4 else ''),
                               'url': '/dashboard#leaves'})
         conn.execute("UPDATE user_notify_tokens SET last_pull_at = datetime('now'), last_event_id = ?, last_leave_id = ?, "
-                     "last_reset_id = ?, last_adms_at = datetime('now'), last_share_id = ? WHERE token_hash = ?",
-                     (ev_max, lv_max, rr_max, sh_max, t['token_hash']))
+                     "last_reset_id = ?, last_adms_at = datetime('now'), last_share_id = ?, last_corr_id = ? WHERE token_hash = ?",
+                     (ev_max, lv_max, rr_max, sh_max, cr_max, t['token_hash']))
         conn.commit()
         return jsonify({'ok': True, 'notes': notes})
     finally:

@@ -222,7 +222,8 @@ def pull_attendance(device_row, date_from=None, date_to=None, uid_to_employee=No
         name = uid_to_employee[uid]
         time_in = stamps[0].strftime('%H:%M:%S')
         time_out = stamps[-1].strftime('%H:%M:%S') if len(stamps) > 1 else ''
-        rows.append({'name': name, 'date': date_str, 'time_in': time_in, 'time_out': time_out})
+        rows.append({'name': name, 'date': date_str, 'time_in': time_in, 'time_out': time_out,
+                     'times': [x.strftime('%H:%M:%S') for x in stamps]})
 
     return {'ok': True, 'rows': rows, 'unmatched_uids': sorted(unmatched_uids)}
 
@@ -431,6 +432,8 @@ def _record_live_punch_and_analyze(name, date_str, time_str):
                 "INSERT INTO punches (name, date, dept, time_in, time_out, batch_id) VALUES (?, ?, ?, ?, ?, ?)",
                 (name, date_str, dept, time_str, time_str, 'live')
             )
+        conn.execute("INSERT OR IGNORE INTO device_punch_times (name, date, time, source) VALUES (?, ?, ?, 'live')",
+                     (name, date_str, time_str))
         conn.commit()
 
         # استيراد مؤجَّل (لا بأعلى الملف) لتفادي حلقة استيراد مع app.py، الذي

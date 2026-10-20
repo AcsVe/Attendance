@@ -92,11 +92,14 @@ import admin_notes as _admin_notes  # noqa: E402 — إشعارات أندروي
 app.register_blueprint(_admin_notes.bp)
 import shares as _shares  # noqa: E402 — مشاركة الموقع من تطبيق الموظف
 app.register_blueprint(_shares.bp)
+import corrections as _corrections  # noqa: E402 — طلبات تصحيح الحضور/الانصراف من تطبيق الموظف
+app.register_blueprint(_corrections.bp)
 try:
     _c = db.get_db()
     _adms.init_tables(_c)
     _admin_notes.init_tables(_c)
     _shares.init_tables(_c)
+    _corrections.init_tables(_c)
     _c.commit()
     _c.close()
 except Exception:
@@ -952,14 +955,133 @@ def api_reports_export_csv():
     buf.write('﻿')  # BOM حتى يفتح إكسل الملف بترميز عربي صحيح
     writer = csv.writer(buf)
     writer.writerow(LL(['الاسم', 'القسم', 'التاريخ', 'وقت الحضور', 'وقت الانصراف', 'الحالة', 'دقائق التأخير', 'ساعات العمل', 'المناوبة',
-                        'دقائق المغادرة المبكرة', 'ملاحظة الانصراف']))
+                        'دقائق المغادرة المبكرة', 'ملاحظة الانصراف', 'خروج مؤقت من البصمة (د)']))
     for r in filtered:
         writer.writerow([r['name'], r['dept'] or '', r['date'], r['time_in'] or '', r['time_out'] or '',
                           L(r['status'] or ''), r['late_minutes'], r['working_hours'], r['shift'] or '',
-                          r.get('early_minutes') or 0, L(OUT_FLAG_LABELS.get(r.get('out_flag') or '', ''))])
+                          r.get('early_minutes') or 0, L(OUT_FLAG_LABELS.get(r.get('out_flag') or '', '')), r.get('break_minutes') or 0])
     mem = io.BytesIO(buf.getvalue().encode('utf-8'))
     return send_file(mem, mimetype='text/csv', as_attachment=True,
                       download_name=f"attendance_report_{datetime.now().strftime('%Y%m%d_%H%M')}.csv")
+
+
+# ============================================================
+# ===== الكشف الشهري (للرواتب): مجاميع كل موظف لشهر واحد =====
+# ============================================================
+_MONTHLY_COLS = [
+    ('name', 'الموظف'), ('dept', 'القسم'), ('present', 'أيام الحضور'), ('absent', 'أيام الغياب'),
+    ('late_days', 'أيام التأخير'), ('late_minutes', 'دقائق التأخير'), ('early_days', 'أيام المغادرة المبكرة'),
+    ('early_minutes', 'دقائق المغادرة المبكرة'), ('no_out', 'بدون سجل انصراف'), ('auto_out', 'انصراف تلقائي'),
+    ('break_minutes', 'خروج من البصمة (د)'), ('exceptions', 'استثناءات/إجازات'), ('weekend_work', 'أيام عمل في العطلة'),
+    ('hours', 'ساعات العمل'), ('ot_minutes', 'دقائق العمل الإضافي'),
+]
+
+
+def _monthly_summary(args):
+    month = (args.get('month') or datetime.now().strftime('%Y-%m'))[:7]
+    try:
+        datetime.strptime(month, '%Y-%m')
+    except ValueError:
+        month = datetime.now().strftime('%Y-%m')
+    try:
+        grace = max(0, int(args.get('grace') or 0))
+    except (TypeError, ValueError):
+        grace = 0
+    conn = db.get_db()
+    try:
+        rows = [dict(r) for r in conn.execute("SELECT * FROM report_cache WHERE date LIKE ? ORDER BY name, date", (month + '%',))]
+        rows = _apply_common_filters(rows, {'dept': args.get('dept', ''), 'q': args.get('q', '')})
+        settings = db.get_all_settings()
+        dept_times = {r['dept']: (parse_time_str(r['attendance_time']) if r['attendance_time'] else None,
+                                  parse_time_str(r['departure_time']) if r['departure_time'] else None)
+                      for r in conn.execute("SELECT dept, attendance_time, departure_time FROM dept_attendance_settings")}
+        shift1 = json.loads(db.get_setting('shift1_names_json', '[]'))
+        shift2 = json.loads(db.get_setting('shift2_names_json', '[]'))
+    finally:
+        conn.close()
+    ot = {}
+    for rec in overtime_engine.calculate(rows, settings, dept_times, shift1, shift2, grace_minutes=grace):
+        ot[rec['name']] = ot.get(rec['name'], 0) + rec['ot_minutes']
+    late_st = ('متأخر', 'تأخير بسيط')
+    out = {}
+    for r in rows:
+        x = out.setdefault(r['name'], {k: 0 for k, _ in _MONTHLY_COLS} | {'name': r['name'], 'dept': r['dept'] or ''})
+        if r['time_in']:
+            x['present'] += 1
+            # عمل في العطلة الأسبوعية: الجمعة، والسبت إن لم يكن له دوام خاص مفعّل
+            if r['weekday'] == 4 or (r['weekday'] == 5 and settings.get('sat_time_enabled') != '1'):
+                x['weekend_work'] += 1
+        if r['status'] == 'غائب':
+            x['absent'] += 1
+        if r['status'] in late_st:
+            x['late_days'] += 1
+        x['late_minutes'] += int(r['late_minutes'] or 0)
+        if r.get('early_minutes'):
+            x['early_days'] += 1
+            x['early_minutes'] += int(r['early_minutes'])
+        if r.get('out_flag') == 'missing':
+            x['no_out'] += 1
+        elif r.get('out_flag') == 'auto':
+            x['auto_out'] += 1
+        x['break_minutes'] += int(r.get('break_minutes') or 0)
+        if r['status'] == 'استثناء':
+            x['exceptions'] += 1
+        x['hours'] += float(r['working_hours'] or 0)
+    for name, x in out.items():
+        x['hours'] = round(x['hours'], 2)
+        x['ot_minutes'] = int(ot.get(name, 0))
+    result = sorted(out.values(), key=lambda x: ((x['dept'] or ''), x['name']))
+    totals = {k: (round(sum(x[k] for x in result), 2) if k not in ('name', 'dept') else '') for k, _ in _MONTHLY_COLS}
+    return month, grace, result, totals
+
+
+@app.route('/api/reports/monthly')
+@login_required
+def api_reports_monthly():
+    month, grace, result, totals = _monthly_summary(request.args)
+    fmt = request.args.get('format')
+    if fmt in ('xlsx', 'csv'):
+        header = LL([h for _, h in _MONTHLY_COLS])
+        data = [[x[k] for k, _ in _MONTHLY_COLS] for x in result]
+        fname = f"monthly-{month}"
+        if fmt == 'csv':
+            buf = io.StringIO()
+            buf.write('\ufeff')
+            w = csv.writer(buf)
+            w.writerow(header)
+            w.writerows(data)
+            return send_file(io.BytesIO(buf.getvalue().encode('utf-8')), mimetype='text/csv', as_attachment=True,
+                             download_name=fname + '.csv')
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment
+        wb = Workbook()
+        ws = wb.active
+        ws.title = L('الكشف الشهري')[:31]
+        ws.sheet_view.rightToLeft = _ui_lang(request) != 'en'
+        org = db.get_setting('org_name', '') or ''
+        ws.append([f"{org} — {L('الكشف الشهري')} {month}" + (f" — {L('فترة سماح العمل الإضافي')}: {grace}" if grace else '')])
+        ws['A1'].font = Font(bold=True, size=13)
+        ws.append([])
+        ws.append(header)
+        for c in ws[3]:
+            c.font = Font(bold=True, color='FFFFFF')
+            c.fill = PatternFill('solid', fgColor='1B6E8C')
+            c.alignment = Alignment(horizontal='center', wrap_text=True)
+        for row in data:
+            ws.append(row)
+        ws.append([L('المجموع'), ''] + [totals[k] for k, _ in _MONTHLY_COLS[2:]])
+        for c in ws[ws.max_row]:
+            c.font = Font(bold=True)
+        for i, wdt in enumerate([24, 18] + [12] * (len(_MONTHLY_COLS) - 2), 1):
+            ws.column_dimensions[ws.cell(row=3, column=i).column_letter].width = wdt
+        ws.freeze_panes = 'C4'
+        mem = io.BytesIO()
+        wb.save(mem)
+        mem.seek(0)
+        return send_file(mem, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                         as_attachment=True, download_name=fname + '.xlsx')
+    return jsonify({'ok': True, 'month': month, 'grace': grace, 'rows': result, 'totals': totals,
+                    'cols': [{'key': k, 'label': h} for k, h in _MONTHLY_COLS]})
 
 
 @app.route('/api/overtime', methods=['POST'])
@@ -2043,6 +2165,37 @@ def api_upload():
     return jsonify(result)
 
 
+DEVICE_DOUBLE_TAP_SEC = 120   # بصمتان خلال دقيقتين = ضغطة مكررة (تُحسب بصمة واحدة)
+
+
+def _device_breaks(conn):
+    """البصمات الوسطى في جهاز البصمة كخروج ← عودة لكل (موظف، يوم):
+    أول بصمة = حضور، آخر بصمة = انصراف، وما بينهما أزواج (خروج، عودة). بصمة وسطى منفردة
+    (عدد فردي) لا يُعرف أهي خروج أم عودة فتُهمَل. لا تُطبَّق على من طريقة توثيقه لا تشمل جهاز البصمة."""
+    modes = {r['name']: (r['attendance_mode'] or 'both') for r in conn.execute("SELECT name, attendance_mode FROM employees")}
+    days = {}
+    for r in conn.execute("SELECT name, date, time FROM device_punch_times ORDER BY name, date, time"):
+        if modes.get(r['name'], 'both') not in ('both', 'device', 'device_qr'):
+            continue
+        lst = days.setdefault((r['name'], r['date']), [])
+        try:
+            t = datetime.strptime(r['time'][:8], '%H:%M:%S')
+        except ValueError:
+            continue
+        if lst and (t - lst[-1]).total_seconds() < DEVICE_DOUBLE_TAP_SEC:
+            continue
+        lst.append(t)
+    out = {}
+    for key, ts in days.items():
+        mids = ts[1:-1]
+        if len(mids) < 2:
+            continue
+        pairs = [(mids[i].strftime('%H:%M:%S'), mids[i + 1].strftime('%H:%M:%S')) for i in range(0, len(mids) - 1, 2)]
+        if pairs:
+            out[key] = pairs
+    return out
+
+
 def run_full_analysis(conn):
     """
     ينفّذ نفس منطق /api/analyze على اتصال قاعدة بيانات مفتوح مُمرَّر من
@@ -2058,6 +2211,14 @@ def run_full_analysis(conn):
         "AND NOT (COALESCE(e.attendance_mode, 'both') IN ('mobile', 'qr', 'mobile_qr') AND COALESCE(p.batch_id, '') NOT IN ('mobile', 'kiosk'))").fetchall()
     # كل مصدر يُحتسب فقط إن كانت طريقة توثيق الموظف تشمله (انظر MODE_SOURCES في mobile.py)
     punches_df = pd.DataFrame([dict(r) for r in punches_rows])
+    # إدخال يدوي (أو طلب تصحيح معتمد) ليوم لا بصمة له إطلاقاً: نضيف له صفاً ليظهر في التقارير
+    # (كان الإدخال اليدوي يصحّح أيام البصمات الموجودة فقط)
+    _have = set(zip(punches_df['name'], punches_df['date'])) if not punches_df.empty else set()
+    _depts = {r['name']: r['dept'] for r in conn.execute("SELECT name, dept FROM employees")}
+    _extra = [{'name': r['name'], 'date': r['date'], 'dept': _depts.get(r['name'], ''), 'time_in': None, 'time_out': None}
+              for r in conn.execute("SELECT name, date FROM manual_time_entries") if (r['name'], r['date']) not in _have]
+    if _extra:
+        punches_df = pd.concat([punches_df, pd.DataFrame(_extra)], ignore_index=True)
 
     settings = db.get_all_settings()
 
@@ -2087,11 +2248,13 @@ def run_full_analysis(conn):
         "SELECT name, date, departure_time, return_time FROM departure_permissions").fetchall()
     departure_permissions = {(r['name'], r['date']): dict(r) for r in dep_perm_rows}
 
+    device_breaks = _device_breaks(conn) if db.get_setting('device_breaks', '1') == '1' else {}
+
     forced_rows = conn.execute("SELECT name, date FROM forced_absences").fetchall()
     forced_set = {(r['name'], r['date']) for r in forced_rows}
 
     cache_cols = ['name', 'dept', 'date', 'weekday', 'time_in', 'time_out', 'status', 'late_minutes', 'working_hours', 'shift',
-                  'early_minutes', 'out_flag']
+                  'early_minutes', 'out_flag', 'break_minutes']
     if punches_df.empty:
         result = pd.DataFrame(columns=cache_cols)
     else:
@@ -2104,7 +2267,7 @@ def run_full_analysis(conn):
             settings['_now'] = datetime.now().strftime('%Y-%m-%d %H:%M')
         result = analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
                           official_holidays, shift1_names, shift2_names,
-                          late_permissions, departure_permissions)
+                          late_permissions, departure_permissions, device_breaks)
 
     # ===== تطبيق "الغياب الإجباري" - يُجبر أي (موظف، تاريخ) مسجَّل بجدول
     # forced_absences يُحسب "غائب" فعلياً، بما في ذلك تحويل "عطلة أسبوعية"
@@ -2128,6 +2291,7 @@ def run_full_analysis(conn):
                 result.loc[mask, 'working_hours'] = 0.0
                 result.loc[mask, 'early_minutes'] = 0
                 result.loc[mask, 'out_flag'] = ''
+                result.loc[mask, 'break_minutes'] = 0
 
         emp_dept = {r['name']: r['dept'] for r in conn.execute("SELECT name, dept FROM employees").fetchall()}
         for (name, date_str) in forced_set:
@@ -2148,16 +2312,17 @@ def run_full_analysis(conn):
     rows_to_insert = [
         (r.name, r.dept, r.date, int(r.weekday) if pd.notna(r.weekday) else None, r.time_in, r.time_out,
          r.status, int(r.late_minutes), float(r.working_hours), r.shift,
-         int(r.early_minutes or 0) if pd.notna(r.early_minutes) else 0, r.out_flag or '') for r in result.itertuples()
+         int(r.early_minutes or 0) if pd.notna(r.early_minutes) else 0, r.out_flag or '',
+         int(r.break_minutes or 0) if pd.notna(r.break_minutes) else 0) for r in result.itertuples()
     ] + [
         (r['name'], r['dept'], r['date'], r['weekday'], r['time_in'], r['time_out'],
-         r['status'], r['late_minutes'], r['working_hours'], r['shift'], 0, '') for r in extra_rows
+         r['status'], r['late_minutes'], r['working_hours'], r['shift'], 0, '', 0) for r in extra_rows
     ]
 
     conn.execute("DELETE FROM report_cache")
     conn.executemany(
         "INSERT INTO report_cache (name, dept, date, weekday, time_in, time_out, status, late_minutes, working_hours, shift, "
-        "early_minutes, out_flag) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "early_minutes, out_flag, break_minutes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         rows_to_insert
     )
     conn.commit()
@@ -2303,7 +2468,7 @@ def api_settings():
         data = request.get_json(force=True)
         allowed_keys = {
             'org_name', 'org_name_en', 'attendance_time', 'departure_time', 'late_threshold',
-            'shift_enabled', 'shift1_start', 'shift1_end', 'shift2_start', 'shift2_end', 'auto_checkout',
+            'shift_enabled', 'shift1_start', 'shift1_end', 'shift2_start', 'shift2_end', 'auto_checkout', 'device_breaks',
             'sat_time_enabled', 'sat_attendance_time', 'sat_departure_time', 'excluded_depts',
             'sync_central_url', 'sync_api_key',
         }
@@ -3182,13 +3347,14 @@ _EXCEL_SHEETS = [
 OUT_FLAG_LABELS = {'missing': 'بدون سجل انصراف', 'auto': 'أُغلق تلقائياً بنهاية الدوام — للمراجعة'}
 
 _EXCEL_HEADERS = ['الاسم', 'القسم', 'التاريخ', 'وقت الحضور', 'وقت الانصراف', 'الحالة',
-                  'دقائق التأخير', 'ساعات العمل', 'المناوبة', 'دقائق المغادرة المبكرة', 'ملاحظة الانصراف']
+                  'دقائق التأخير', 'ساعات العمل', 'المناوبة', 'دقائق المغادرة المبكرة', 'ملاحظة الانصراف',
+                  'خروج مؤقت من البصمة (د)']
 
 
 def _excel_row(r):
     return [r['name'], r['dept'] or '', r['date'], r['time_in'] or '', r['time_out'] or '',
             L(r['status'] or ''), r['late_minutes'], r['working_hours'], r['shift'] or '',
-            r.get('early_minutes') or 0, L(OUT_FLAG_LABELS.get(r.get('out_flag') or '', ''))]
+            r.get('early_minutes') or 0, L(OUT_FLAG_LABELS.get(r.get('out_flag') or '', '')), r.get('break_minutes') or 0]
 
 
 @app.route('/api/export/excel')
@@ -3230,7 +3396,7 @@ def api_export_excel():
             cell.alignment = header_align
         for r in sheet_rows:
             ws.append(_excel_row(r))
-        widths = [18, 16, 12, 12, 12, 14, 10, 10, 10, 12, 26]
+        widths = [18, 16, 12, 12, 12, 14, 10, 10, 10, 12, 26, 12]
         for i, w in enumerate(widths, start=1):
             ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
         if not sheet_rows:
@@ -3417,6 +3583,8 @@ def pull_from_devices(conn, device_ids=None, d_from=None, d_to=None):
             "INSERT INTO punches (name, date, dept, time_in, time_out, batch_id) VALUES (?, ?, ?, ?, ?, ?)",
             [(r['name'], r['date'], emp_dept.get(r['name'], ''), r['time_in'], r['time_out'], batch_id) for r in all_rows]
         )
+        conn.executemany("INSERT OR IGNORE INTO device_punch_times (name, date, time, source) VALUES (?, ?, ?, 'pull')",
+                         [(r['name'], r['date'], t) for r in all_rows for t in (r.get('times') or [])])
         log_audit(conn, 'pull', 'device',
                    new_value=f"{len(all_rows)} سجل من {len([d for d in per_device if d['ok']])} جهاز",
                    reason=f"غير مطابق: {len(all_unmatched)} رقم بصمة" if all_unmatched else None)

@@ -258,6 +258,13 @@ def init_db():
         cur.execute("ALTER TABLE report_cache ADD COLUMN early_minutes INTEGER DEFAULT 0")
     if 'out_flag' not in existing_cols:        # '' / missing (بدون سجل انصراف) / auto (أُغلق تلقائياً)
         cur.execute("ALTER TABLE report_cache ADD COLUMN out_flag TEXT DEFAULT ''")
+    if 'break_minutes' not in existing_cols:   # خروج مؤقت من البصمات الوسطى في جهاز البصمة (دقائق)
+        cur.execute("ALTER TABLE report_cache ADD COLUMN break_minutes INTEGER DEFAULT 0")
+    # كل بصمات أجهزة البصمة بأوقاتها (لا أول/آخر بصمة فقط) — لاحتساب الخروج والعودة من البصمات الوسطى
+    cur.execute('''CREATE TABLE IF NOT EXISTS device_punch_times (
+        name TEXT NOT NULL, date TEXT NOT NULL, time TEXT NOT NULL, source TEXT,
+        PRIMARY KEY (name, date, time)
+    )''')
 
     # ===== تطبيق الموظفين على الهاتف: حسابات دخول + ربط الهاتف + مواقع العمل (Geofence) + الحركات =====
     cur.execute('''CREATE TABLE IF NOT EXISTS employee_accounts (
@@ -595,6 +602,7 @@ def get_all_settings():
         'mobile_bind_device': '1',        # ربط حساب الموظف بهاتف واحد فقط
         'mobile_max_accuracy': '150',     # أقصى خطأ مقبول في دقة الموقع (متر)
         'mobile_require_geofence': '1',   # منع التسجيل خارج مواقع العمل
+        'device_breaks': '1',             # البصمات الوسطى في جهاز البصمة = خروج ← عودة (يُخصم من ساعات العمل)
         'auto_checkout': '0',             # إغلاق الانصراف المنسي تلقائياً بوقت نهاية الدوام (يُعلَّم للمراجعة)
         'mobile_leave_deduct': '1',       # الخروج المؤقت يُخصم من ساعات العمل
         'mobile_require_app': '0',        # التسجيل من تطبيق الموظف (APK) فقط — لا من المتصفح

@@ -38,7 +38,7 @@
     <a class="btn btn-l" style="padding:9px 12px" href="{{ url_for('mobile.me_logout') }}" onclick="return confirm('تسجيل الخروج من التطبيق؟')"><i class="fas fa-sign-out-alt" aria-hidden="true"></i></a>
   </div>
 
-  <div class="tabs"><button class="on" data-t="today">اليوم</button><button data-t="month">الشهر</button><button data-t="notes">الإشعارات <span id="unread" class="tag t-out hide" style="padding:0 7px">0</span></button><button data-t="acc">حسابي</button></div>
+  <div class="tabs"><button class="on" data-t="today">اليوم</button><button data-t="month">الشهر <span id="corrBadge" class="tag t-out hide" style="padding:0 7px">0</span></button><button data-t="notes">الإشعارات <span id="unread" class="tag t-out hide" style="padding:0 7px">0</span></button><button data-t="acc">حسابي</button></div>
   <div class="card hide" id="quickBanner" style="background:#eef7f1;font-size:.9rem;line-height:1.7">
     <b style="color:var(--pd)"><i class="fas fa-fingerprint" aria-hidden="true"></i> ادخل بعد اليوم بـ Face ID / البصمة</b><br>
     <span class="muted">بدل كتابة اسم المستخدم وكلمة المرور كل مرة.</span>
@@ -110,6 +110,22 @@
       <label for="lrReason">السبب</label><input id="lrReason" maxlength="300" placeholder="مثال: مراجعة طبية">
       <button class="btn btn-p" id="lrSend" style="width:100%;margin-top:10px">إرسال الطلب</button>
       <ul class="tl" id="lrList" style="margin-top:10px"></ul>
+    </div>
+    <div class="card" id="corrCard">
+      <b style="color:var(--pd)"><i class="fas fa-pen-to-square" aria-hidden="true"></i> طلب تصحيح حضور / انصراف</b>
+      <p class="muted" style="margin:4px 0 8px;font-size:.85rem">نسيت تسجيل الانصراف أو الحضور؟ أرسل الوقت الصحيح والسبب، وتعتمده الإدارة.</p>
+      <ul class="tl" id="corrMissing" style="margin:0 0 8px"></ul>
+      <div style="display:flex;gap:8px">
+        <label style="flex:1">التاريخ<input type="date" id="crDate"></label>
+        <label style="flex:1">التصحيح<select id="crKind"><option value="out">انصراف</option><option value="in">حضور</option><option value="both">حضور وانصراف</option></select></label>
+      </div>
+      <div style="display:flex;gap:8px">
+        <label style="flex:1" id="crInBox">وقت الحضور<input type="time" id="crIn"></label>
+        <label style="flex:1" id="crOutBox">وقت الانصراف<input type="time" id="crOut"></label>
+      </div>
+      <label for="crReason">السبب</label><input id="crReason" maxlength="300" placeholder="مثال: نفدت بطارية الهاتف عند المغادرة">
+      <button class="btn btn-p" id="crSend" style="width:100%;margin-top:10px">إرسال طلب التصحيح</button>
+      <ul class="tl" id="crList" style="margin-top:10px"></ul>
     </div>
     <div class="card"><b style="color:var(--pd)">آخر الحركات من الهاتف</b><ul class="tl" id="recent" style="margin-top:6px"></ul></div>
   </div>
@@ -526,8 +542,50 @@
     api('/me/api/leave/request', { method: 'POST', body: JSON.stringify({ from: $('lrFrom').value, to: $('lrTo').value, reason: $('lrReason').value }) })
       .then(function (d) { toast(d.ok ? d.message : d.error, d.ok); if (d.ok) { $('lrReason').value = ''; load(); } });
   });
+  // ===== طلبات تصحيح الحضور/الانصراف =====
+  function crKindUi() { var k = $('crKind').value; $('crInBox').classList.toggle('hide', k === 'out'); $('crOutBox').classList.toggle('hide', k === 'in'); }
+  $('crKind').addEventListener('change', crKindUi);
+  function corrLoad() {
+    api('/me/api/corrections').then(function (d) {
+      if (!d || !d.ok) return;
+      var b = $('corrBadge'); b.textContent = d.missing.length; b.classList.toggle('hide', !d.missing.length);
+      $('corrMissing').innerHTML = d.missing.map(function (m) {
+        return '<li><span><b dir="ltr">' + esc(m.date.slice(5)) + '</b> — ' + (m.kind === 'out' ? (m.auto ? 'انصراف احتُسب تلقائياً' : 'بدون انصراف') : 'بدون حضور')
+          + (m.time_in ? ' <span class="muted">(حضرت ' + esc(m.time_in) + ')</span>' : '') + '</span>'
+          + '<a href="#" onclick="corrFill(\'' + m.date + '\',\'' + m.kind + '\');return false">تصحيح</a></li>';
+      }).join('');
+      $('crList').innerHTML = d.rows.map(function (r) {
+        var t = [r.time_in, r.time_out].filter(Boolean).join(' – ');
+        return '<li><span>' + esc(r.date.slice(5)) + ' ' + esc(r.kind_label) + ' <b dir="ltr">' + esc(t) + '</b>'
+          + (r.decision_note ? ' <span class="muted">— ' + esc(r.decision_note) + '</span>' : '') + '</span><span>' + esc(r.status_label)
+          + (r.status === 'pending' ? ' <a href="#" onclick="corrCancel(' + r.id + ');return false">إلغاء</a>' : '') + '</span></li>';
+      }).join('') || '<li class="muted">لا توجد طلبات تصحيح</li>';
+      var ymd = function (x) { return x.getFullYear() + '-' + ('0' + (x.getMonth() + 1)).slice(-2) + '-' + ('0' + x.getDate()).slice(-2); };
+      if (!$('crDate').value) { var n = nowSrv(); n.setDate(n.getDate() - 1); $('crDate').value = ymd(n); }
+      $('crDate').max = ymd(nowSrv());
+      crKindUi();
+    }).catch(function () {});
+  }
+  window.corrFill = function (date, kind) {
+    $('crDate').value = date; $('crKind').value = kind; crKindUi();
+    ($('crKind').value === 'in' ? $('crIn') : $('crOut')).focus();
+  };
+  window.corrCancel = function (id) {
+    if (!confirm('إلغاء طلب التصحيح؟')) return;
+    api('/me/api/corrections/cancel', { method: 'POST', body: JSON.stringify({ id: id }) }).then(function (d) { toast(d.ok ? 'أُلغي الطلب' : d.error, d.ok); corrLoad(); });
+  };
+  $('crSend').addEventListener('click', function () {
+    var btn = $('crSend'); btn.disabled = true;
+    api('/me/api/corrections', { method: 'POST', body: JSON.stringify({ date: $('crDate').value, kind: $('crKind').value,
+      time_in: $('crIn').value, time_out: $('crOut').value, reason: $('crReason').value }) })
+      .then(function (d) { btn.disabled = false; toast(d.ok ? d.message : d.error, d.ok); if (d.ok) { $('crReason').value = ''; $('crIn').value = $('crOut').value = ''; corrLoad(); } })
+      .catch(function () { btn.disabled = false; toast('تعذّر الإرسال — تحقق من الإنترنت'); });
+  });
+  setTimeout(corrLoad, 1500);
+
   document.querySelectorAll('.tabs button').forEach(function (b) {
     b.addEventListener('click', function () {
+      if (b.dataset.t === 'month') corrLoad();
       document.querySelectorAll('.tabs button').forEach(function (x) { x.classList.toggle('on', x === b); });
       ['today', 'month', 'notes', 'acc'].forEach(function (t) { $('t-' + t).classList.toggle('hide', t !== b.dataset.t); });
       if (b.dataset.t === 'notes' && S && S.unread) { api('/me/api/notifications/read', { method: 'POST' }).then(load); }

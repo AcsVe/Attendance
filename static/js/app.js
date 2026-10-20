@@ -761,7 +761,7 @@ async function loadReports(page) {
         <td>${escapeHtml(r.date)}</td>
         <td>${escapeHtml(r.time_in || '—')}</td>
         <td>${_reportOutCell(r)}</td>
-        <td>${_reportStatusCell(r)}${r.early_minutes ? ` <span class="badge badge-late" title="انصرف قبل نهاية الدوام">مغادرة مبكرة ${r.early_minutes} د</span>` : ''}</td>
+        <td>${_reportStatusCell(r)}${r.early_minutes ? ` <span class="badge badge-late" title="انصرف قبل نهاية الدوام">مغادرة مبكرة ${r.early_minutes} د</span>` : ''}${r.break_minutes ? ` <span class="badge badge-none" title="بصمات خروج وعودة أثناء الدوام في جهاز البصمة — خُصمت من ساعات العمل">خروج من البصمة ${r.break_minutes} د</span>` : ''}</td>
         <td>${r.late_minutes || 0}</td>
         <td>${r.working_hours || 0}</td>
         <td>${escapeHtml(r.shift || '—')}</td>
@@ -2186,6 +2186,7 @@ async function loadSettings() {
   document.getElementById('setSatAtt').value = s.sat_attendance_time;
   document.getElementById('setSatDep').value = s.sat_departure_time;
   document.getElementById('setAutoCheckout').checked = s.auto_checkout === '1';
+  document.getElementById('setDeviceBreaks').checked = s.device_breaks !== '0';
   renderLogoPreview(s.org_logo_filename);
   document.getElementById('setSyncUrl').value = s.sync_central_url || '';
   document.getElementById('setSyncKey').value = s.sync_api_key || '';
@@ -2224,6 +2225,7 @@ async function saveSettings() {
     sat_attendance_time: document.getElementById('setSatAtt').value,
     sat_departure_time: document.getElementById('setSatDep').value,
     auto_checkout: document.getElementById('setAutoCheckout').checked ? '1' : '0',
+    device_breaks: document.getElementById('setDeviceBreaks').checked ? '1' : '0',
     sync_central_url: syncRole() === 'branch' ? document.getElementById('setSyncUrl').value.trim() : '',
     sync_api_key: syncRole() === 'none' ? '' : document.getElementById('setSyncKey').value.trim(),
   };

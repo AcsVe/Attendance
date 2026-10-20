@@ -14,6 +14,7 @@ window.EXTRA_LOADERS = Object.assign(window.EXTRA_LOADERS || {}, {
   presence: prLoad,
   shares: () => { trLoad(); shLoad(); },
   leaves: () => { lvSettings(); lvLoad(); lvReport(); },
+  manual: () => { if (typeof loadManualEntries === 'function') loadManualEntries(); crLoad(); },
 });
 
 const OSM = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
@@ -1340,3 +1341,36 @@ function shFollowStop(keep) {
   const b = document.getElementById('shFollowBar'); if (b) { b.classList.add('hide'); b.style.display = 'none'; }
   if (!keep) shRender();
 }
+
+
+/* ================= طلبات التصحيح من الموظفين ================= */
+async function crLoad() {
+  let d;
+  try { d = await (await fetch('/api/corrections?status=' + (document.getElementById('crStatus') || {}).value, { credentials: 'same-origin' })).json(); } catch (e) { return; }
+  if (!d || !d.ok) return;
+  const nb = document.getElementById('crNavBadge'); if (nb) { nb.classList.toggle('hide', !d.pending); nb.textContent = d.pending; }
+  const pc = document.getElementById('crPending'); if (pc) pc.textContent = d.pending;
+  const tb = document.getElementById('crTable'); if (!tb) return;
+  document.getElementById('crAll').checked = false;
+  tb.innerHTML = d.rows.map(r => `<tr>
+    <td>${r.status === 'pending' ? `<input type="checkbox" class="cr-check" data-id="${r.id}" aria-label="تحديد">` : ''}</td>
+    <td><b>${mEsc(r.name)}</b><br><small style="color:var(--muted)">${mEsc(r.dept || '')}</small></td>
+    <td dir="ltr">${mEsc(r.date)}</td><td>${mEsc(r.kind_label)}</td>
+    <td dir="ltr"><b>${mEsc([r.time_in, r.time_out].filter(Boolean).join(' – '))}</b></td>
+    <td dir="ltr" style="color:var(--muted)">${mEsc([r.current_in || '—', r.current_out || '—'].join(' – '))}</td>
+    <td>${mEsc(r.reason)}${r.decision_note ? `<br><small style="color:var(--muted)">ملاحظة: ${mEsc(r.decision_note)}</small>` : ''}</td>
+    <td>${mEsc(r.status_label)}${r.decided_by ? `<br><small style="color:var(--muted)">${mEsc(r.decided_by)}</small>` : ''}</td></tr>`).join('')
+    || '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:14px">لا توجد طلبات</td></tr>';
+}
+async function crDecide(action) {
+  const ids = [...document.querySelectorAll('.cr-check:checked')].map(c => +c.dataset.id);
+  if (!ids.length) { toast('حدّد طلباً واحداً على الأقل', true); return; }
+  if (!confirm(`${action === 'approve' ? 'موافقة على' : 'رفض'} ${ids.length} طلب تصحيح؟`)) return;
+  const d = await api('/api/corrections/decide', { method: 'POST', body: JSON.stringify({ ids, action, note: document.getElementById('crNote').value }) });
+  if (!d) return;
+  toast(`تم: ${d.count} طلب`);
+  document.getElementById('crNote').value = '';
+  crLoad();
+  if (action === 'approve' && typeof loadManualEntries === 'function') loadManualEntries();
+}
+document.addEventListener('DOMContentLoaded', () => { crLoad(); setInterval(crLoad, 120000); });

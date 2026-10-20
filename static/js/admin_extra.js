@@ -164,3 +164,58 @@ async function rrAct(id, action) {
   } else toast('تم');
 }
 document.addEventListener('DOMContentLoaded', () => { rrLoad(); setInterval(rrLoad, 120000); });
+
+
+/* ================= الكشف الشهري (للرواتب) ================= */
+let moData = null;
+function moParams(extra) {
+  const p = new URLSearchParams({ month: document.getElementById('moMonth').value, dept: document.getElementById('moDept').value,
+    grace: document.getElementById('moGrace').value || '0' });
+  Object.entries(extra || {}).forEach(([k, v]) => p.set(k, v));
+  return p;
+}
+async function loadMonthly() {
+  const m = document.getElementById('moMonth');
+  if (!m.value) { const t = new Date(); m.value = t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0'); }
+  const ds = document.getElementById('moDept');
+  if (ds.options.length <= 1) {   // نفس قائمة أقسام التقارير
+    const src = document.getElementById('repDept');
+    if (src) [...src.options].slice(1).forEach(o => ds.add(new Option(o.text, o.value)));
+  }
+  const d = await api('/api/reports/monthly?' + moParams());
+  if (!d) return;
+  moData = d;
+  renderMonthly();
+}
+function renderMonthly() {
+  if (!moData) return;
+  const q = (document.getElementById('moSearch').value || '').trim().toLowerCase();
+  const cols = moData.cols;
+  const warn = { absent: 1, late_minutes: 1, early_minutes: 1, no_out: 1 };
+  document.getElementById('moHead').innerHTML = '<tr>' + cols.map(c => `<th>${escapeHtml(c.label)}</th>`).join('') + '</tr>';
+  const rows = moData.rows.filter(r => !q || (r.name || '').toLowerCase().includes(q) || (r.dept || '').toLowerCase().includes(q));
+  document.getElementById('moBody').innerHTML = rows.map(r => '<tr>' + cols.map(c => {
+    const v = r[c.key];
+    if (c.key === 'name') return `<td><a href="#" onclick="moOpenEmployee(${JSON.stringify(r.name).replace(/"/g, '&quot;')});return false"><b>${escapeHtml(v)}</b></a></td>`;
+    const bad = warn[c.key] && v > 0;
+    return `<td${bad ? ' style="color:#c0392b;font-weight:700"' : ''}>${escapeHtml(String(v ?? ''))}</td>`;
+  }).join('') + '</tr>').join('') || `<tr><td colspan="${cols.length}" style="text-align:center;color:var(--muted);padding:16px">لا توجد بيانات محلّلة لهذا الشهر</td></tr>`;
+  document.getElementById('moFoot').innerHTML = rows.length ? '<tr>' + cols.map((c, i) => `<td>${i === 0 ? 'المجموع (' + moData.rows.length + ')' : escapeHtml(String(moData.totals[c.key] ?? ''))}</td>`).join('') + '</tr>' : '';
+}
+function exportMonthly(fmt) { window.location.href = '/api/reports/monthly?' + moParams({ format: fmt }); }
+/* من الكشف إلى تقرير الموظف التفصيلي لنفس الشهر */
+function moOpenEmployee(name) {
+  const m = document.getElementById('moMonth').value;
+  const [y, mo] = m.split('-').map(Number);
+  const last = new Date(y, mo, 0).getDate();
+  showTab('reports');
+  setTimeout(() => {
+    const f = document.getElementById('repFrom'), t = document.getElementById('repTo'), s = document.getElementById('repSearch');
+    if (f) f.value = m + '-01';
+    if (t) t.value = m + '-' + String(last).padStart(2, '0');
+    if (s) s.value = name;
+    if (typeof loadReports === 'function') loadReports(1);
+  }, 50);
+}
+if (typeof PAGE_TITLES !== 'undefined') PAGE_TITLES.monthly = 'الكشف الشهري لكل موظف';
+window.EXTRA_LOADERS = Object.assign(window.EXTRA_LOADERS || {}, { monthly: loadMonthly });
