@@ -263,7 +263,14 @@ def analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
                 dep_t = parse_time_str(perm.get('departure_time'))
                 ret_t = parse_time_str(perm.get('return_time'))
                 if dep_t is not None and ret_t is not None:
-                    deduct = max(0, to_minutes(ret_t) - to_minutes(dep_t))
+                    # يُخصم فقط الجزء من الإذن الواقع بين الحضور والانصراف: إذن في أول الدوام أو آخره
+                    # (حضر بعده أو انصرف عند بدايته) لم يكن أصلاً ضمن المدة المحسوبة فلا يُخصم مرتين
+                    p1, p2 = to_minutes(dep_t), to_minutes(ret_t)
+                    if p2 < p1:
+                        p2 += 24 * 60
+                    if end > 24 * 60 and p1 < start:   # دوام يمتد بعد منتصف الليل وإذن بعده
+                        p1, p2 = p1 + 24 * 60, p2 + 24 * 60
+                    deduct = max(0, min(p2, end) - max(p1, start))
                     hours = max(0.0, hours - deduct / 60)
             except ValueError:
                 pass
