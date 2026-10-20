@@ -49,6 +49,8 @@ public class PresenceService extends Service implements LocationListener {
     private String device = "";
     private long intervalMs = 10 * 60000L;
     private long stopAtElapsed = 0;
+    // في التتبع كل ثانية قد يتأخر الإرسال إن كانت الشبكة بطيئة: لا نرسل طلباً جديداً قبل انتهاء السابق
+    private final java.util.concurrent.atomic.AtomicBoolean posting = new java.util.concurrent.atomic.AtomicBoolean(false);
     private long lastCheckNotified = -1;
 
     private final Runnable tick = new Runnable() {
@@ -68,7 +70,7 @@ public class PresenceService extends Service implements LocationListener {
             String d = intent.getStringExtra(EXTRA_DEVICE);
             if (d != null && !d.isEmpty()) device = d;
             long iv = intent.getLongExtra(EXTRA_INTERVAL, 600) * 1000L;
-            intervalMs = Math.max(5000L, Math.min(3600000L, iv));   // 5 ثوانٍ = التتبع اللحظي للموظف الميداني
+            intervalMs = Math.max(1000L, Math.min(3600000L, iv));   // ثانية واحدة = أسرع تتبع لحظي للموظف الميداني
             long rem = intent.getLongExtra(EXTRA_REMAINING, 0);
             if (rem > 0) stopAtElapsed = SystemClock.elapsedRealtime() + rem;
             sp.edit().putString("device", device).putLong("interval", intervalMs).apply();
@@ -128,7 +130,7 @@ public class PresenceService extends Service implements LocationListener {
         lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         if (lm == null || !hasLocationPermission()) return;
         try { lm.removeUpdates(this); } catch (Exception ignored) { }
-        long minTime = Math.max(2000L, Math.min(60000L, intervalMs / 2));
+        long minTime = Math.max(1000L, Math.min(60000L, intervalMs / 2));
         try { if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, minTime, 0, this); } catch (Exception ignored) { }
         try { if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, minTime, 0, this); } catch (Exception ignored) { }
         try {
@@ -166,7 +168,7 @@ public class PresenceService extends Service implements LocationListener {
             Location l = last;
             // قراءة أقدم من ثلاث دورات تُعد «بلا موقع»
             if (l != null && Build.VERSION.SDK_INT >= 17
-                    && (SystemClock.elapsedRealtimeNanos() - l.getElapsedRealtimeNanos()) / 1000000L > intervalMs * 3) l = null;
+                    && (SystemClock.elapsedRealtimeNanos() - l.getElapsedRealtimeNanos()) / 1000000L > Math.max(intervalMs * 3, 15000L)) l = null;
             if (!enabled || l == null) {
                 o.put("location_off", true);
             } else {
@@ -179,7 +181,8 @@ public class PresenceService extends Service implements LocationListener {
         } catch (Exception e) {
             return;
         }
-        new Thread(() -> post(body)).start();
+        if (!posting.compareAndSet(false, true)) return;
+        new Thread(() -> { try { post(body); } finally { posting.set(false); } }).start();
     }
 
     private void post(String body) {
@@ -220,7 +223,7 @@ public class PresenceService extends Service implements LocationListener {
                 return;
             }
             long iv = r.optLong("interval_s", 0) * 1000L;
-            if (iv >= 5000L && iv != intervalMs) {   // تغيّر الفاصل (مثلاً تتبع مستمر كل 15 ثانية): نعيد ضبط قراءات الموقع
+            if (iv >= 1000L && iv != intervalMs) {   // تغيّر الفاصل (مثلاً تتبع مستمر كل 15 ثانية): نعيد ضبط قراءات الموقع
                 intervalMs = iv;
                 getSharedPreferences("presence", MODE_PRIVATE).edit().putLong("interval", intervalMs).apply();
                 handler.post(() -> {

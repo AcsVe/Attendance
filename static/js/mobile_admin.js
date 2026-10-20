@@ -450,7 +450,7 @@ let liveMap = null, liveLayer = null, liveTimer = null, mvKind = '', mvStatus = 
 const ST_LABEL = { in: 'في الدوام', out: 'انصرف', leave: 'خروج مؤقت', none: 'لم يسجّل' };
 
 /* ===== التحديث اللحظي (Realtime): تشغيل/إيقاف + فاصل يختاره المستخدم (يُحفظ على هذا الجهاز) ===== */
-const LIVE_RT_STEPS = [2, 3, 5, 10, 15, 30, 60];
+const LIVE_RT_STEPS = [1, 2, 3, 5, 10, 15, 30, 60];
 let liveRt = { on: true, every: 10, busy: false, lastOk: 0, movesAt: 0, followId: null, fitted: false, rows: [] };
 (function () {
   try {
@@ -1278,7 +1278,7 @@ function trRender() {
     <td><input type="checkbox" class="tr-check" data-id="${r.id}" onchange="trSelCount()"></td>
     <td><b>${mEsc(r.name)}</b></td><td>${mEsc(r.dept || '—')}</td>
     <td>${r.always_track ? '<span style="color:#0a6640;font-weight:700">مفعّل</span>' : '<span style="color:var(--muted)">غير مفعّل</span>'}</td>
-    <td>${({ 5: '⚡ لحظي (5 ث)', 10: '⚡ كل 10 ثوانٍ', 15: 'كل 15 ثانية', 30: 'كل 30 ثانية' })[r.track_interval] || 'كل دقيقة'}</td>
+    <td>${({ 1: '⚡ كل ثانية', 2: '⚡ كل ثانيتين', 3: '⚡ كل 3 ثوانٍ', 5: '⚡ لحظي (5 ث)', 10: '⚡ كل 10 ثوانٍ', 15: 'كل 15 ثانية', 30: 'كل 30 ثانية' })[r.track_interval] || 'كل دقيقة'}</td>
     <td>${r.always_track ? connLabel(r.age_s, !!r.last_update) : '—'}</td></tr>`).join('') || '<tr><td colspan="6" style="color:var(--muted)">لا يوجد موظفون بحسابات تطبيق</td></tr>';
   trSelCount();
 }

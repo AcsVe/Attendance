@@ -17,8 +17,8 @@ from mobile import (_me_json, admin_required, now_local, _employee_scope_ok, _au
 bp = Blueprint('shares', __name__)
 LIVE_CHOICES = {15, 30, 60, 120, 240}
 FOREVER = '9999-12-31 23:59:59'     # مشاركة بلا مدة (حتى الإيقاف)
-# فواصل التتبع المستمر بالثواني: 5 و10 = «لحظي» للموظف الميداني/المتنقل (يستهلك بطارية وبيانات أكثر)
-TRACK_CHOICES = (5, 10, 15, 30, 60)
+# فواصل التتبع المستمر بالثواني: 1 إلى 10 = «لحظي» للموظف الميداني/المتنقل (يستهلك بطارية وبيانات أكثر)
+TRACK_CHOICES = (1, 2, 3, 5, 10, 15, 30, 60)
 
 
 def init_tables(conn):
@@ -109,7 +109,8 @@ def add_point(conn, share, lat, lng, acc, now=None):
         if km > 1 and km / (secs / 3600) > 250:
             _flag(conn, share['id'], f'قفزة غير منطقية ({km:.0f} كم خلال ' + (f'{secs / 60:.0f} دقيقة)' if secs >= 60 else 'أقل من دقيقة)'))
     # نقطة جديدة في المسار كل 20 ثانية على الأقل، وفي التتبع اللحظي (5/10 ث) كل 4 ثوانٍ ليظهر المسار دقيقاً
-    min_gap = 4 if share_interval(conn, share) < 15 else 20
+    iv = share_interval(conn, share)
+    min_gap = 1 if iv < 5 else 4 if iv < 15 else 20
     if last and (datetime.strptime(ts, '%Y-%m-%d %H:%M:%S') - datetime.strptime(last['ts'], '%Y-%m-%d %H:%M:%S')).total_seconds() < min_gap:
         conn.execute("UPDATE location_shares SET lat = ?, lng = ?, accuracy = ?, updated_at = ? WHERE id = ?", (lat, lng, acc, ts, share['id']))
         return True

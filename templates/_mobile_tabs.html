@@ -258,6 +258,7 @@ html.map-fs-open,html.map-fs-open body{overflow:hidden!important}
       <input type="search" id="trSearch" class="search-input" placeholder="بحث بالاسم أو القسم…" oninput="trRender()">
       <div class="m-chips" id="trChips"></div>
       <select id="trInterval" class="search-input" aria-label="فاصل الإرسال" title="فاصل إرسال الموقع">
+        <option value="1">⚡ كل ثانية (أقصى سرعة)</option><option value="2">⚡ كل ثانيتين</option><option value="3">⚡ كل 3 ثوانٍ</option>
         <option value="5">⚡ لحظي — كل 5 ثوانٍ (ميداني)</option><option value="10">⚡ كل 10 ثوانٍ (متنقل)</option>
         <option value="15">كل 15 ثانية</option><option value="30">كل 30 ثانية</option><option value="60" selected>كل دقيقة</option></select>
       <button class="btn btn-primary btn-sm" onclick="trSet(true)"><i class="fas fa-play" aria-hidden="true"></i> تشغيل / تحديث الفاصل</button>
@@ -367,6 +368,7 @@ html.map-fs-open,html.map-fs-open body{overflow:hidden!important}
       <button class="btn btn-sm" id="liveRtBtn" onclick="liveRtToggle()"></button>
       <label for="liveRtEvery" style="font-size:.82rem;font-weight:600">التحديث كل</label>
       <select id="liveRtEvery" class="search-input" style="min-width:0;width:auto;padding:4px 8px" onchange="liveRtSetEvery(this.value)">
+        <option value="1">ثانية</option><option value="2">ثانيتين</option><option value="3">3 ثوانٍ</option>
         <option value="5">5 ثوانٍ</option><option value="10">10 ثوانٍ</option><option value="15">15 ثانية</option>
         <option value="30">30 ثانية</option><option value="60">دقيقة</option>
       </select>
