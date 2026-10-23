@@ -7,6 +7,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASE = os.path.dirname(HERE)
 ENV = os.path.join(BASE, '.env')
+sys.path.insert(0, HERE)
+from common import t  # noqa: E402
 
 
 def set_env(key, val):
@@ -16,11 +18,11 @@ def set_env(key, val):
 
 
 def main():
-    print('\n  الصق رابط Neon لهذا النظام (DATABASE_URL من Render، يبدأ بـ postgresql://)')
-    print('  في PowerShell/CMD الصق بزر الفأرة الأيمن — لا يظهر شيء أثناء اللصق، ثم Enter\n')
-    url = ''.join(ch for ch in getpass.getpass('  الرابط: ') if ch.isprintable()).strip()
+    print(t('\n  الصق رابط Neon لهذا النظام (DATABASE_URL من Render، يبدأ بـ postgresql://)', '\n  Paste the Neon link of this system (DATABASE_URL from Render, starts with postgresql://)'))
+    print(t('  في PowerShell/CMD الصق بزر الفأرة الأيمن — لا يظهر شيء أثناء اللصق، ثم Enter\n', '  In PowerShell/CMD paste with the right mouse button - nothing is shown while pasting - then Enter\n'))
+    url = ''.join(ch for ch in getpass.getpass(t('  الرابط: ', '  Link: ')) if ch.isprintable()).strip()
     if '://' not in url:
-        print('\n  ✖ الرابط لم يُلصق صحيحاً — أعد المحاولة (زر الفأرة الأيمن للصق)')
+        print(t('\n  ✖ الرابط لم يُلصق صحيحاً — أعد المحاولة (زر الفأرة الأيمن للصق)', '\n  ✖ The link was not pasted correctly - try again (right mouse button pastes)'))
         sys.exit(1)
     os.environ['NEON_BACKUP_URL'] = url
     sys.path.insert(0, HERE)
@@ -29,10 +31,10 @@ def main():
         con = neon_store.connect()
         con.close()
     except BaseException as e:   # noqa: BLE001
-        print(f'\n  ✖ تعذّر الاتصال بـ Neon: {e}')
+        print(t(f'\n  ✖ تعذّر الاتصال بـ Neon: {e}', f'\n  ✖ Could not connect to Neon: {e}'))
         sys.exit(1)
     set_env('NEON_BACKUP_URL', url)
-    print('\n  ✓ حُفظ الرابط في .env والاتصال يعمل — رفع أول نسخة الآن…\n')
+    print(t('\n  ✓ حُفظ الرابط في .env والاتصال يعمل — رفع أول نسخة الآن…\n', '\n  ✓ Link saved in .env and the connection works - uploading the first copy now…\n'))
     BACKUP_CMD = [sys.executable] + sys.argv[1:]
     if BACKUP_CMD[1:]:
         subprocess.call(BACKUP_CMD)

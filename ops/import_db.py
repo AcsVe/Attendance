@@ -12,36 +12,36 @@ import sys
 from contextlib import closing
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import BASE, data_dir, db_path, die, load_env, stamp  # noqa: E402
+from common import BASE, data_dir, db_path, die, load_env, stamp, t  # noqa: E402
 
 
 def main():
     load_env()
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
-    src = args[0] if args else input('  مسار ملف attendance_web.db القديم (اسحب الملف إلى هذه النافذة): ').strip().strip('"')
+    src = args[0] if args else input(t('  مسار ملف attendance_web.db القديم (اسحب الملف إلى هذه النافذة): ', '  Path of the old attendance_web.db file (drag the file into this window): ')).strip().strip('"')
     if not src:
-        die('تم الإلغاء')
+        die(t('تم الإلغاء', 'Cancelled'))
     if not os.path.isfile(src):
-        die(f'الملف غير موجود: {src}')
+        die(t(f'الملف غير موجود: {src}', f'File not found: {src}'))
     try:
         with closing(sqlite3.connect(f'file:{src}?mode=ro', uri=True)) as c:
             ok = c.execute('PRAGMA integrity_check').fetchone()[0]
             tables = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     except sqlite3.DatabaseError as e:
-        die(f'ليس ملف قاعدة بيانات صالحاً: {e}')
+        die(t(f'ليس ملف قاعدة بيانات صالحاً: {e}', f'Not a valid database file: {e}'))
     if ok != 'ok' or not {'users', 'employees'} <= tables:
-        die('الملف تالف أو ليس قاعدة نظام الحضور (لا توجد جداول users/employees)')
+        die(t('الملف تالف أو ليس قاعدة نظام الحضور (لا توجد جداول users/employees)', 'The file is damaged or is not an attendance database (no users/employees tables)'))
     dst = db_path()
     if os.path.abspath(src) == os.path.abspath(dst):
-        die('هذا هو ملف النظام نفسه')
-    if '--yes' not in sys.argv and input('  ستُستبدل بيانات هذا النظام بالملف المختار. اكتب YES: ').strip() != 'YES':
-        die('تم الإلغاء')
+        die(t('هذا هو ملف النظام نفسه', 'This is the system\'s own database file'))
+    if '--yes' not in sys.argv and input(t('  ستُستبدل بيانات هذا النظام بالملف المختار. اكتب YES: ', '  The data of this system will be replaced by the chosen file. Type YES: ')).strip() != 'YES':
+        die(t('تم الإلغاء', 'Cancelled'))
     os.makedirs(data_dir(), exist_ok=True)
     if os.path.isfile(dst):
         safe = os.path.join(data_dir(), f'before-import-{stamp()}.db')
         with closing(sqlite3.connect(dst, timeout=60)) as s, closing(sqlite3.connect(safe)) as d:
             s.backup(d)
-        print(f'  ✓ نسخة أمان من البيانات الحالية: {safe}')
+        print(t(f'  ✓ نسخة أمان من البيانات الحالية: {safe}', f'  ✓ Safety copy of the current data: {safe}'))
     tmp = dst + '.import'
     with closing(sqlite3.connect(f'file:{src}?mode=ro', uri=True)) as s, closing(sqlite3.connect(tmp)) as d:
         s.backup(d)
@@ -59,7 +59,7 @@ def main():
     sys.path.insert(0, BASE)
     import db
     db.init_db()   # يضيف أي أعمدة/جداول جديدة
-    print('  ✓ نُقلت البيانات. شغّل النظام وادخل بحساباتكم القديمة.')
+    print(t('  ✓ نُقلت البيانات. شغّل النظام وادخل بحساباتكم القديمة.', '  ✓ Data moved. Start the system and sign in with your old accounts.'))
 
 
 if __name__ == '__main__':

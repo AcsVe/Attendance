@@ -192,7 +192,7 @@ def main():
             if rec['content'] != target:
                 cf.call('PATCH', f"/zones/{zone}/dns_records/{rec['id']}", json={'content': target, 'proxied': True})
         with open(os.path.join(logs, 'failover.log'), 'a', encoding='utf-8') as fh:
-            fh.write(f'{now} الهاتف منقطع والموقع موجّه له — أُعيد 3.iajaward.org إلى الكمبيوتر تلقائياً\n')
+            fh.write(f'{now} phone unreachable while the site pointed to it - 3.iajaward.org moved back to the PC automatically\n')
         print(f'{now} ✅ phone offline - moved back to the PC')
         return
 

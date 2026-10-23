@@ -20,11 +20,24 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 BASE = os.path.dirname(HERE)
 SITE = os.environ.get('NEON_SITE') or 'attendance'
 KEEP = 3
-EN = os.environ.get('IAJ_LANG', os.environ.get('LANG_UI', '')) == 'en'
+# Windows command windows cannot show Arabic (boxes), so the PC uses English; the phone (Termux) stays Arabic.
+# Force either with IAJ_LANG=ar / IAJ_LANG=en.
+_LANG = os.environ.get('IAJ_LANG') or os.environ.get('LANG_UI') or ('en' if os.name == 'nt' else 'ar')
+EN = _LANG == 'en'
+_ASCII = {'✓': '[OK]', '✅': '[OK]', '✖': '[X]', '❌': '[X]', '⚠': '[!]', '←': '<-', '→': '->', '★': '*', '•': '-',
+          '🟢': '[OK]', '🔴': '[X]', '✋': '[!]', '…': '...', '—': '-', '–': '-', '«': '"', '»': '"'}
+
+
+def _plain(text):
+    for k, v in _ASCII.items():
+        text = text.replace(k, v)
+    return text
 
 
 def t(ar, en):
-    return en if EN else ar
+    if not EN:
+        return ar
+    return _plain(en) if os.name == 'nt' else en
 
 
 def _load_env():

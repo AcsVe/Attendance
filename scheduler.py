@@ -119,7 +119,7 @@ def run_scheduled_report(manual_trigger=False):
         return {'ok': True, 'message': msg}
 
     except Exception as e:
-        logger.exception('فشل تشغيل الجدولة التلقائية')
+        logger.exception('Automatic schedule run failed')
         _record_run(conn, False, f'خطأ أثناء تنفيذ الجدولة: {e}')
         return {'ok': False, 'message': f'خطأ أثناء تنفيذ الجدولة: {e}'}
     finally:
@@ -190,7 +190,7 @@ def _tick():
         days = []
     if days and now.weekday() not in days:
         return
-    logger.info('تشغيل الجدولة التلقائية المجدولة الآن')
+    logger.info('Running the scheduled automatic job now')
     run_scheduled_report(manual_trigger=False)
 
 
@@ -203,5 +203,5 @@ def start_scheduler():
     _scheduler = BackgroundScheduler(daemon=True)
     _scheduler.add_job(_tick, 'interval', minutes=1, id='schedule_tick', replace_existing=True)
     _scheduler.start()
-    logger.info('بدأ المجدول الخلفي للجدولة التلقائية (فحص كل دقيقة)')
+    logger.info('Background scheduler started (checks every minute)')
     return _scheduler
