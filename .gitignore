@@ -16,3 +16,8 @@ __pycache__/
 *.pyc
 *.json.key
 service_account*.json
+# مفاتيح توقيع تطبيقات أندرويد وأسرارها — في أسرار GitHub فقط (المستودع عام)
+android/keystore/
+android/signing.properties
+*.jks
+*.keystore

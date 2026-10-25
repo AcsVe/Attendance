@@ -2,14 +2,22 @@ plugins {
     id 'com.android.application'
 }
 
-// إعدادات البناء من android/app.properties (+ أسرار GitHub إن وُجدت)
+// إعدادات البناء: العنوان من android/app.properties، والأسرار من متغيرات البيئة (أسرار GitHub في Actions)
+// أو من android/signing.properties على جهاز محلي (لا يُرفع إلى GitHub — المستودع عام)
 def props = new Properties()
 file('../app.properties').withInputStream { props.load(it) }
+def local = new Properties()
+def localFile = file('../signing.properties')
+if (localFile.exists()) { localFile.withInputStream { local.load(it) } }
 def baseUrl = System.getenv('ATT_BASE_URL') ?: props.getProperty('BASE_URL')
-def appKey = System.getenv('ATT_APP_KEY') ?: props.getProperty('APP_KEY')
-def ksFile = System.getenv('ANDROID_KEYSTORE_FILE') ?: ('../' + props.getProperty('KEYSTORE_FILE'))
-def ksPass = System.getenv('ANDROID_KEYSTORE_PASSWORD') ?: props.getProperty('KEYSTORE_PASSWORD')
-def ksAlias = System.getenv('ANDROID_KEY_ALIAS') ?: props.getProperty('KEY_ALIAS')
+def appKey = System.getenv('ATT_APP_KEY') ?: local.getProperty('APP_KEY')
+def ksFile = System.getenv('ANDROID_KEYSTORE_FILE') ?: (local.getProperty('KEYSTORE_FILE') ? ('../' + local.getProperty('KEYSTORE_FILE')) : null)
+def ksPass = System.getenv('ANDROID_KEYSTORE_PASSWORD') ?: local.getProperty('KEYSTORE_PASSWORD')
+def ksAlias = System.getenv('ANDROID_KEY_ALIAS') ?: local.getProperty('KEY_ALIAS') ?: 'attendance'
+if (!appKey || !ksFile || !ksPass) {
+    // never fall back to another signing key: an APK signed differently cannot update the installed app
+    throw new GradleException('Missing signing secrets: set ANDROID_KEYSTORE_B64, ANDROID_KEYSTORE_PASSWORD and ATT_APP_KEY (GitHub secrets) or android/signing.properties')
+}
 def vCode = (System.getenv('GITHUB_RUN_NUMBER') ?: '1') as Integer
 
 android {

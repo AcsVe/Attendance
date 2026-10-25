@@ -38,14 +38,19 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Signing key from secrets (optional)
+      - name: Signing key from secrets
         env:
           KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          APP_KEY: ${{ secrets.ATT_APP_KEY }}
         run: |
-          if [ -n "$KS_B64" ]; then
-            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
-            echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          # the signing key and passwords live only in GitHub secrets (this repository is public)
+          if [ -z "$KS_B64" ] || [ -z "$KS_PASS" ] || [ -z "$APP_KEY" ]; then
+            echo "::error::Add the secrets ANDROID_KEYSTORE_B64, ANDROID_KEYSTORE_PASSWORD and ATT_APP_KEY (Settings > Secrets and variables > Actions), then run this workflow again."
+            exit 1
           fi
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
 
       - name: Build
         working-directory: android
@@ -53,6 +58,7 @@ jobs:
           ATT_BASE_URL: ${{ github.event.inputs.base_url }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ATT_APP_KEY: ${{ secrets.ATT_APP_KEY }}
         run: |
           [ -n "$ATT_BASE_URL" ] || unset ATT_BASE_URL
           [ -n "$ANDROID_KEYSTORE_PASSWORD" ] || unset ANDROID_KEYSTORE_PASSWORD

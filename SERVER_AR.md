@@ -73,4 +73,10 @@ cd ~ && curl -sL -H "Authorization: Bearer $(cat ~/.iaj_github_token)" \
 - تُبنى تلقائياً على GitHub (Actions ← Android APKs) عند أي تعديل في `android/`، وتُرفع إلى `static/apk/` فتصل للكمبيوتر مع `update.bat`.
 - صفحة التنزيل: `https://3.iajaward.org/app` — «Check-in» للموظفين، و«Att Dashboard» لمستخدمي النظام (يُثبَّتان معاً على الهاتف نفسه).
 - Windows: افتح النظام في Edge/Chrome ← زر «تثبيت على هذا الجهاز» أعلى الصفحة.
-- مفتاح توقيع APK في `android/keystore` (المستودع خاص). لاستبداله بأسرار GitHub: `ANDROID_KEYSTORE_B64` و`ANDROID_KEYSTORE_PASSWORD` و`ANDROID_KEY_ALIAS`.
+- **أسرار تطبيقات أندرويد في GitHub فقط** (المستودع عام): `ANDROID_KEYSTORE_B64` و`ANDROID_KEYSTORE_PASSWORD` و`ANDROID_KEY_ALIAS`
+  و`ATT_APP_KEY`. تُضاف بتشغيل **`app_key.bat`** على الكمبيوتر: ينشئ مفتاح التطبيق الجديد مرة واحدة (في القاعدة
+  `app_settings.mobile_app_key`، فيصل للهاتف الاحتياطي مع النسخ) وينسخ كل قيمة إلى الحافظة دون عرضها، ويفتح صفحة الأسرار ثم صفحة
+  البناء (Actions ← Android APKs ← Run workflow). البناء يتوقف برسالة واضحة إن نقص سرّ، ولا يوقّع أبداً بمفتاح آخر.
+- **تبديل مفتاح التطبيق:** المفتاح القديم كان منشوراً، فالنسخ القديمة من التطبيق تُقبل **14 يوماً** فقط بعد إنشاء المفتاح الجديد ثم
+  تُرفض — على الموظفين تحديث التطبيق من صفحة `/app`. `app_key.bat --status` يعرض الحالة، و`app_key.bat --end` يوقف قبول القديم فوراً.
+  للبناء على جهاز محلي: `android/signing.properties` (لا يُرفع).

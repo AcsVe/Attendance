@@ -86,10 +86,10 @@ def api_notify_token():
 
 
 def _signed():
-    from mobile import APP_KEY
+    from mobile import app_sig
     raw = request.get_data() or b''
     ts = request.headers.get('X-App-Ts', '')
-    good = hmac.new(APP_KEY.encode(), raw + b'|' + ts.encode(), hashlib.sha256).hexdigest()
+    good = app_sig(raw + b'|' + ts.encode(), request.headers.get('X-App-Sig', ''))
     try:
         fresh = abs(time.time() * 1000 - float(ts)) < 600000
     except ValueError:

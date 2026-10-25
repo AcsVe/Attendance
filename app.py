@@ -553,7 +553,7 @@ def _establish_session(conn, user, dept_rows=None):
 import hashlib as _hl  # noqa: E402
 import hmac as _hm2  # noqa: E402
 import time  # noqa: E402
-from mobile import APP_KEY as _APP_KEY  # noqa: E402
+from mobile import app_sig as _app_sig  # noqa: E402
 
 
 def _dev_hash(t):
@@ -561,7 +561,7 @@ def _dev_hash(t):
 
 
 def _bio_sig_ok(device, ts):
-    good = _hm2.new(_APP_KEY.encode(), (device + '|' + ts).encode(), _hl.sha256).hexdigest()
+    good = _app_sig((device or '') + '|' + (ts or ''), request.headers.get('X-App-Sig', ''))
     try:
         fresh = abs(time.time() * 1000 - float(ts)) < 600000
     except (TypeError, ValueError):

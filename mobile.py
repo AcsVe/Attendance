@@ -37,8 +37,48 @@ NEXT = {   # الحركة المسموحة حسب آخر حركة اليوم
     'out': ['in'],
 }
 LEAVE_REASON = 'خروج مؤقت عبر تطبيق الهاتف'
-# مفتاح توقيع تطبيق الموظف (APK) — نفس القيمة في android/app.properties (يمكن تغييره بـ MOBILE_APP_KEY في .env + إعادة بناء التطبيق)
-APP_KEY = os.environ.get('MOBILE_APP_KEY') or '8aGskrDZUF1q0VN5_Eny0xQVPLl4a2lYSOzl63c93_A'
+# ===== مفتاح توقيع حركات تطبيق أندرويد (HMAC) =====
+# المفتاح الحالي في القاعدة (app_settings.mobile_app_key — يُنسخ مع النسخ الاحتياطي إلى الهاتف الاحتياطي)
+# أو MOBILE_APP_KEY في .env، وهو نفسه سرّ GitHub «ATT_APP_KEY» الذي يُبنى به التطبيق. يُنشئه ops/app_key.py
+# (app_key.bat). المفتاح القديم كان منشوراً في المستودع العام، فلا يُقبل إلا في فترة الانتقال
+# (app_settings.mobile_app_key_legacy_until) حتى يحدّث الموظفون التطبيق، ثم يُرفض نهائياً.
+LEGACY_APP_KEY = '8aGskrDZUF1q0VN5_Eny0xQVPLl4a2lYSOzl63c93_A'
+_KEYS_CACHE = {'at': 0.0, 'keys': None}
+
+
+def app_keys():
+    """المفاتيح المقبولة الآن (الحالي أولاً)؛ تُقرأ من القاعدة مرة كل 30 ثانية."""
+    now = time.time()
+    if _KEYS_CACHE['keys'] is not None and now - _KEYS_CACHE['at'] < 30:
+        return _KEYS_CACHE['keys']
+    cur = os.environ.get('MOBILE_APP_KEY') or ''
+    until = ''
+    try:
+        cur = cur or db.get_setting('mobile_app_key', '')
+        until = db.get_setting('mobile_app_key_legacy_until', '')
+    except Exception:
+        pass
+    if not cur:
+        keys = [LEGACY_APP_KEY]                       # not rotated yet
+    else:
+        keys = [cur]
+        if until and datetime.now().strftime('%Y-%m-%d %H:%M') < until:
+            keys.append(LEGACY_APP_KEY)               # transition: old app versions still accepted
+    _KEYS_CACHE.update(at=now, keys=keys)
+    return keys
+
+
+def app_sig(msg, given):
+    """التوقيع الصحيح للرسالة إن طابق أحد المفاتيح المقبولة التوقيعَ المرسل، وإلا قيمة لا تطابق أبداً."""
+    import hashlib as _hh
+    import hmac as _hmm
+    if isinstance(msg, str):
+        msg = msg.encode()
+    for k in app_keys():
+        sig = _hmm.new(k.encode(), msg, _hh.sha256).hexdigest()
+        if _hmm.compare_digest(sig, given or ''):
+            return sig
+    return '!'
 
 
 # =====================================================
@@ -230,7 +270,7 @@ def check_integrity(conn, emp, kind, data, lat, lng, accuracy, site, cfg):
         ts = request.headers.get('X-App-Ts', '')
         js = lambda v: 'null' if v is None else v   # noqa: E731 — نفس تمثيل الجافاسكربت
         msg = f"{kind}|{js(data.get('lat'))}|{js(data.get('lng'))}|{ts}|{1 if data.get('bio') else 0}".encode()
-        good = hmac.new(APP_KEY.encode(), msg, _h.sha256).hexdigest()
+        good = app_sig(msg, request.headers.get('X-App-Sig', ''))
         try:
             fresh = abs(time.time() * 1000 - float(ts)) < 180000
         except ValueError:
@@ -520,7 +560,7 @@ def me_quick_login():
         if request.headers.get('X-App'):
             # تطبيق أندرويد: البصمة تمت داخل التطبيق، والطلب موقّع من التطبيق
             ts = request.headers.get('X-App-Ts', '')
-            good = hmac.new(APP_KEY.encode(), f"login|{nonce}|{ts}|1".encode(), _h.sha256).hexdigest()
+            good = app_sig(f"login|{nonce}|{ts}|1", request.headers.get('X-App-Sig', ''))
             try:
                 fresh = abs(time.time() * 1000 - float(ts)) < 120000
             except ValueError:
@@ -2545,7 +2585,7 @@ def _app_signed():
     import hmac as _hm
     raw = request.get_data() or b''
     ts = request.headers.get('X-App-Ts', '')
-    good = _hm.new(APP_KEY.encode(), raw + b'|' + ts.encode(), _h.sha256).hexdigest()
+    good = app_sig(raw + b'|' + ts.encode(), request.headers.get('X-App-Sig', ''))
     try:
         fresh = abs(time.time() * 1000 - float(ts)) < 600000
     except ValueError:
@@ -2583,7 +2623,7 @@ def me_presence_ping():
     import hmac as _hm
     raw = request.get_data() or b''
     ts = request.headers.get('X-App-Ts', '')
-    good = _hm.new(APP_KEY.encode(), raw + b'|' + ts.encode(), _h.sha256).hexdigest()
+    good = app_sig(raw + b'|' + ts.encode(), request.headers.get('X-App-Sig', ''))
     try:
         fresh = abs(time.time() * 1000 - float(ts)) < 600000
     except ValueError:
@@ -2638,7 +2678,7 @@ def me_share_backfill():
     import hmac as _hm
     raw = request.get_data() or b''
     ts = request.headers.get('X-App-Ts', '')
-    good = _hm.new(APP_KEY.encode(), raw + b'|' + ts.encode(), _h.sha256).hexdigest()
+    good = app_sig(raw + b'|' + ts.encode(), request.headers.get('X-App-Sig', ''))
     try:
         fresh = abs(time.time() * 1000 - float(ts)) < 600000
     except ValueError:
