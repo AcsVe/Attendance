@@ -88,6 +88,8 @@ from mobile import bp as _mobile_bp  # noqa: E402
 app.register_blueprint(_mobile_bp)
 import adms as _adms  # noqa: E402 — استقبال البصمات من الأجهزة عبر الإنترنت (ADMS / Cloud Server)
 app.register_blueprint(_adms.bp)
+import dahua as _dahua  # noqa: E402 — أجهزة Dahua (سحب CGI داخل الشبكة + استقبال عبر الإنترنت + ملفات SmartPSS)
+app.register_blueprint(_dahua.bp)
 import admin_notes as _admin_notes  # noqa: E402 — إشعارات أندرويد لتطبيق الإدارة
 app.register_blueprint(_admin_notes.bp)
 import shares as _shares  # noqa: E402 — مشاركة الموقع من تطبيق الموظف
@@ -101,6 +103,7 @@ app.register_blueprint(_displays.bp)
 try:
     _c = db.get_db()
     _adms.init_tables(_c)
+    _dahua.init_tables(_c)
     _admin_notes.init_tables(_c)
     _shares.init_tables(_c)
     _corrections.init_tables(_c)
@@ -3617,11 +3620,25 @@ def pull_from_devices(conn, device_ids=None, d_from=None, d_to=None):
     commit إلا بعد إدراج البيانات.
     """
     devices = _get_devices(conn, device_ids)
-    if not devices:
+    # أجهزة Dahua المفعّلة تُسحب معها عند «سحب الكل» (زر السحب والجدولة)
+    dahua_res = []
+    if not device_ids:
+        try:
+            dahua_res = _dahua.pull_all(conn,
+                                        start=datetime.combine(d_from, datetime.min.time()) if d_from else None,
+                                        end=datetime.combine(d_to, datetime.min.time()) + timedelta(days=1) if d_to else None)
+        except Exception as e:   # noqa: BLE001 — لا يوقف سحب ZKTeco
+            dahua_res = [{'device': 'Dahua', 'ok': False, 'error': f'{type(e).__name__}'}]
+    if not devices and not dahua_res:
         return {'ok': False, 'error': 'لا يوجد جهاز محدَّد أو مفعَّل', 'imported': 0, 'per_device': [], 'unmatched_uids': []}
     uid_map = _uid_employee_map(conn)
 
-    all_rows, per_device, all_unmatched = [], [], set()
+    all_rows, all_unmatched = [], set()
+    per_device = [{'device': r['device'], 'ok': r['ok'], **({'count': r.get('count', 0)} if r['ok'] else {'error': r.get('error')})}
+                  for r in dahua_res]
+    for r in dahua_res:
+        all_unmatched.update(r.get('unmatched') or [])
+    dahua_new = sum(r.get('count', 0) for r in dahua_res if r['ok'])
     for dev in devices:
         result = zk_devices.pull_attendance(dev, d_from, d_to, uid_map)
         if result.get('ok'):
@@ -3645,7 +3662,7 @@ def pull_from_devices(conn, device_ids=None, d_from=None, d_to=None):
                    reason=f"غير مطابق: {len(all_unmatched)} رقم بصمة" if all_unmatched else None)
         conn.commit()
 
-    return {'ok': True, 'imported': len(all_rows), 'per_device': per_device, 'unmatched_uids': sorted(all_unmatched)}
+    return {'ok': True, 'imported': len(all_rows) + dahua_new, 'per_device': per_device, 'unmatched_uids': sorted(all_unmatched)}
 
 
 @app.route('/api/devices/pull', methods=['POST'])

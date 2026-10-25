@@ -8,7 +8,7 @@
 | العنوان | https://3.iajaward.org |
 | المنفذ | `8003` |
 | المجلد على كمبيوتر المدرسة | `C:\Att` |
-| التقنية | Flask + Waitress (`serve.py`) + تطبيقا Android (`android/`، يُبنى في Actions) + أجهزة بصمة ZKTeco (`zk/`, `adms.py`) |
+| التقنية | Flask + Waitress (`serve.py`) + تطبيقا Android (`android/`، يُبنى في Actions) + أجهزة بصمة ZKTeco (`zk/`, `adms.py`) وDahua (`dahua.py`) |
 | القاعدة | SQLite `data\attendance_web.db` |
 | الاختبار | لا توجد اختبارات آلية: شغّل على SQLite مؤقتة وجرّب الصفحات المعدّلة؛ ميزات الهاتف تحتاج تجربة على جهاز حقيقي |
 | الأدلة | `SYSTEM_GUIDE_AR.md`، `SERVER_AR.md`، `docs/payroll_plan.md` |

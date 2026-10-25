@@ -159,6 +159,11 @@ def _tick():
     except Exception:   # noqa: BLE001
         logger.exception('adms flush/offline check failed')
     try:
+        import dahua
+        dahua.tick()      # سحب تلقائي من أجهزة Dahua داخل الشبكة كل بضع دقائق (قراءة فقط)
+    except Exception:   # noqa: BLE001
+        logger.exception('dahua auto pull failed')
+    try:
         import daily_summary
         daily_summary.tick()   # الملخص اليومي للإدارة (صباحاً ومساءً)
     except Exception:   # noqa: BLE001

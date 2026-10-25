@@ -851,6 +851,7 @@
     <div class="tab-panel" id="tab-devices">
       <div class="subtab-nav">
         <button class="subtab-btn active" data-subtab="dev-list" onclick="showDeviceSubtab('dev-list')"><i class="fas fa-server" aria-hidden="true"></i> الأجهزة المسجَّلة</button>
+        <button class="subtab-btn" data-subtab="dev-dahua" onclick="showDeviceSubtab('dev-dahua'); dhLoad()"><i class="fas fa-face-smile" aria-hidden="true"></i> أجهزة Dahua</button>
         <button class="subtab-btn" data-subtab="dev-mdb" onclick="showDeviceSubtab('dev-mdb')"><i class="fas fa-database" aria-hidden="true"></i> استيراد ملف خارجي</button>
         <button class="subtab-btn" data-subtab="dev-live" onclick="showDeviceSubtab('dev-live')"><i class="fas fa-circle" style="color:#e74c3c" aria-hidden="true"></i> مراقبة حية</button>
         <button class="subtab-btn" data-subtab="dev-pull" onclick="showDeviceSubtab('dev-pull')"><i class="fas fa-sync-alt" aria-hidden="true"></i> مزامنة واستيراد</button>
@@ -905,6 +906,104 @@
               <tbody id="admsTable"><tr><td colspan="8" style="color:var(--muted)">لم يتصل أي جهاز بعد</td></tr></tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+      <!-- ===== أجهزة Dahua (بجانب ZKTeco في القاعدة نفسها) — dahua.py / static/js/dahua_admin.js ===== -->
+      <div class="device-subtab" id="devsub-dev-dahua">
+        <div class="card">
+          <div class="card-title"><i class="fas fa-plus" aria-hidden="true"></i> <span id="dhFormTitle">إضافة جهاز Dahua على شبكة المدرسة</span></div>
+          <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">مثل ASA3223A-W. يقرأ الخادم السجلات من الجهاز عبر واجهة CGI (قراءة فقط: لا يتوقف الجهاز ولا تُمسح سجلاته).
+            اجعل عنوان الجهاز ثابتاً في الراوتر، وفي الجهاز فعّل <b>CGI</b> (الميزات ← إعدادات الخصوصية). اسم المستخدم وكلمة المرور هما حساب الدخول إلى صفحة الجهاز، وتُحفظ كلمة المرور مشفّرة.
+            <b>رقم المستخدم (User ID) في الجهاز = «رقم البصمة» للموظف</b> في قائمة الموظفين.</p>
+          <div class="form-grid quad">
+            <div class="form-group"><label>اسم الجهاز <span style="color:#c0392b">*</span></label><input type="text" id="dhName" placeholder="مثال: بوابة المعلمين"></div>
+            <div class="form-group"><label>عنوان IP <span style="color:#c0392b">*</span></label><input type="text" id="dhHost" dir="ltr" placeholder="192.168.1.108"></div>
+            <div class="form-group"><label>المنفذ</label><input type="number" id="dhPort" value="80" dir="ltr"></div>
+            <div class="form-group"><label>الموقع (اختياري)</label><input type="text" id="dhLocation" placeholder="مثال: المبنى الرئيسي"></div>
+            <div class="form-group"><label>اسم المستخدم</label><input type="text" id="dhUser" value="admin" dir="ltr" autocomplete="off"></div>
+            <div class="form-group"><label>كلمة المرور <span style="color:#c0392b" id="dhPwStar">*</span></label><input type="password" id="dhPass" dir="ltr" autocomplete="new-password" placeholder="••••••"></div>
+            <div class="form-group"><label>توقيت السجلات</label><select id="dhTime"><option value="utc">قياسي (UTC) — الأغلب</option><option value="local">الجهاز يرسل الوقت المحلي</option></select></div>
+            <div class="form-group" style="justify-content:flex-end;gap:6px">
+              <label style="display:flex;gap:6px;align-items:center;font-weight:600"><input type="checkbox" id="dhHttps"> HTTPS</label>
+              <label style="display:flex;gap:6px;align-items:center;font-weight:600"><input type="checkbox" id="dhAuto" checked> سحب تلقائي</label>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="dhSave()"><i class="fas fa-save" aria-hidden="true"></i> <span id="dhSaveLbl">حفظ</span></button>
+          <button class="btn btn-outline" id="dhCancel" style="display:none" onclick="dhReset()">إلغاء التعديل</button>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><i class="fas fa-list" aria-hidden="true"></i> أجهزة Dahua على الشبكة (<span id="dhCount">0</span>)</div>
+          <div class="filter-bar" style="margin-bottom:8px;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" onclick="dhBulk('pull')"><i class="fas fa-download" aria-hidden="true"></i> سحب الآن</button>
+            <input type="date" id="dhFrom" class="search-input" style="min-width:140px" title="من تاريخ (اختياري)">
+            <input type="date" id="dhTo" class="search-input" style="min-width:140px" title="إلى تاريخ (اختياري)">
+            <button class="btn btn-outline btn-sm" onclick="dhBulk('test')"><i class="fas fa-plug" aria-hidden="true"></i> اختبار الاتصال</button>
+            <button class="btn btn-outline btn-sm" onclick="dhBulk('enable')">تفعيل</button>
+            <button class="btn btn-outline btn-sm" onclick="dhBulk('disable')">تعطيل</button>
+            <button class="btn btn-outline btn-sm" onclick="dhBulk('auto_on')">تشغيل السحب التلقائي</button>
+            <button class="btn btn-outline btn-sm" onclick="dhBulk('auto_off')">إيقاف السحب التلقائي</button>
+            <button class="btn btn-red btn-sm" onclick="dhBulk('delete')"><i class="fas fa-trash" aria-hidden="true"></i> حذف</button>
+            <span style="font-size:.85rem;color:var(--muted)">المحدد: <b id="dhSel">0</b></span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:.85rem;margin-bottom:8px">
+            <label style="display:flex;gap:6px;align-items:center;font-weight:600"><input type="checkbox" id="dhAutoAll" onchange="dhSettings({auto_pull: this.checked})"> السحب التلقائي مفعّل</label>
+            <label style="display:flex;gap:6px;align-items:center">كل
+              <select id="dhEvery" class="search-input" style="width:auto;min-width:0" onchange="dhSettings({pull_every: +this.value})">
+                <option>1</option><option>2</option><option>3</option><option>5</option><option>10</option><option>15</option><option>30</option><option>60</option></select> دقيقة</label>
+            <span style="color:var(--muted)">بلا تاريخ: يسحب الجديد منذ آخر سحب (أول مرة: آخر 31 يوماً). المكرر يُتجاهل دائماً.</span>
+          </div>
+          <div class="table-wrap" style="max-height:380px">
+            <table class="dt-filterable">
+              <thead><tr><th class="no-filter"><input type="checkbox" aria-label="تحديد الكل" onchange="dhCheckAll('dh-dev', this.checked)"></th>
+                <th>الاسم</th><th>العنوان</th><th>الطراز</th><th>الحالة</th><th>آخر سحب</th><th>آخر بصمة</th><th>اليوم</th><th>الإجمالي</th><th>أرقام غير مطابقة</th><th class="no-filter">تعديل</th></tr></thead>
+              <tbody id="dhDevices"></tbody>
+            </table>
+          </div>
+          <div id="dhResult" style="font-size:.85rem;margin-top:8px"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><i class="fas fa-cloud-arrow-up" aria-hidden="true"></i> استقبال عبر الإنترنت من أي مكان (Auto Upload / HTTP Push) — المرسِلون (<span id="dhSendCount">0</span>)</div>
+          <p style="font-size:.85rem;color:var(--muted);margin-bottom:8px">إن كان برنامج الجهاز يدعم الرفع التلقائي (صفحة الجهاز ← الشبكة ← <b>Auto Upload</b> أو HTTP Push)، اضبطه على:</p>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+            <code dir="ltr" id="dhPushUrl" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;word-break:break-all">—</code>
+            <button class="btn btn-outline btn-sm" onclick="dhCopy()"><i class="fas fa-copy" aria-hidden="true"></i> نسخ</button>
+            <button class="btn btn-outline btn-sm" onclick="dhNewToken()" title="يبطل الرابط القديم">رمز جديد</button>
+          </div>
+          <p style="font-size:.82rem;color:var(--muted);margin-bottom:8px">إن طلب الجهاز الحقول منفصلة: العنوان <b dir="ltr" id="dhPushHost">—</b>، المنفذ <b dir="ltr">443</b> مع HTTPS، والمسار <b dir="ltr" id="dhPushPath">—</b>.
+            المرسِل بالرابط الكامل يُقبل مباشرة؛ ومن يرسل بلا الرمز يظهر «بانتظار الموافقة»، وتُحفظ بصماته معلّقة ثم تُطبَّق كلها عند الموافقة.
+            إن وصلت رسائل ولم تُقرأ منها بصمات، افتح «آخر رسالة» وأرسلها إلى الدعم الفني لضبط القراءة.</p>
+          <div class="filter-bar" style="margin-bottom:8px;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" onclick="dhSendBulk('approve')"><i class="fas fa-check" aria-hidden="true"></i> موافقة</button>
+            <button class="btn btn-outline btn-sm" onclick="dhSendBulk('block')"><i class="fas fa-ban" aria-hidden="true"></i> إيقاف</button>
+            <select id="dhSendTime" class="search-input" style="width:auto;min-width:0" onchange="if(this.value){dhSendBulk(this.value);this.value=''}">
+              <option value="">توقيت الرسائل…</option><option value="time_auto">تلقائي (موصى به)</option><option value="time_utc">قياسي UTC</option><option value="time_local">محلي</option></select>
+            <button class="btn btn-red btn-sm" onclick="dhSendBulk('delete')"><i class="fas fa-trash" aria-hidden="true"></i> حذف</button>
+            <span style="font-size:.85rem;color:var(--muted)">المحدد: <b id="dhSendSel">0</b></span>
+          </div>
+          <div class="table-wrap" style="max-height:320px">
+            <table class="dt-filterable">
+              <thead><tr><th class="no-filter"><input type="checkbox" aria-label="تحديد الكل" onchange="dhCheckAll('dh-send', this.checked)"></th>
+                <th>الاسم</th><th>المعرّف</th><th>الحالة</th><th>آخر اتصال</th><th>الرسائل</th><th>اليوم</th><th>معلّقة</th><th>أرقام غير مطابقة</th><th>آخر رسالة</th></tr></thead>
+              <tbody id="dhSenders"></tbody>
+            </table>
+          </div>
+          <pre id="dhRaw" dir="ltr" style="display:none;white-space:pre-wrap;max-height:260px;overflow:auto;font-size:.75rem;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;margin-top:8px"></pre>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><i class="fas fa-file-excel" aria-hidden="true"></i> رفع ملف سجلات من SmartPSS Lite / SmartPSS AC</div>
+          <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">في البرنامج: الحضور ← السجلات (Attendance Records / Original Records) ← تصدير، ثم ارفع الملف هنا (xlsx أو xls أو csv).
+            تُكتشف الأعمدة تلقائياً (رقم الموظف أو اسمه، والوقت)، وإعادة رفع الملف نفسه لا تكرر شيئاً.
+            ملاحظة: التصدير إلى USB من الجهاز نفسه مشفَّر ولا تقرؤه إلا برامج Dahua.</p>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input type="file" id="dhFile" accept=".xlsx,.xls,.csv,.txt">
+            <button class="btn btn-primary" onclick="dhImport()"><i class="fas fa-upload" aria-hidden="true"></i> رفع واستيراد</button>
+            <button class="btn btn-outline btn-sm" onclick="dhRematch()" title="بعد إضافة رقم البصمة لموظف">إعادة مطابقة الأرقام غير المطابقة</button>
+          </div>
+          <div id="dhImportResult" style="font-size:.85rem;margin-top:8px"></div>
         </div>
       </div>
 
@@ -1597,6 +1696,7 @@
 <script src="{{ url_for('static', filename='js/admin_extra.js') }}"></script>
 <script src="{{ url_for('static', filename='js/vacations_admin.js') }}"></script>
 <script src="{{ url_for('static', filename='js/displays_admin.js') }}"></script>
+<script src="{{ url_for('static', filename='js/dahua_admin.js') }}"></script>
 <script>
 function toggleTheme(){var r=document.documentElement,d=r.getAttribute('data-theme')==='dark';r.setAttribute('data-theme',d?'light':'dark');try{localStorage.setItem('att_theme',d?'light':'dark');}catch(e){}var b=document.getElementById('themeIcon');if(b)b.className=d?'fas fa-moon':'fas fa-sun';}
 document.addEventListener('DOMContentLoaded',function(){var b=document.getElementById('themeIcon');if(b)b.className=document.documentElement.getAttribute('data-theme')==='dark'?'fas fa-sun':'fas fa-moon';});
