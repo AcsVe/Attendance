@@ -175,7 +175,8 @@ def _store_attlog(conn, dev, raw, stamp):
                      "ON CONFLICT(key) DO UPDATE SET value = excluded.value")
     conn.commit()
     if by_day:
-        flush(throttle=60)
+        # التحليل في الخلفية: الجهاز يتلقى «OK» فوراً ولا ينتظر، حتى مع طابور موظفين
+        threading.Thread(target=flush, kwargs={'throttle': 60}, daemon=True).start()
     return count
 
 
