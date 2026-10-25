@@ -6,6 +6,7 @@
   <style>.hide{display:none}</style>
 </head>
 <body>
+{% include "_ticker.html" %}
 <div class="wrap" style="padding-top:8vh">
   <div style="text-align:center;margin-bottom:18px">
     {% if settings.org_logo_filename %}<img src="{{ url_for('static', filename='uploads/' + settings.org_logo_filename) }}" alt="شعار {{ settings.org_name or 'المؤسسة' }}" style="max-height:70px;max-width:220px">

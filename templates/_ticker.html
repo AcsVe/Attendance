@@ -1,0 +1,233 @@
+<!-- ── Global scrolling ticker (announcement marquee) ───────────────────────
+     Fully transparent background, bold white text with a soft shadow for
+     legibility over any page background, fades out at the left/right
+     edges via a CSS mask, and mirrors its scroll direction automatically
+     with the page's current language (RTL for Arabic, LTR otherwise).
+     Fixed to the very top of the viewport so it stays put while the page
+     scrolls. Given a deliberately fixed, known height (38px) instead of
+     one measured at runtime — a page reserving that exact amount of
+     space via CSS alone (see .has-ticker below) is far more reliable
+     than racing a JS measurement against first paint. -->
+<style>
+  #globalTicker {
+    position: fixed; top: 0; inset-inline-start: 0; inset-inline-end: 0; z-index: 50;
+    height: 38px; overflow: hidden; /* width comes from inset-inline-start/end, not a fixed 100% — see the frozen-sidebar override below */
+    display: none; /* JS reveals this (display:flex) once content is confirmed non-empty */
+    align-items: center;
+    pointer-events: auto; /* hover-to-pause needs the bar itself to receive the hover */
+    /* NOTE: direction is intentionally NOT forced here on the outer
+       positioned box — inset-inline-start/-end above must keep resolving
+       against the page's real direction (dir="rtl"/"ltr" on <html>), or
+       the admin sidebar offset (see dashboard.html's
+       "inset-inline-start: var(--sidebar)" override) ends up applied to
+       the wrong physical edge and the bar is misaligned/clipped. The
+       LTR-pinning that the scroll animation needs lives on .ticker-track
+       below instead, which has no positioning of its own. */
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 60px, #000 calc(100% - 60px), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, #000 60px, #000 calc(100% - 60px), transparent 100%);
+  }
+  /* Always laid out LTR internally, regardless of page language: the
+     scroll animation below moves the track with translateX() in plain
+     physical pixels, and the two duplicated <span class="ticker-seg">
+     halves must stay in a fixed left-to-right order for that math (and
+     the left/right fade mask on the parent) to line up. Without this,
+     an Arabic page (<html dir="rtl">) silently flips the flex item
+     order here too, breaking the loop — items land outside the masked
+     strip and it looks like only one item ever shows. Each item's own
+     text still reads correctly (Arabic or English) via dir="auto". */
+  #globalTicker .ticker-track { display: flex; width: max-content; will-change: transform; direction: ltr; }
+  #globalTicker:hover .ticker-track { animation-play-state: paused; }
+  #globalTicker .ticker-seg { display: flex; align-items: center; white-space: nowrap; direction: ltr; }
+  #globalTicker .ticker-item {
+    color: var(--ticker-text, #fff); font-weight: 800; font-size: 1rem;
+    padding-right: 46px; /* physical (not inline-end): the flex flow itself is pinned LTR above, so the gap
+                             must stay on the visual right regardless of each item's own resolved text direction */
+    white-space: nowrap !important; /* !important: admin-entered content can carry an inline
+                                        white-space/display style of its own (e.g. pasted from Word into
+                                        the Quill editor) which otherwise outranks this rule and wraps the
+                                        item onto a second line, clipped by the bar's fixed height — looks
+                                        like a "ghost line" trying to peek through underneath. */
+    display: inline-block !important;
+  }
+  #globalTicker .ticker-item * { white-space: nowrap !important; display: inline !important; }
+  #globalTicker .ticker-track.shadow-light .ticker-item { text-shadow: 0 1px 3px rgba(0,0,0,.6), 0 0 2px rgba(0,0,0,.45); }
+  #globalTicker .ticker-track.shadow-strong .ticker-item { text-shadow: 0 2px 5px rgba(0,0,0,.85), 0 0 6px rgba(0,0,0,.7), 0 0 2px rgba(0,0,0,.9); }
+  #globalTicker .ticker-item a { color: inherit; text-decoration: underline; }
+  /* margin-inline-end (not margin-right): each ticker-item carries
+     dir="auto" so Arabic content resolves to RTL internally, which flips
+     the VISUAL order of the logo and its text inside that one item (even
+     though the outer track is always force-LTR for the scroll math) —
+     the logo ends up on the visual right, same side a physical
+     margin-right already sits on, so the gap lands on the wrong side of
+     the logo (away from the text) and the two look glued together. The
+     logical property instead always lands the gap between the logo and
+     the text, whichever way that item itself resolves. */
+  #globalTicker .ticker-item img.ticker-logo { height: 22px; vertical-align: middle; margin-inline-end: 10px; }
+  /* ticker-scroll-ltr moves leftward (content exits on the left) — the
+     conventional news-ticker motion for LTR/English pages. ticker-scroll-rtl
+     moves rightward (content exits on the right) — its mirror, for
+     Arabic/RTL pages. Keep the class→keyframe pairing below matched to
+     that (dir-ltr → ticker-scroll-ltr, dir-rtl → ticker-scroll-rtl); the
+     two were previously swapped, which made both languages scroll
+     backwards from what people expect. */
+  @keyframes ticker-scroll-ltr { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  @keyframes ticker-scroll-rtl { from { transform: translateX(0); } to { transform: translateX(50%); } }
+  #globalTicker .ticker-track.dir-ltr { animation-name: ticker-scroll-ltr; }
+  #globalTicker .ticker-track.dir-rtl { animation-name: ticker-scroll-rtl; }
+  #globalTicker .ticker-track { animation-timing-function: linear; animation-iteration-count: infinite; }
+  @keyframes ticker-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+  #globalTicker .ticker-track.pulse-on { animation-name: ticker-scroll-ltr, ticker-pulse; animation-iteration-count: infinite, infinite; animation-timing-function: linear, ease-in-out; }
+  #globalTicker .ticker-track.pulse-on.dir-rtl { animation-name: ticker-scroll-rtl, ticker-pulse; }
+  @media (max-width: 640px) {
+    #globalTicker { -webkit-mask-image: linear-gradient(to right, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%); mask-image: linear-gradient(to right, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%); }
+    #globalTicker .ticker-item { font-size: .88rem; padding-right: 30px; }
+  }
+</style>
+<div id="globalTicker" data-notr><div class="ticker-track" id="tickerTrack"></div></div>
+<script>
+(function () {
+  const ORG_LOGO = {{ (ticker_logo if ticker_logo is defined else (config.LOGO_URL or ''))|tojson }};
+  // NOT a fixed PAGE_LANG constant: the admin dashboard's language toggle
+  // (toggleLang() in dashboard.html) switches languages in place — no
+  // page reload — updating document.documentElement.lang/dir and then
+  // calling window.reloadTicker() again. A constant captured once at
+  // first render would keep showing the Arabic ticker text (and the
+  // Arabic-vs-English scroll direction it was built for) forever after
+  // that, even though the rest of the page switched to English — reading
+  // it fresh here is what makes the ticker actually follow the toggle.
+  // Pages that don't have a toggle (public pages, login, monitoring) set
+  // this once at render and never change it, so behavior there is
+  // unaffected.
+  function currentLang() { return document.documentElement.lang || {{ (lang or 'ar')|tojson }}; }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function extractSegments(html) {
+    if (!html) return [];
+    // A real DOMParser instead of a <p>-only regex: some builds of the
+    // admin's rich-text editor emit each line as a <div> (not <p>), and a
+    // <p>-only regex would then miss the split entirely and treat the
+    // whole multi-line content as one block. Whatever block-level tag
+    // was actually used (p, div, h1-h6, li), each becomes its own ticker
+    // item correctly. Falls back to the raw string if there's no
+    // block-level structure at all (a single line with no wrapper).
+    let blocks;
+    try {
+      const doc = new DOMParser().parseFromString(`<div id="_root">${html}</div>`, 'text/html');
+      const root = doc.getElementById('_root');
+      const children = root ? [...root.children].filter(el => /^(P|DIV|H[1-6]|LI)$/.test(el.tagName)) : [];
+      blocks = children.length ? children.map(el => el.innerHTML) : [html];
+    } catch (e) {
+      blocks = [html];
+    }
+    return blocks
+      .map(b => b.replace(/<br\s*\/?>/gi, '').replace(/[\r\n\t]+/g, ' ').trim())
+      // Strip any "white-space:" / "display:" / "width:" declarations an
+      // admin's pasted content (e.g. from Word into the editor) might
+      // carry on a nested element — those can force a wrap onto a second
+      // line despite the CSS nowrap rules above, which then gets clipped
+      // by the ticker's fixed height and looks like a stray "ghost
+      // line". Other inline formatting (color/bold/etc.) is left
+      // untouched.
+      .map(b => b.replace(/style="([^"]*)"/gi, (m, css) =>
+        `style="${css.split(';').filter(d => !/^\s*(white-space|display|width)\s*:/i.test(d)).join(';')}"`))
+      .filter(b => b && b.replace(/&nbsp;/gi, '').trim());
+  }
+
+  // Exposed globally so the admin's ticker-settings save button can call
+  // this directly for an instant live preview, instead of the person
+  // having to reload the whole page to see a new speed/pulse/color.
+  window.reloadTicker = function () {
+    const bar = document.getElementById('globalTicker');
+    const track = document.getElementById('tickerTrack');
+    // Reset before re-fetching, in case the ticker just got disabled or
+    // its content became empty.
+    bar.style.display = 'none';
+    bar.style.background = '';
+    bar.style.removeProperty('--ticker-text');
+    track.className = 'ticker-track'; // reset only the toggle classes below — this must keep the base class
+    track.style.animationDuration = '';
+    track.style.animationDelay = '';
+
+    return fetch('/api/ticker').then(r => r.json()).then(data => {
+      if (!data || !data.enabled) return;
+
+      const contentHtml = currentLang() === 'en' ? (data.htmlEn || data.html) : (data.html || data.htmlEn);
+      const manualSegments = extractSegments(contentHtml).map(s => `<span class="ticker-item" dir="auto">${s}</span>`);
+      // RSS-sourced items get their own optional color/weight/size and
+      // dir="auto" so each headline's own script (Arabic vs English,
+      // mixed feeds, etc.) renders in its own correct direction
+      // regardless of the page's overall direction.
+      const rssStyleParts = [];
+      if (data.rssColor) rssStyleParts.push(`color:${data.rssColor}`);
+      if (data.rssBold) rssStyleParts.push('font-weight:800');
+      if (data.rssFontSize) rssStyleParts.push(`font-size:${data.rssFontSize}px`);
+      const rssStyle = rssStyleParts.length ? ` style="${rssStyleParts.join(';')}"` : '';
+      const rssSegments = (data.rssItems || []).map(it => {
+        const title = escapeHtml(it.title);
+        const inner = it.link ? `<a href="${it.link}" target="_blank" rel="noopener">${title}</a>` : title;
+        return `<span class="ticker-item"${rssStyle} dir="auto">${inner}</span>`;
+      });
+
+      const sep = (data.logoBetween && ORG_LOGO) ? `<img class="ticker-logo" src="${ORG_LOGO}" alt="">` : '';
+      const segments = [...manualSegments, ...rssSegments];
+      if (!segments.length) return;
+      // The logo (if enabled) goes inside each item, right before its text.
+      const itemsHtml = segments
+        .map(s => sep ? s.replace('>', `>${sep}`) : s)
+        .join('');
+
+      const isRtl = document.documentElement.dir === 'rtl';
+      track.setAttribute('dir', 'ltr'); // see the CSS comment above — the track itself always stays LTR
+      track.innerHTML = `<span class="ticker-seg">${itemsHtml}</span><span class="ticker-seg" aria-hidden="true">${itemsHtml}</span>`;
+      track.classList.add(isRtl ? 'dir-rtl' : 'dir-ltr');
+      if (data.textShadow === 'strong') track.classList.add('shadow-strong');
+      else if (data.textShadow !== 'none') track.classList.add('shadow-light');
+      if (data.pulse) track.classList.add('pulse-on');
+      // Background colour and its opacity (0 = fully transparent, the original look), and the colour of
+      // the text that has no colour of its own from the editor.
+      const hex = /^#[0-9a-fA-F]{6}$/.test(data.bgColor || '') ? data.bgColor : '#1B3358';
+      const alpha = Math.max(0, Math.min(100, Number(data.bgOpacity) || 0)) / 100;
+      if (alpha > 0) {
+        const n = parseInt(hex.slice(1), 16);
+        bar.style.background = `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${alpha})`;
+      }
+      if (/^#[0-9a-fA-F]{6}$/.test(data.textColor || '')) bar.style.setProperty('--ticker-text', data.textColor);
+
+      // Reveal (still 0-width content isn't measurable while display:none)
+      // before computing the animation duration below.
+      bar.style.display = 'flex';
+      document.body.classList.add('has-ticker');
+      if (window.updateHeaderSpacing) window.updateHeaderSpacing();
+
+      // Constant physical speed (px/second) instead of a fixed duration
+      // for a full loop: the Arabic and English content are two
+      // completely different strings with different total widths, so a
+      // shared "speedSeconds" duration made one visibly crawl and the
+      // other visibly race even though the admin only set one speed.
+      // speedSeconds is instead treated as "how many seconds a loop
+      // would take at a reference width (900px)" and converted to a
+      // px/second rate that both languages then share, so they always
+      // look like they're moving at the same speed.
+      const speedSeconds = data.speedSeconds || 25;
+      const pxPerSecond = 900 / speedSeconds;
+      const segWidth = track.children[0] ? track.children[0].getBoundingClientRect().width : 0;
+      const duration = segWidth > 0 ? Math.max(3, segWidth / pxPerSecond) : speedSeconds;
+      track.style.animationDuration = data.pulse ? `${duration}s, ${data.pulseSeconds || 1.6}s` : `${duration}s`;
+
+      // Reloading (e.g. right after saving a settings change) would
+      // otherwise hard-reset the animation to its 0% starting position —
+      // a sudden jump that, mid-scroll, looks exactly like the direction
+      // just reversed. A negative delay resumes from roughly the same
+      // point in the cycle instead, so it reads as continuous.
+      if (window.__tickerStart == null) window.__tickerStart = Date.now();
+      const elapsed = ((Date.now() - window.__tickerStart) / 1000) % duration;
+      track.style.animationDelay = `-${elapsed}s`;
+    }).catch(() => {});
+  };
+
+  window.reloadTicker();
+})();
+</script>

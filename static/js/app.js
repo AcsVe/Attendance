@@ -153,6 +153,7 @@ const PAGE_TITLES = {
   permissions: 'أذونات التأخير والمغادرة', employees: 'الموظفون', devices: 'أجهزة البصمة',
   'dept-times': 'أوقات الأقسام', settings: 'الإعدادات العامة', schedule: 'الجدولة التلقائية',
   audit: 'سجل التدقيق', users: 'المستخدمون والصلاحيات', maintenance: 'أدوات الصيانة',
+  ticker: 'الشريط الإعلاني',
 };
 
 let currentTab = 'dashboard';

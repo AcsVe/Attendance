@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
   <script>(function(){try{var t=localStorage.getItem('att_theme');if(t==='dark'||(t===null&&window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches))document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
   <!-- ===== إعدادات تثبيت التطبيق (PWA) على أندرويد/ويندوز/آيفون ===== -->
   <link rel="manifest" href="/manifest.json?v={{ icon_ver }}">
   <meta name="theme-color" content="#1B6E8C">
@@ -26,6 +27,7 @@
       data-can-manage-departments="{{ perms.can_manage_departments|int }}"
       data-can-push-devices="{{ perms.can_push_devices|int }}"
       data-can-edit-org-settings="{{ perms.can_edit_org_settings|int }}">
+{% include "_ticker.html" %}
 <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
 <nav class="sidebar" id="sidebar">
   <div class="sidebar-logo">
@@ -90,6 +92,7 @@
       <button class="nav-item" data-tab="dept-times" onclick="showTab('dept-times')"><i class="fas fa-building" aria-hidden="true"></i> أوقات الأقسام</button>
       <button class="nav-item" data-tab="settings" onclick="showTab('settings')"><i class="fas fa-cog" aria-hidden="true"></i> الإعدادات العامة</button>
       <button class="nav-item" data-tab="schedule" onclick="showTab('schedule')"><i class="fas fa-clock" aria-hidden="true"></i> الجدولة التلقائية</button>
+      <button class="nav-item" data-tab="ticker" onclick="showTab('ticker')"><i class="fas fa-bullhorn" aria-hidden="true"></i> الشريط الإعلاني</button>
       </div>
     </div>
     <div class="nav-group" data-group="admin">
@@ -1213,6 +1216,44 @@
       </div>
     </div>
 
+    <!-- ============ TICKER — الشريط الإعلاني المتحرك (نفس وحدة نظامي التذاكر والقاعات) ============ -->
+    <div class="tab-panel" id="tab-ticker">
+      <div class="card">
+        <div class="card-title"><i class="fas fa-bullhorn" aria-hidden="true"></i> الشريط الإعلاني المتحرك</div>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">يظهر أعلى لوحة التحكم وصفحة الدخول، وفي صفحة الموظف وتطبيقه على الهاتف وصفحة دخوله.</p>
+        <label style="display:flex;align-items:center;gap:8px;font-weight:700;cursor:pointer;margin-bottom:14px"><input type="checkbox" id="tickerEnabled"> تفعيل الشريط على كل الصفحات</label>
+        <div class="form-group"><label>محتوى الشريط (عربي)</label>
+          <div id="tickerQuill" style="background:#fff;color:#1e2a2b;min-height:120px" data-notr></div>
+          <div style="font-size:.78rem;color:var(--muted);margin-top:6px">يمكنك تلوين النص، تنسيق الخط، وإضافة روابط — لكل الفقرة أو لجزء محدد منها. كل سطر فقرة مستقلة في الشريط.</div></div>
+        <div class="form-group"><label>محتوى الشريط (إنجليزي)</label>
+          <div id="tickerQuillEn" style="background:#fff;color:#1e2a2b;min-height:120px" dir="ltr" data-notr></div>
+          <div style="font-size:.78rem;color:var(--muted);margin-top:6px">يظهر هذا المحتوى فقط عند تصفح الموقع بالإنجليزية — إن تُرك فارغاً يُستخدم المحتوى العربي بدلاً منه.</div></div>
+        <div class="form-grid">
+          <div class="form-group"><label>سرعة الشريط (ثواني لكل دورة)</label><input type="number" id="tickerSpeed" min="5" max="180" step="1">
+            <div style="font-size:.76rem;color:var(--muted)">رقم أصغر = حركة أسرع</div></div>
+          <div class="form-group"><label>رابط RSS (اختياري)</label><input type="text" id="tickerRssUrl" dir="ltr" placeholder="https://example.com/feed.xml"></div>
+          <div class="form-group"><label>لون نص أخبار RSS</label><input type="color" id="tickerRssColor" style="height:38px;padding:2px;cursor:pointer"></div>
+          <div class="form-group"><label>حجم خط أخبار RSS</label><input type="number" id="tickerRssFontSize" min="10" max="40" step="1"></div>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;font-weight:700;cursor:pointer;margin-top:10px"><input type="checkbox" id="tickerRssBold"> خط عريض لأخبار RSS</label>
+        <label style="display:flex;align-items:center;gap:8px;font-weight:700;cursor:pointer;margin-top:10px"><input type="checkbox" id="tickerLogoBetween"> إظهار الشعار بين فقرات الشريط</label>
+        <label style="display:flex;align-items:center;gap:8px;font-weight:700;cursor:pointer;margin-top:10px"><input type="checkbox" id="tickerPulse" onchange="document.getElementById('tickerPulseSpeedRow').style.display = this.checked ? '' : 'none'"> تأثير النبض (وميض)</label>
+        <div class="form-group" id="tickerPulseSpeedRow" style="display:none;margin-top:8px;max-width:260px"><label>سرعة النبض (ثواني لكل ومضة)</label><input type="number" id="tickerPulseSpeed" min="0.3" max="10" step="0.1"></div>
+        <div class="form-grid trio" style="margin-top:14px">
+          <div class="form-group"><label>لون خلفية الشريط</label><input type="color" id="tickerBgColor" style="height:38px;padding:2px;cursor:pointer" oninput="previewTickerColors()"></div>
+          <div class="form-group"><label><span>شفافية الخلفية:</span> <b id="tickerBgOpacityVal">0%</b></label><input type="range" id="tickerBgOpacity" min="0" max="100" step="5" style="width:100%" oninput="previewTickerColors()">
+            <div style="font-size:.76rem;color:var(--muted)">0% = شفاف تماماً (كما كان)، 100% = لون كامل</div></div>
+          <div class="form-group"><label>لون النص</label><input type="color" id="tickerTextColor" style="height:38px;padding:2px;cursor:pointer" oninput="previewTickerColors()"></div>
+        </div>
+        <div class="form-group" style="margin-top:12px;max-width:260px"><label>ظل النص (لوضوح أفضل)</label>
+          <select id="tickerShadow"><option value="none">بدون ظل</option><option value="light">ظل خفيف</option><option value="strong">ظل قوي</option></select></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:18px">
+          <button class="btn btn-primary" onclick="saveTickerSettings()"><i class="fas fa-save" aria-hidden="true"></i> حفظ</button>
+          <a class="btn btn-outline" href="/me/login" target="_blank"><i class="fas fa-eye" aria-hidden="true"></i> معاينة صفحة الموظف</a>
+        </div>
+      </div>
+    </div>
+
     <!-- ============ SETTINGS ============ -->
     <div class="tab-panel" id="tab-settings">
       <div class="card hide" id="bioCard">
@@ -1697,6 +1738,8 @@
 <script src="{{ url_for('static', filename='js/vacations_admin.js') }}"></script>
 <script src="{{ url_for('static', filename='js/displays_admin.js') }}"></script>
 <script src="{{ url_for('static', filename='js/dahua_admin.js') }}"></script>
+<script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
+<script src="{{ url_for('static', filename='js/ticker_admin.js') }}"></script>
 <script>
 function toggleTheme(){var r=document.documentElement,d=r.getAttribute('data-theme')==='dark';r.setAttribute('data-theme',d?'light':'dark');try{localStorage.setItem('att_theme',d?'light':'dark');}catch(e){}var b=document.getElementById('themeIcon');if(b)b.className=d?'fas fa-moon':'fas fa-sun';}
 document.addEventListener('DOMContentLoaded',function(){var b=document.getElementById('themeIcon');if(b)b.className=document.documentElement.getAttribute('data-theme')==='dark'?'fas fa-sun':'fas fa-moon';});

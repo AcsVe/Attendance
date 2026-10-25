@@ -31,6 +31,7 @@
   </style>
 </head>
 <body>
+{% include "_ticker.html" %}
 <div class="wrap">
   <div class="top">
     <div style="display:flex;align-items:center;gap:10px;min-width:0">{% if logo_url %}<img src="{{ logo_url }}" alt="شعار {{ org_display or 'المؤسسة' }}" style="height:44px;max-width:90px;object-fit:contain;border-radius:8px;background:#fff;padding:3px;flex:none">{% endif %}

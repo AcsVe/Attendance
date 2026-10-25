@@ -388,3 +388,13 @@ html.modal-lock .modal, html.modal-lock .sidebar { touch-action: pan-y; }
 /* زر تبديل الوضع */
 .theme-toggle { background: none; border: 1.5px solid var(--border); color: var(--text); border-radius: 8px; width: 36px; height: 36px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-size: 1rem; }
 .theme-toggle:hover { border-color: var(--primary); color: var(--primary); }
+
+/* ===== الشريط الإعلاني المتحرك (templates/_ticker.html): في لوحة التحكم يمتد بجانب القائمة الجانبية فقط،
+   وتنزل الصفحة بمقدار ارتفاعه الثابت (38px) ما دام ظاهراً؛ وفي صفحتي الدخول ينزل المحتوى بالمقدار نفسه ===== */
+body[data-role] #globalTicker { inset-inline-start: var(--sidebar); }
+body[data-role].has-ticker .main { padding-top: 38px; }
+body.has-ticker:not([data-role]) { padding-top: 38px; }
+@media (max-width: 768px) {
+  body[data-role].has-ticker .topbar { top: 38px; }
+}
+body.has-ticker .theme-toggle[style*="position:fixed"] { top: 52px !important; }   /* زر الوضع الداكن في صفحة الدخول ينزل تحت الشريط */

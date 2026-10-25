@@ -372,8 +372,9 @@ def _inject_lang():
         st = {}
     org = (st.get('org_name_en') if lang == 'en' else '') or st.get('org_name') or ''
     logo, ver = _logo_file(st)
+    logo_url = url_for('static', filename='uploads/' + logo, v=ver) if logo else ''
     return {'ui_lang': lang, 'ui_dir': 'ltr' if lang == 'en' else 'rtl', 'org_display': org,
-            'logo_url': url_for('static', filename='uploads/' + logo, v=ver) if logo else '', 'icon_ver': ver}
+            'logo_url': logo_url, 'ticker_logo': logo_url, 'icon_ver': ver}
 
 
 def _logo_file(st=None):
@@ -808,6 +809,53 @@ def logout():
 @app.route('/')
 def index():
     return redirect(url_for('dashboard') if session.get('user_id') else url_for('login'))
+
+
+# ── Scrolling ticker (announcement marquee) — the same module as the tickets and venues systems ──────
+@app.route('/api/ticker')
+def api_ticker():
+    """Public, unauthenticated: the ticker shows on the sign-in pages and in the employees' app too."""
+    from utils.ticker_utils import build_ticker_payload
+    return jsonify(build_ticker_payload())
+
+
+@app.route('/api/ticker-settings', methods=['GET', 'POST'])
+@login_required
+def api_ticker_settings():
+    from utils.ticker_utils import get_ticker_config, set_ticker_config
+    if request.method == 'GET':
+        return jsonify(get_ticker_config())
+    if not user_can('can_edit_org_settings'):
+        return jsonify({'ok': False, 'error': 'لا تملك صلاحية تعديل الإعدادات'}), 403
+    data = request.get_json(silent=True) or {}
+    cfg = {}
+    for key in ('enabled', 'pulse', 'rssBold', 'logoBetween'):
+        if key in data:
+            cfg[key] = bool(data[key])
+    for key in ('html', 'htmlEn'):
+        if key in data:
+            cfg[key] = data[key] or ''
+    for key, lo, hi, cast in (('speedSeconds', 5, 180, int), ('pulseSeconds', 0.3, 10, float),
+                              ('rssFontSize', 10, 40, int), ('bgOpacity', 0, 100, int)):
+        if key in data:
+            try:
+                cfg[key] = max(lo, min(hi, cast(data[key])))
+            except (TypeError, ValueError):
+                pass
+    if data.get('textShadow') in ('none', 'light', 'strong'):
+        cfg['textShadow'] = data['textShadow']
+    for key in ('rssColor', 'bgColor', 'textColor'):
+        if key in data and re.fullmatch(r'#[0-9a-fA-F]{6}', str(data[key] or '')):
+            cfg[key] = data[key]
+    if 'rssUrl' in data:
+        url = re.sub(r'[\x00-\x1F\x7F-\x9F\u200B-\u200D\uFEFF\u00A0]', '', str(data['rssUrl'] or '')).strip()
+        cfg['rssUrl'] = url if re.match(r'^https?://', url) else ''
+    saved = set_ticker_config(cfg)
+    conn = db.get_db()
+    log_audit(conn, 'ticker_updated', 'settings', new_value='on' if saved.get('enabled') else 'off')
+    conn.commit()
+    conn.close()
+    return jsonify(saved)
 
 
 @app.route('/dashboard')
