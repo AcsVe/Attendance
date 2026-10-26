@@ -96,7 +96,7 @@ function mtCount() {
   const boxes = Array.from(document.querySelectorAll('.mt-check'));
   const sel = boxes.filter(c => c.checked);
   const rows = sel.reduce((a, c) => a + (+c.dataset.count || 0), 0);
-  document.getElementById('mtSel').textContent = `المحدَّد: ${sel.length} من ${boxes.length} — ${rows.toLocaleString('ar')} سجل`;
+  document.getElementById('mtSel').textContent = `المحدَّد: ${sel.length} من ${boxes.length} — ${rows.toLocaleString('en')} سجل`;
   document.getElementById('mtAll').checked = sel.length && sel.length === boxes.length;
 }
 function _mtRender(groups) {
@@ -104,7 +104,7 @@ function _mtRender(groups) {
   document.getElementById('mtTable').innerHTML = groups.map(g => `<tr>
     <td><input type="checkbox" class="mt-check" value="${g.key}" data-count="${g.count}" ${keep.has(g.key) ? 'checked' : ''} onchange="mtCount()" aria-label="${escapeHtml(g.label)}"></td>
     <td>${escapeHtml(g.label)}${g.dated ? '' : ' <small style="color:#c0392b">(كل الفترات — لا يتأثر بالتاريخ)</small>'}</td>
-    <td><b>${g.count.toLocaleString('ar')}</b></td></tr>`).join('');
+    <td><b>${g.count.toLocaleString('en')}</b></td></tr>`).join('');
   mtCount();
 }
 async function loadMaintenance() {

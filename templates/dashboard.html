@@ -110,7 +110,7 @@
       <h1 id="pageTitle">لوحة التحكم</h1>
     </div>
     <div class="topbar-right">
-      <span id="clockEl" class="topbar-clock" data-notr aria-live="off"><b id="clockTime"></b><span id="clockDate"></span></span>
+      <span id="clockEl" class="topbar-clock" dir="ltr" data-notr aria-live="off"><span id="clockDate"></span><b id="clockTime"></b></span>
       <button type="button" class="icon-btn" onclick="refreshCurrentTab()" title="تحديث" aria-label="تحديث"><i class="fas fa-rotate" aria-hidden="true"></i></button>
       <button type="button" class="icon-btn hide-sm" id="pwaInstallBtn" style="display:none" onclick="pwaInstall()" title="تثبيت على هذا الجهاز — يُضاف النظام كتطبيق في قائمة ابدأ وشريط المهام" aria-label="تثبيت على هذا الجهاز"><i class="fas fa-download" aria-hidden="true"></i></button>
       {% include '_lang.html' %}
@@ -150,8 +150,8 @@
       <div class="filter-bar">
         <select id="dashDept" class="search-input" onchange="loadStats()"><option value="">كل الأقسام</option></select>
         <select id="dashEmployee" class="search-input" onchange="loadStats()"><option value="">كل الموظفين</option></select>
-        <input type="date" id="dashFrom" class="search-input" onchange="loadStats()" style="min-width:140px">
-        <input type="date" id="dashTo" class="search-input" onchange="loadStats()" style="min-width:140px">
+        <input type="date" id="dashFrom" lang="en-CA" aria-label="من تاريخ" title="من تاريخ (YYYY-MM-DD)" class="search-input" onchange="loadStats()" style="min-width:140px">
+        <input type="date" id="dashTo" lang="en-CA" aria-label="إلى تاريخ" title="إلى تاريخ (YYYY-MM-DD)" class="search-input" onchange="loadStats()" style="min-width:140px">
         <button class="btn btn-outline btn-sm" onclick="clearDashFilters()"><i class="fas fa-times" aria-hidden="true"></i> إلغاء الفلترة</button>
       </div>
       <div class="stats-grid">
@@ -240,8 +240,8 @@
           <select id="repDept" class="search-input" onchange="loadReports(1)"><option value="">كل الأقسام</option></select>
           <select id="repEmployee" class="search-input" multiple size="4" style="min-width:180px" onchange="loadReports(1)" title="اضغط Ctrl (أو Cmd على ماك) واختر لتحديد أكثر من موظف معاً — اتركها دون تحديد لعرض كل الموظفين"></select>
           <button type="button" class="btn btn-outline btn-sm" onclick="selectAllFilteredEmployees('repDept','repEmployee')" title="تحديد كل موظفي القسم المختار حالياً (أو الجميع إن لم يُحدَّد قسم)"><i class="fas fa-check-double" aria-hidden="true"></i> تحديد كل موظفي القسم</button>
-          <input type="date" id="repFrom" class="search-input" onchange="loadReports(1)" style="min-width:140px">
-          <input type="date" id="repTo" class="search-input" onchange="loadReports(1)" style="min-width:140px">
+          <input type="date" id="repFrom" lang="en-CA" aria-label="من تاريخ" title="من تاريخ (YYYY-MM-DD)" class="search-input" onchange="loadReports(1)" style="min-width:140px">
+          <input type="date" id="repTo" lang="en-CA" aria-label="إلى تاريخ" title="إلى تاريخ (YYYY-MM-DD)" class="search-input" onchange="loadReports(1)" style="min-width:140px">
           <input class="search-input" type="text" id="repSearch" placeholder="🔍 بحث بالاسم أو القسم..." oninput="loadReports(1)">
           <button class="btn btn-outline btn-sm" onclick="exportReportsCSV()"><i class="fas fa-file-csv" aria-hidden="true"></i> تصدير CSV</button>
           <button class="btn btn-outline btn-sm" onclick="exportReportsPDF()"><i class="fas fa-file-pdf" aria-hidden="true"></i> تصدير PDF</button>
@@ -347,8 +347,8 @@
           <button class="filter-btn" data-cr="month" onclick="setCompareCriterion('month')">حسب الشهر</button>
         </div>
         <div class="filter-bar">
-          <input type="date" id="cmpFrom" class="search-input" onchange="loadCompare()" style="min-width:140px">
-          <input type="date" id="cmpTo" class="search-input" onchange="loadCompare()" style="min-width:140px">
+          <input type="date" id="cmpFrom" lang="en-CA" aria-label="من تاريخ" title="من تاريخ (YYYY-MM-DD)" class="search-input" onchange="loadCompare()" style="min-width:140px">
+          <input type="date" id="cmpTo" lang="en-CA" aria-label="إلى تاريخ" title="إلى تاريخ (YYYY-MM-DD)" class="search-input" onchange="loadCompare()" style="min-width:140px">
           <button class="btn btn-outline btn-sm" onclick="clearCompareFilters()"><i class="fas fa-times" aria-hidden="true"></i> إلغاء الفلترة</button>
         </div>
       </div>
@@ -367,8 +367,8 @@
       <div class="card">
         <div class="card-title"><i class="fas fa-map" aria-hidden="true"></i> Blueprint — نظرة شاملة بصفحة واحدة</div>
         <div class="filter-bar">
-          <input type="date" id="bpFrom" class="search-input" onchange="loadBlueprint()" style="min-width:140px">
-          <input type="date" id="bpTo" class="search-input" onchange="loadBlueprint()" style="min-width:140px">
+          <input type="date" id="bpFrom" lang="en-CA" aria-label="من تاريخ" title="من تاريخ (YYYY-MM-DD)" class="search-input" onchange="loadBlueprint()" style="min-width:140px">
+          <input type="date" id="bpTo" lang="en-CA" aria-label="إلى تاريخ" title="إلى تاريخ (YYYY-MM-DD)" class="search-input" onchange="loadBlueprint()" style="min-width:140px">
           <button class="btn btn-outline btn-sm" onclick="clearBlueprintFilters()"><i class="fas fa-times" aria-hidden="true"></i> إلغاء الفلترة</button>
           <button class="btn btn-outline btn-sm" onclick="window.print()"><i class="fas fa-print" aria-hidden="true"></i> طباعة</button>
         </div>
@@ -418,8 +418,8 @@
         <div class="filter-bar">
           <select id="expDept" class="search-input"><option value="">كل الأقسام</option></select>
           <select id="expEmployee" class="search-input"><option value="">كل الموظفين</option></select>
-          <input type="date" id="expFrom" class="search-input" style="min-width:140px">
-          <input type="date" id="expTo" class="search-input" style="min-width:140px">
+          <input type="date" id="expFrom" lang="en-CA" aria-label="من تاريخ" title="من تاريخ (YYYY-MM-DD)" class="search-input" style="min-width:140px">
+          <input type="date" id="expTo" lang="en-CA" aria-label="إلى تاريخ" title="إلى تاريخ (YYYY-MM-DD)" class="search-input" style="min-width:140px">
         </div>
         <div class="filter-bar">
           <select id="expReportType" class="search-input" style="min-width:220px">
@@ -577,8 +577,8 @@
         <div class="filter-bar">
           <select id="arDept" class="search-input" onchange="loadAbsenceReasons()"><option value="">كل الأقسام</option></select>
           <select id="arEmployee" class="search-input" onchange="loadAbsenceReasons()"><option value="">كل الموظفين</option></select>
-          <input type="date" id="arFrom" class="search-input" onchange="loadAbsenceReasons()" style="min-width:140px">
-          <input type="date" id="arTo" class="search-input" onchange="loadAbsenceReasons()" style="min-width:140px">
+          <input type="date" id="arFrom" lang="en-CA" aria-label="من تاريخ" title="من تاريخ (YYYY-MM-DD)" class="search-input" onchange="loadAbsenceReasons()" style="min-width:140px">
+          <input type="date" id="arTo" lang="en-CA" aria-label="إلى تاريخ" title="إلى تاريخ (YYYY-MM-DD)" class="search-input" onchange="loadAbsenceReasons()" style="min-width:140px">
           <button class="btn btn-outline btn-sm" onclick="loadAbsenceReasons()"><i class="fas fa-sync" aria-hidden="true"></i> تحديث</button>
         </div>
         <button class="btn btn-red btn-sm" style="margin-bottom:8px" onclick="bulkDeleteAbsenceReasons()"><i class="fas fa-trash" aria-hidden="true"></i> حذف المحدد</button>

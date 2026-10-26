@@ -361,14 +361,32 @@ function dismissLastImportNotice() {
   if (box) box.style.display = 'none';
 }
 
-/* ===== الساعة الحية ===== */
+/* ===== الساعة الحية: 2026-10-26 23:12 (أرقام لاتينية، 24 ساعة، توقيت Asia/Amman) بكلتا اللغتين ===== */
+const _CLOCK_FMT = (() => { try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Amman', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }); } catch (e) { return null; } })();
 function tickClock() {
   const t = document.getElementById('clockTime'), d = document.getElementById('clockDate');
-  if (!t || !d) return;
-  const en = document.documentElement.lang === 'en', now = new Date(), loc = en ? 'en-GB' : 'ar-EG';
-  t.textContent = now.toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit', hour12: !en });
-  d.textContent = now.toLocaleDateString(loc, { weekday: 'short', day: 'numeric', month: 'short' });
+  if (!t || !d || !_CLOCK_FMT) return;
+  const p = {}; _CLOCK_FMT.formatToParts(new Date()).forEach(x => { p[x.type] = x.value; });
+  d.textContent = `${p.year}-${p.month}-${p.day}`;
+  t.textContent = `${p.hour === '24' ? '00' : p.hour}:${p.minute}`;
 }
+
+/* ===== حقول التاريخ: تبقى منتقيات المتصفح الأصلية، مع وصف واضح (aria-label) وصيغة YYYY-MM-DD في التلميح ===== */
+function labelDateInputs(root) {
+  (root || document).querySelectorAll('input[type=date]:not([data-dl])').forEach(el => {
+    el.setAttribute('data-dl', '1');
+    if (!el.getAttribute('lang')) el.setAttribute('lang', 'en-CA');   // يعرض YYYY-MM-DD في المتصفحات التي تتبع لغة الحقل
+    if (!el.getAttribute('aria-label')) {
+      let txt = el.getAttribute('title') || '';
+      if (!txt && el.id) { const l = document.querySelector(`label[for="${el.id}"]`); if (l) txt = l.textContent; }
+      if (!txt) { const l = el.closest('label') || (el.closest('.form-group') && el.closest('.form-group').querySelector('label')); if (l) txt = l.textContent; }
+      if (!txt) txt = /To$/.test(el.id) ? 'إلى تاريخ' : (/From$/.test(el.id) ? 'من تاريخ' : 'التاريخ');
+      el.setAttribute('aria-label', txt.replace(/\*/g, '').replace(/\s+/g, ' ').trim());
+    }
+    if (!el.getAttribute('title')) el.setAttribute('title', (el.getAttribute('aria-label') || '') + ' (YYYY-MM-DD)');
+  });
+}
+document.addEventListener('DOMContentLoaded', () => labelDateInputs());
 setInterval(tickClock, 1000);
 tickClock();
 
