@@ -356,7 +356,7 @@ async function loadSites() {
     siteLayer.clearLayers();
     const bounds = [];
     d.rows.forEach(s => {
-      L.circle([s.lat, s.lng], { radius: s.radius_m, color: s.active ? '#1B6E8C' : '#999', fillOpacity: .15 }).bindTooltip(s.name).addTo(siteLayer);
+      L.circle([s.lat, s.lng], { radius: s.radius_m, color: s.active ? '#0C67EC' : '#999', fillOpacity: .15 }).bindTooltip(s.name).addTo(siteLayer);
       bounds.push([s.lat, s.lng]);
     });
     if (bounds.length) siteMap.fitBounds(L.latLngBounds(bounds).pad(0.4), { maxZoom: 17 });
@@ -546,7 +546,7 @@ async function loadLive(quiet) {
     liveMap.invalidateSize();
     liveLayer.clearLayers();
     const b = [];
-    d.sites.forEach(s => { L.circle([s.lat, s.lng], { radius: s.radius, color: '#1B6E8C', fillOpacity: .08, weight: 1 }).addTo(liveLayer); b.push([s.lat, s.lng]); });
+    d.sites.forEach(s => { L.circle([s.lat, s.lng], { radius: s.radius, color: '#0C67EC', fillOpacity: .08, weight: 1 }).addTo(liveLayer); b.push([s.lat, s.lng]); });
     const color = { in: '#0a6640', leave: '#d9822b', out: '#6c757d' };
     d.rows.filter(r => r.lat != null && !r.live).forEach(r => {
       L.circleMarker([r.lat, r.lng], { radius: 7, color: '#fff', weight: 2, fillColor: color[r.state] || '#333', fillOpacity: .9 })
@@ -981,7 +981,7 @@ async function prLive() {
     if (r.open && r.open.includes('outside')) return ['#c0392b', 'خارج النطاق الآن'];
     if (r.open && r.open.includes('no_location')) return ['#b45309', 'الموقع مطفأ/وهمي'];
     if (r.stale || (r.open && r.open.includes('no_signal'))) return ['#6b7c7e', 'انقطعت الإشارة'];
-    if (r.status === 'exempt') return ['#1B6E8C', 'مستثنى (خروج مؤقت/استثناء)'];
+    if (r.status === 'exempt') return ['#0C67EC', 'مستثنى (خروج مؤقت/استثناء)'];
     if (r.inside === 1) return ['#1e8e5a', 'داخل النطاق'];
     if (r.inside === 0) return ['#e67e22', 'خارج النطاق (ضمن المهلة)'];
     return ['#9aa', '—'];
@@ -1034,7 +1034,7 @@ async function prEvDelete() {
 
 /* ================= الخروج المؤقت ================= */
 let lvRows = [], lvStatus = '', lvStatuses = {};
-const LV_COLOR = { pending: '#b45309', approved: '#1B6E8C', rejected: '#842029', cancelled: '#6b7c7e', expired: '#6b7c7e', active: '#1B6E8C',
+const LV_COLOR = { pending: '#b45309', approved: '#0C67EC', rejected: '#842029', cancelled: '#6b7c7e', expired: '#6b7c7e', active: '#0C67EC',
   overdue: '#c0392b', returned: '#1e8e5a', returned_late: '#e67e22', not_returned: '#c0392b' };
 const lvToday = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 
@@ -1227,7 +1227,7 @@ function shDrawMarkers(rows) {
     const b = [];
     rows.filter(r => r.lat != null).forEach(r => {
       const live = r.live_now;
-      L.circleMarker([r.lat, r.lng], { radius: live ? 9 : 6, color: r.flags ? '#c0392b' : (live ? '#0a6640' : '#1B6E8C'), fillOpacity: .8 })
+      L.circleMarker([r.lat, r.lng], { radius: live ? 9 : 6, color: r.flags ? '#c0392b' : (live ? '#0a6640' : '#0C67EC'), fillOpacity: .8 })
         .bindPopup(`<b>${mEsc(r.name)}</b><br>${live ? 'مباشر الآن' : (r.kind === 'live' ? 'مباشر (انتهى)' : 'موقع حالي')}<br>${mEsc((r.updated_at || r.started_at || '').slice(0, 16))}${r.note ? '<br>' + mEsc(r.note) : ''}`)
         .addTo(shLayer);
       b.push([r.lat, r.lng]);

@@ -374,7 +374,7 @@ def _inject_lang():
     logo, ver = _logo_file(st)
     logo_url = url_for('static', filename='uploads/' + logo, v=ver) if logo else ''
     return {'ui_lang': lang, 'ui_dir': 'ltr' if lang == 'en' else 'rtl', 'org_display': org,
-            'logo_url': logo_url, 'ticker_logo': logo_url, 'icon_ver': ver}
+            'logo_url': logo_url, 'ticker_logo': logo_url, 'icon_ver': ver, 'now_year': datetime.now().year}
 
 
 def _logo_file(st=None):

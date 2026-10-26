@@ -1,0 +1,3 @@
+{# شعار المؤسسة المرفوع، وإلا أيقونة النظام (static/brand/system.svg) حتى يُرفع شعار من الإعدادات #}
+{% if logo_url %}<img class="brand-logo" src="{{ logo_url }}" alt="{{ org_display or 'شعار المؤسسة' }}">
+{% else %}<img class="brand-logo sys-icon" src="{{ url_for('static', filename='brand/system.svg') }}" alt="نظام الحضور والانصراف">{% endif %}

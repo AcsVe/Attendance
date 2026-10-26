@@ -1,0 +1,2 @@
+{# زر اللغة: اللغة الأخرى مكتوبة بنفسها (static/js/i18n.js — كوكي lang) #}
+<button type="button" class="lang-switch" data-notr onclick="toggleUiLang()" {% if ui_lang == 'en' %}lang="ar" title="التبديل إلى العربية"{% else %}lang="en" title="Switch to English"{% endif %}><i class="fas fa-globe" aria-hidden="true"></i>{{ 'العربية' if ui_lang == 'en' else 'English' }}</button>

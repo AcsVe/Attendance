@@ -1,35 +1,24 @@
-<!DOCTYPE html>
-<html lang="{{ ui_lang }}" dir="{{ ui_dir }}">
-<head>
-  {% include '_me_head.html' %}
-  <title>كلمة مرور جديدة — تسجيل الدوام</title>
-</head>
-<body>
-<div class="wrap" style="padding-top:8vh">
-  <div style="text-align:center;margin-bottom:18px">
-    {% if logo_url %}<img src="{{ logo_url }}" alt="شعار {{ org_display or 'المؤسسة' }}" style="max-height:64px;max-width:200px;object-fit:contain;display:block;margin:0 auto 10px">{% endif %}
-    <h1 style="font-size:1.35rem;color:var(--pd)"><i class="fas fa-key" aria-hidden="true"></i> كلمة مرور جديدة</h1>
-    <div class="muted">{{ org_display }}</div>
-  </div>
-  <div class="card">
-    {% if ok %}
-      <p>تم تغيير كلمة المرور بنجاح.</p>
-      <a class="btn btn-p" style="width:100%;margin-top:12px" href="{{ url_for('mobile.me_login') }}">تسجيل الدخول</a>
-    {% elif invalid %}
-      <div class="err">{{ error }}</div>
-      <a class="btn btn-p" style="width:100%;margin-top:12px" href="{{ url_for('mobile.me_forgot') }}">طلب رابط جديد</a>
-    {% else %}
-      {% if error %}<div class="err">{{ error }}</div>{% endif %}
-      <form method="post">
-        <label for="p1">كلمة المرور الجديدة (6 أحرف على الأقل)</label>
-        <input id="p1" name="password" type="password" minlength="6" required autocomplete="new-password">
-        <label for="p2">أعد كتابة كلمة المرور</label>
-        <input id="p2" name="password2" type="password" minlength="6" required autocomplete="new-password">
-        <button class="btn btn-p" style="width:100%;margin-top:16px">حفظ</button>
-      </form>
-    {% endif %}
-  </div>
-<p style="margin-top:10px;font-size:.85rem;text-align:center" data-notr><a href="#" onclick="toggleUiLang();return false">{{ 'العربية' if ui_lang == 'en' else 'English' }}</a></p>
-</div>
-</body>
-</html>
+{% extends '_auth.html' %}
+{% from '_auth_fields.html' import field %}
+{% block manifest %}<link rel="manifest" href="/manifest-me.json?v={{ icon_ver }}">
+  <meta name="apple-mobile-web-app-title" content="Check-in">{% endblock %}
+{% block systitle %}تسجيل الدوام{% endblock %}
+{% block sub %}تسجيل الدوام — تطبيق الموظف{% endblock %}
+{% block title %}كلمة مرور جديدة{% endblock %}
+{% block heading %}كلمة مرور جديدة{% endblock %}
+{% block body %}
+{% if ok %}
+  <div class="alert alert-success">تم تغيير كلمة المرور بنجاح.</div>
+  <a class="btn btn-primary" href="{{ url_for('mobile.me_login') }}"><i class="fas fa-right-to-bracket" aria-hidden="true"></i> تسجيل الدخول</a>
+{% elif invalid %}
+  <div class="alert alert-error">{{ error }}</div>
+  <a class="btn btn-primary" href="{{ url_for('mobile.me_forgot') }}">طلب رابط جديد</a>
+{% else %}
+  {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+  <form method="post">
+    {{ field('p1', 'password', 'كلمة المرور الجديدة (6 أحرف على الأقل)', 'fa-lock', type='password', autocomplete='new-password', ltr=False, minlength=6, autofocus=True) }}
+    {{ field('p2', 'password2', 'أعد كتابة كلمة المرور', 'fa-lock', type='password', autocomplete='new-password', ltr=False, minlength=6) }}
+    <button class="btn btn-primary" type="submit"><i class="fas fa-check" aria-hidden="true"></i> حفظ</button>
+  </form>
+{% endif %}
+{% endblock %}

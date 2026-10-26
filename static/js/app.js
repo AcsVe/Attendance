@@ -342,7 +342,7 @@ async function loadLastImportNotice() {
     if (!data.ok || !data.has_notice) return;
     box.style.display = 'block';
     box.innerHTML = `
-      <div class="alert" style="background:#eaf4f8;border:1px solid var(--primary-light);color:#124a5f;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:8px;margin-bottom:14px">
+      <div class="alert" style="background:var(--primary-soft);border:1px solid #cfe0fb;color:var(--primary-deep);display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:8px;margin-bottom:14px">
         <div>
           <i class="fas fa-info-circle" aria-hidden="true"></i>
           <b>آخر عملية سحب/استيراد بصمات:</b> ${escapeHtml(data.label)} — ${escapeHtml(data.timestamp)}
@@ -2222,6 +2222,7 @@ async function loadSettings() {
   document.getElementById('setLunchEnd').value = s.lunch_end || '';
   document.getElementById('lunchTimes').style.opacity = s.lunch_enabled === '1' ? 1 : .5;
   renderLogoPreview(s.org_logo_filename);
+  renderGraphStatus(s);
   document.getElementById('setSyncUrl').value = s.sync_central_url || '';
   document.getElementById('setSyncKey').value = s.sync_api_key || '';
   const syncStatus = document.getElementById('syncStatusBox');
@@ -2274,6 +2275,12 @@ async function saveSettings() {
   const box = document.getElementById('settingsResult');
   try {
     await api('/api/settings', { method: 'POST', body: JSON.stringify(payload) });
+    const rm = document.getElementById('logoRemove');
+    if (rm && rm.checked) {
+      await api('/api/settings/logo', { method: 'DELETE' });
+      applyLogoEverywhere('');
+      renderLogoPreview('');
+    }
     const shift1 = document.getElementById('setShift1Names').value.split(',').map(s => s.trim()).filter(Boolean);
     const shift2 = document.getElementById('setShift2Names').value.split(',').map(s => s.trim()).filter(Boolean);
     await api('/api/shift-names', { method: 'POST', body: JSON.stringify({ shift1, shift2 }) });
@@ -2304,36 +2311,38 @@ async function syncPush() {
 }
 
 /* ============ شعار المؤسسة ============ */
+const SYS_ICON = '/static/brand/system.svg';
 function renderLogoPreview(filename) {
-  const box = document.getElementById('logoPreviewBox');
-  if (!box) return;
-  box.innerHTML = filename
-    ? `<img src="/static/uploads/${encodeURIComponent(filename)}?v=${Date.now()}" alt="الشعار الحالي" style="max-height:70px;max-width:220px;border:1px solid var(--border,#ddd);border-radius:6px;padding:4px">`
-    : '<p style="color:var(--muted);font-size:.85rem">لا يوجد شعار محفوظ حالياً</p>';
+  const img = document.getElementById('logoPreviewImg');
+  if (!img) return;
+  img.src = filename ? `/static/uploads/${encodeURIComponent(filename)}?v=${Date.now()}` : SYS_ICON;
+  img.classList.toggle('sys-icon', !filename);
+  const row = document.getElementById('logoRemoveRow');
+  if (row) row.style.display = filename ? 'inline-flex' : 'none';
+  const cb = document.getElementById('logoRemove');
+  if (cb) cb.checked = false;
 }
 
-/* تحديث الشعار في الشريط الجانبي والشريط العلوي فوراً دون إعادة تحميل الصفحة */
+/* تحديث الشعار في القائمة الجانبية فوراً دون إعادة تحميل الصفحة (بلا شعار: أيقونة النظام) */
 function applyLogoEverywhere(url) {
-  const chip = document.querySelector('.sidebar-logo-chip');
-  if (chip) {
-    if (url) {
-      chip.innerHTML = '';
-      const img = document.createElement('img');
-      img.src = url; img.alt = 'شعار المؤسسة';
-      img.style.cssText = 'max-height:32px;max-width:150px;vertical-align:middle';
-      chip.appendChild(img);
-    } else {
-      chip.innerHTML = '<i class="fas fa-fingerprint" aria-hidden="true"></i>&nbsp;<span class="sidebar-logo-title">نظام الحضور</span>';
-    }
-  }
-  let top = document.querySelector('.topbar-logo');
-  if (url) {
-    if (!top) {
-      const h = document.getElementById('pageTitle');
-      if (h) { top = document.createElement('img'); top.className = 'topbar-logo'; top.alt = 'شعار المؤسسة'; h.before(top); }
-    }
-    if (top) top.src = url;
-  } else if (top) top.remove();
+  document.querySelectorAll('.side-brand .brand-logo').forEach(img => {
+    img.src = url || SYS_ICON;
+    img.classList.toggle('sys-icon', !url);
+  });
+}
+
+/* حالة البريد عبر Microsoft Graph: شارات فقط، دون أي قيمة */
+function renderGraphStatus(s) {
+  const box = document.getElementById('graphStatus');
+  if (!box) return;
+  const items = [['Tenant ID', s.graph_tenant_id], ['Client ID', s.graph_client_id], ['Client Secret', s.graph_client_secret], ['بريد المُرسِل', s.graph_sender_upn]];
+  const all = items.every(i => i[1]);
+  const active = s.email_method === 'graph';
+  let html = all ? '<span class="badge ok"><i class="fas fa-circle-check" aria-hidden="true"></i> مُعدّ</span>'
+                 : '<span class="badge warn"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i> غير مكتمل</span>';
+  html += active ? ' <span class="badge ok">طريقة الإرسال الحالية</span>' : ' <span class="badge">الإرسال الحالي عبر SMTP</span>';
+  items.forEach(([k, v]) => { html += ` <span class="badge ${v ? 'ok' : 'bad'}">${escapeHtml(k)} ${v ? '✓' : '✗'}</span>`; });
+  box.innerHTML = html;
 }
 
 async function uploadLogo() {

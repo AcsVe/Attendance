@@ -12,7 +12,7 @@
   <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
   <!-- ===== إعدادات تثبيت التطبيق (PWA) على أندرويد/ويندوز/آيفون ===== -->
   <link rel="manifest" href="/manifest.json?v={{ icon_ver }}">
-  <meta name="theme-color" content="#1B6E8C">
+  <meta name="theme-color" content="#0C67EC">
   <link rel="icon" type="image/png" sizes="32x32" href="/app-icon/32.png?v={{ icon_ver }}">
   <link rel="icon" type="image/png" sizes="16x16" href="/app-icon/16.png?v={{ icon_ver }}">
   <!-- آيفون/آيباد (Safari لا يقرأ manifest.json لأيقونة الشاشة الرئيسية) -->
@@ -30,14 +30,11 @@
 {% include "_ticker.html" %}
 <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
 <nav class="sidebar" id="sidebar">
-  <div class="sidebar-logo">
-    {% if logo_url %}
-      <div class="sidebar-logo-chip"><img src="{{ logo_url }}" alt="شعار {{ settings.org_name or 'المؤسسة' }}" style="max-height:32px;max-width:150px;vertical-align:middle"></div>
-    {% else %}
-      <div class="sidebar-logo-chip"><i class="fas fa-fingerprint" aria-hidden="true"></i>&nbsp;<span class="sidebar-logo-title">نظام الحضور</span></div>
-    {% endif %}
-    <div class="sidebar-logo-text">{{ org_display or 'الجمعية الثقافية العربية - الرائد العربي' }}</div>
-  </div>
+  <a class="side-brand" href="#dashboard" onclick="showTab('dashboard');return false">
+    {% include '_brand_logo.html' %}
+    <span class="org" data-notr title="{{ org_display or 'الجمعية الثقافية العربية - مدرسة الرائد العربي' }}">{{ org_display or 'الجمعية الثقافية العربية - مدرسة الرائد العربي' }}</span>
+    <span class="sys">نظام الحضور والانصراف</span>
+  </a>
   <div class="sidebar-nav" role="navigation" aria-label="القائمة الرئيسية">
     <div class="nav-group nav-fav-group" data-group="fav">
       <div class="nav-group-title" style="cursor:default">المفضلة<button type="button" class="fav-edit" onclick="favOpen()" title="تخصيص المفضلة" aria-label="تخصيص المفضلة"><i class="fas fa-pen" aria-hidden="true"></i></button></div>
@@ -48,18 +45,6 @@
       <div class="nav-group-items">
       <button class="nav-item active" data-tab="dashboard" onclick="showTab('dashboard')"><i class="fas fa-chart-pie" aria-hidden="true"></i> لوحة التحكم</button>
       <button class="nav-item" data-tab="mobile-moves" onclick="showTab('mobile-moves')"><i class="fas fa-satellite-dish" aria-hidden="true"></i> المتابعة المباشرة</button>
-      <button class="nav-item" data-tab="displays" onclick="showTab('displays')"><i class="fas fa-tv" aria-hidden="true"></i> شاشات العرض</button>
-      </div>
-    </div>
-    <div class="nav-group" data-group="reports">
-      <button class="nav-group-title" type="button" onclick="toggleNavGroup('reports')" aria-expanded="true">التقارير والتحليل<i class="fas fa-chevron-down" aria-hidden="true"></i></button>
-      <div class="nav-group-items">
-      <button class="nav-item" data-tab="reports" onclick="showTab('reports')"><i class="fas fa-table" aria-hidden="true"></i> التقارير</button>
-      <button class="nav-item" data-tab="monthly" onclick="showTab('monthly')"><i class="fas fa-file-invoice-dollar" aria-hidden="true"></i> الكشف الشهري</button>
-      <button class="nav-item" data-tab="compare" onclick="showTab('compare')"><i class="fas fa-chart-bar" aria-hidden="true"></i> المقارنات</button>
-      <button class="nav-item" data-tab="overtime" onclick="showTab('overtime')"><i class="fas fa-business-time" aria-hidden="true"></i> العمل الإضافي</button>
-      <button class="nav-item" data-tab="blueprint" onclick="showTab('blueprint')"><i class="fas fa-map" aria-hidden="true"></i> النظرة الشاملة</button>
-      <button class="nav-item" data-tab="export" onclick="showTab('export')"><i class="fas fa-file-export" aria-hidden="true"></i> التصدير</button>
       </div>
     </div>
     <div class="nav-group" data-group="daily">
@@ -73,6 +58,17 @@
       <button class="nav-item" data-tab="absence-reasons" onclick="showTab('absence-reasons')"><i class="fas fa-comment-medical" aria-hidden="true"></i> أسباب الغياب</button>
       <button class="nav-item" data-tab="exceptions" onclick="showTab('exceptions')"><i class="fas fa-user-slash" aria-hidden="true"></i> استثناءات التواريخ</button>
       <button class="nav-item" data-tab="holidays" onclick="showTab('holidays')"><i class="fas fa-umbrella-beach" aria-hidden="true"></i> العطل الرسمية</button>
+      </div>
+    </div>
+    <div class="nav-group" data-group="reports">
+      <button class="nav-group-title" type="button" onclick="toggleNavGroup('reports')" aria-expanded="true">التقارير والتحليل<i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+      <div class="nav-group-items">
+      <button class="nav-item" data-tab="reports" onclick="showTab('reports')"><i class="fas fa-table" aria-hidden="true"></i> التقارير</button>
+      <button class="nav-item" data-tab="monthly" onclick="showTab('monthly')"><i class="fas fa-file-invoice-dollar" aria-hidden="true"></i> الكشف الشهري</button>
+      <button class="nav-item" data-tab="compare" onclick="showTab('compare')"><i class="fas fa-chart-bar" aria-hidden="true"></i> المقارنات</button>
+      <button class="nav-item" data-tab="overtime" onclick="showTab('overtime')"><i class="fas fa-business-time" aria-hidden="true"></i> العمل الإضافي</button>
+      <button class="nav-item" data-tab="blueprint" onclick="showTab('blueprint')"><i class="fas fa-map" aria-hidden="true"></i> النظرة الشاملة</button>
+      <button class="nav-item" data-tab="export" onclick="showTab('export')"><i class="fas fa-file-export" aria-hidden="true"></i> التصدير</button>
       </div>
     </div>
     <div class="nav-group" data-group="people">
@@ -92,6 +88,7 @@
       <button class="nav-item" data-tab="dept-times" onclick="showTab('dept-times')"><i class="fas fa-building" aria-hidden="true"></i> أوقات الأقسام</button>
       <button class="nav-item" data-tab="settings" onclick="showTab('settings')"><i class="fas fa-cog" aria-hidden="true"></i> الإعدادات العامة</button>
       <button class="nav-item" data-tab="schedule" onclick="showTab('schedule')"><i class="fas fa-clock" aria-hidden="true"></i> الجدولة التلقائية</button>
+      <button class="nav-item" data-tab="displays" onclick="showTab('displays')"><i class="fas fa-tv" aria-hidden="true"></i> شاشات العرض</button>
       <button class="nav-item" data-tab="ticker" onclick="showTab('ticker')"><i class="fas fa-bullhorn" aria-hidden="true"></i> الشريط الإعلاني</button>
       </div>
     </div>
@@ -104,28 +101,32 @@
       </div>
     </div>
   </div>
-  <div class="sidebar-footer">
-    <span style="font-size:.82rem;opacity:.85"><i class="fas fa-user-circle" aria-hidden="true"></i> {{ full_name }}</span>
-    <a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt" aria-hidden="true"></i> تسجيل الخروج</a>
-  </div>
 </nav>
 
 <div class="main">
-  <div class="topbar">
+  <header class="topbar">
     <div class="topbar-left">
-      <button class="hamburger" onclick="toggleSidebar()" aria-label="فتح القائمة" title="فتح القائمة"><i class="fas fa-bars" aria-hidden="true"></i></button>
-      {% if logo_url %}<img class="topbar-logo" src="{{ logo_url }}" alt="شعار {{ org_display or 'المؤسسة' }}">{% endif %}
+      <button type="button" class="icon-btn hamburger" onclick="toggleSidebar()" aria-controls="sidebar" aria-label="القائمة" title="القائمة"><i class="fas fa-bars" aria-hidden="true"></i></button>
       <h1 id="pageTitle">لوحة التحكم</h1>
     </div>
     <div class="topbar-right">
-      <button type="button" class="theme-toggle" data-notr onclick="toggleTheme()" title="الوضع الفاتح/الداكن" aria-label="تبديل الوضع الداكن"><i id="themeIcon" class="fas fa-moon" aria-hidden="true"></i></button>
-      <button type="button" class="btn btn-outline btn-sm" data-notr onclick="toggleUiLang()" title="{{ 'Switch to Arabic — التبديل إلى العربية' if ui_lang == 'en' else 'Switch to English' }}"><i class="fas fa-language" aria-hidden="true"></i> <span class="lbl">{{ 'العربية' if ui_lang == 'en' else 'English' }}</span><span class="lbl-s">{{ 'ع' if ui_lang == 'en' else 'EN' }}</span></button>
-      <button class="btn btn-primary btn-sm" id="pwaInstallBtn" style="display:none" onclick="pwaInstall()" title="يُضاف النظام كتطبيق في قائمة ابدأ وشريط المهام"><i class="fas fa-download" aria-hidden="true"></i> <span class="lbl">تثبيت على هذا الجهاز</span></button>
-      <a class="btn btn-outline btn-sm" href="/app" target="_blank" title="تطبيقات أندرويد للموظفين والإدارة" aria-label="التطبيقات"><i class="fab fa-android" aria-hidden="true"></i> <span class="lbl">التطبيقات</span></a>
-      <button class="btn btn-outline btn-sm" onclick="refreshCurrentTab()" title="تحديث" aria-label="تحديث"><i class="fas fa-sync" aria-hidden="true"></i> <span class="lbl">تحديث</span></button>
       <span id="clockEl" class="topbar-clock" data-notr aria-live="off"><b id="clockTime"></b><span id="clockDate"></span></span>
+      <button type="button" class="icon-btn" onclick="refreshCurrentTab()" title="تحديث" aria-label="تحديث"><i class="fas fa-rotate" aria-hidden="true"></i></button>
+      <button type="button" class="icon-btn hide-sm" id="pwaInstallBtn" style="display:none" onclick="pwaInstall()" title="تثبيت على هذا الجهاز — يُضاف النظام كتطبيق في قائمة ابدأ وشريط المهام" aria-label="تثبيت على هذا الجهاز"><i class="fas fa-download" aria-hidden="true"></i></button>
+      {% include '_lang.html' %}
+      <details class="user-menu">
+        <summary aria-label="قائمة المستخدم"><span class="avatar" aria-hidden="true" data-notr>{{ (full_name or 'م')[:1] }}</span><span class="uname" data-notr>{{ full_name }}</span><i class="fas fa-chevron-down" aria-hidden="true"></i></summary>
+        <div class="menu">
+          <div class="menu-head"><b data-notr>{{ full_name }}</b><small data-notr>{{ session.get('username', '') }}</small></div>
+          <button type="button" onclick="openMyPassword()"><i class="fas fa-key" aria-hidden="true"></i> تغيير كلمة المرور</button>
+          <button type="button" data-notr onclick="toggleTheme()"><i id="themeIcon" class="fas fa-moon" aria-hidden="true"></i> <span id="themeLabel">{{ 'Dark mode' if ui_lang == 'en' else 'الوضع الداكن' }}</span></button>
+          <a href="/app" target="_blank" rel="noopener"><i class="fab fa-android" aria-hidden="true"></i> التطبيقات</a>
+          <hr>
+          <a class="out" href="{{ url_for('logout') }}"><i class="fas fa-right-from-bracket" aria-hidden="true"></i> تسجيل الخروج</a>
+        </div>
+      </details>
     </div>
-  </div>
+  </header>
   <div id="prBanner" class="hide" role="alert" style="margin:12px 24px 0;background:#fdecea;border:1px solid #f3c2bd;border-radius:12px;padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
     <i class="fas fa-location-crosshairs" aria-hidden="true" style="color:#c0392b"></i>
     <b id="prBannerText" style="flex:1"></b>
@@ -1269,18 +1270,21 @@
         <div class="form-group"><label>اسم المؤسسة</label><input type="text" id="setOrgName"></div>
         <div class="form-group"><label>اسم المؤسسة بالإنجليزية (يظهر في الواجهة الإنجليزية)</label><input type="text" id="setOrgNameEn" dir="ltr"></div>
         <div class="form-group">
-          <label>شعار المؤسسة</label>
-          <p style="font-size:.8rem;color:var(--muted);margin:4px 0">
-            يظهر بالشريط الجانبي، صفحة تسجيل الدخول، ترويسة تقارير PDF، ورأس رسائل البريد المُرسَلة. الصيغ المدعومة: PNG/JPG/GIF/WEBP، بحد أقصى 3 ميجابايت.
-          </p>
-          <div id="logoPreviewBox" style="margin-bottom:8px"></div>
-          <p style="color:var(--muted);font-size:.8rem;margin:0 0 8px">يُرفع الشعار فور اختيار الملف ويظهر مباشرة في جميع الصفحات. الصيغ: PNG أو JPG أو WEBP (يُفضَّل PNG بخلفية شفافة)، حتى 15 ميجابايت.</p>
-          <div class="filter-bar">
-            <input type="file" id="logoFileInput" accept="image/*" onchange="uploadLogo()">
-            <button class="btn btn-outline btn-sm" onclick="uploadLogo()"><i class="fas fa-upload" aria-hidden="true"></i> رفع الشعار</button>
-            <button class="btn btn-red btn-sm" onclick="removeLogo()"><i class="fas fa-trash" aria-hidden="true"></i> إزالة الشعار</button>
+          <label for="logoFileInput">شعار المؤسسة</label>
+          <div class="logo-pick">
+            <img id="logoPreviewImg" class="sys-icon" src="{{ logo_url or url_for('static', filename='brand/system.svg') }}" alt="الشعار الحالي">
+            <div>
+              <input type="file" id="logoFileInput" accept="image/*" onchange="uploadLogo()">
+              <p style="color:var(--muted);font-size:.8rem;margin:6px 0 0">يُرفع الشعار فور اختيار الملف ويظهر في القائمة الجانبية وصفحات الدخول وصفحة الموظف وأيقونة التطبيق وترويسة تقارير PDF والبريد. الصيغ: PNG أو JPG أو WEBP (يُفضَّل PNG بخلفية شفافة)، حتى 15 ميجابايت. ما دام لا يوجد شعار تظهر أيقونة النظام.</p>
+              <label class="chk" id="logoRemoveRow" style="display:none"><input type="checkbox" id="logoRemove"> إزالة الشعار (العودة إلى أيقونة النظام عند الحفظ)</label>
+            </div>
           </div>
         </div>
+      </div>
+      <div class="card" id="graphCard">
+        <div class="card-title"><i class="fab fa-microsoft" aria-hidden="true"></i> البريد عبر Microsoft Graph</div>
+        <div class="graph-status" id="graphStatus"><span class="badge">…</span></div>
+        <p class="hint" style="color:var(--muted);font-size:.82rem;margin-top:8px">تُعرض الحالة فقط ولا تُعرض القيم. تُضبط بيانات التطبيق (Tenant ID وClient ID وClient Secret وبريد المُرسِل) من <a href="#schedule" onclick="showTab('schedule');return false">الجدولة التلقائية ← إعدادات إرسال البريد</a>.</p>
       </div>
       <div class="card">
         <div class="card-title"><i class="fas fa-clock" aria-hidden="true"></i> الأوقات العامة</div>
@@ -1400,7 +1404,7 @@
         </div>
 
         <div id="schSmtpBox">
-          <div id="schProviderHelp" style="font-size:.85rem;color:var(--muted);margin:12px 0;line-height:1.8;background:#f6fafb;border-radius:10px;padding:10px 12px"></div>
+          <div id="schProviderHelp" style="font-size:.85rem;color:var(--muted);margin:12px 0;line-height:1.8;background:var(--primary-soft);border-radius:10px;padding:10px 12px"></div>
           <div class="form-grid quad">
             <div class="form-group"><label>خادم SMTP</label><input type="text" id="schSmtpHost" class="search-input" dir="ltr" placeholder="smtp.office365.com"></div>
             <div class="form-group"><label>المنفذ (Port)</label><input type="number" id="schSmtpPort" class="search-input" value="587"></div>
@@ -1728,6 +1732,18 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="myPwModal">
+  <div class="modal" style="max-width:420px" role="dialog" aria-labelledby="myPwTitle">
+    <div class="modal-title" id="myPwTitle"><i class="fas fa-key" aria-hidden="true"></i> تغيير كلمة المرور</div>
+    <div class="form-group"><label for="myPwCur">كلمة المرور الحالية</label><input type="password" id="myPwCur" autocomplete="current-password"></div>
+    <div class="form-group"><label for="myPwNew">كلمة المرور الجديدة (8 أحرف على الأقل)</label><input type="password" id="myPwNew" autocomplete="new-password" minlength="8"></div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="saveMyPassword()"><i class="fas fa-save" aria-hidden="true"></i> حفظ</button>
+      <button class="btn btn-outline" onclick="document.getElementById('myPwModal').classList.remove('open')">إلغاء</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
@@ -1741,8 +1757,17 @@
 <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
 <script src="{{ url_for('static', filename='js/ticker_admin.js') }}"></script>
 <script>
-function toggleTheme(){var r=document.documentElement,d=r.getAttribute('data-theme')==='dark';r.setAttribute('data-theme',d?'light':'dark');try{localStorage.setItem('att_theme',d?'light':'dark');}catch(e){}var b=document.getElementById('themeIcon');if(b)b.className=d?'fas fa-moon':'fas fa-sun';}
-document.addEventListener('DOMContentLoaded',function(){var b=document.getElementById('themeIcon');if(b)b.className=document.documentElement.getAttribute('data-theme')==='dark'?'fas fa-sun':'fas fa-moon';});
+function attThemeUi(){var dk=document.documentElement.getAttribute('data-theme')==='dark',b=document.getElementById('themeIcon'),l=document.getElementById('themeLabel'),en=document.documentElement.lang==='en';
+  if(b)b.className=dk?'fas fa-sun':'fas fa-moon';if(l)l.textContent=dk?(en?'Light mode':'الوضع الفاتح'):(en?'Dark mode':'الوضع الداكن');}
+function toggleTheme(){var r=document.documentElement,d=r.getAttribute('data-theme')==='dark';r.setAttribute('data-theme',d?'light':'dark');try{localStorage.setItem('att_theme',d?'light':'dark');}catch(e){}attThemeUi();}
+document.addEventListener('DOMContentLoaded',attThemeUi);
+/* قائمة المستخدم: تُغلق بالضغط خارجها أو بـ Esc؛ وEsc يغلق الدرج على الهاتف */
+document.addEventListener('click',function(e){document.querySelectorAll('details.user-menu[open]').forEach(function(d){if(!d.contains(e.target)||e.target.closest('.menu a,.menu button'))d.removeAttribute('open');});});
+document.addEventListener('keydown',function(e){if(e.key!=='Escape')return;document.querySelectorAll('details.user-menu[open]').forEach(function(d){d.removeAttribute('open');});
+  var sb=document.getElementById('sidebar');if(sb&&sb.classList.contains('open'))toggleSidebar();});
+function openMyPassword(){document.getElementById('myPwCur').value='';document.getElementById('myPwNew').value='';document.getElementById('myPwModal').classList.add('open');setTimeout(function(){document.getElementById('myPwCur').focus();},30);}
+async function saveMyPassword(){try{await api('/api/change-password',{method:'POST',body:JSON.stringify({current_password:document.getElementById('myPwCur').value,new_password:document.getElementById('myPwNew').value})});
+  toast('تم تحديث كلمة المرور');document.getElementById('myPwModal').classList.remove('open');}catch(e){}}
 </script>
 <script>window.__CMDK_CONFIG={sel:".sidebar .nav-item"};</script>
 <!-- ===== لوحة البحث السريع للتنقّل (Ctrl+K) — مكوّن مستقل ===== -->

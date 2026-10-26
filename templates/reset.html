@@ -1,38 +1,20 @@
-<!DOCTYPE html>
-<html lang="{{ ui_lang }}" dir="{{ ui_dir }}">
-<head>
-  {% include '_i18n.html' %}
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>تعيين كلمة مرور جديدة — نظام الحضور والانصراف</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icons/favicon-32.png') }}">
-</head>
-<body>
-  <div class="login-wrap">
-    <div class="login-card">
-      {% if settings and settings.org_logo_filename %}
-        <img src="{{ url_for('static', filename='uploads/' + settings.org_logo_filename) }}" alt="شعار {{ settings.org_name or 'المؤسسة' }}" style="max-height:64px;max-width:220px;margin-bottom:8px">
-      {% else %}<i class="fas fa-key logo-icon" aria-hidden="true"></i>{% endif %}
-      <h1>تعيين كلمة مرور جديدة</h1>
-      {% if ok %}
-        <div class="alert alert-success">تم تغيير كلمة المرور بنجاح.</div>
-        <a class="btn btn-primary" href="{{ url_for('login') }}" style="width:100%;justify-content:center">تسجيل الدخول</a>
-      {% elif invalid %}
-        <div class="alert alert-error">{{ error }}</div>
-        <a class="btn btn-primary" href="{{ url_for('forgot_password') }}" style="width:100%;justify-content:center">طلب رابط جديد</a>
-      {% else %}
-        {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
-        <form method="post">
-          <div class="form-group"><label for="p1">كلمة المرور الجديدة (8 أحرف على الأقل)</label><input type="password" id="p1" name="password" required minlength="8" autocomplete="new-password"></div>
-          <div class="form-group"><label for="p2">أعد كتابة كلمة المرور</label><input type="password" id="p2" name="password2" required minlength="8" autocomplete="new-password"></div>
-          <button type="submit" class="btn btn-primary"><i class="fas fa-check" aria-hidden="true"></i> حفظ</button>
-        </form>
-      {% endif %}
-      <p style="margin-top:10px;font-size:.85rem;text-align:center" data-notr><a href="#" onclick="toggleUiLang();return false">{{ 'العربية' if ui_lang == 'en' else 'English' }}</a></p>
-    </div>
-  </div>
-</body>
-</html>
+{% extends '_auth.html' %}
+{% from '_auth_fields.html' import field %}
+{% block title %}تعيين كلمة مرور جديدة{% endblock %}
+{% block heading %}تعيين كلمة مرور جديدة{% endblock %}
+{% block body %}
+{% if ok %}
+  <div class="alert alert-success">تم تغيير كلمة المرور بنجاح.</div>
+  <a class="btn btn-primary" href="{{ url_for('login') }}"><i class="fas fa-right-to-bracket" aria-hidden="true"></i> تسجيل الدخول</a>
+{% elif invalid %}
+  <div class="alert alert-error">{{ error }}</div>
+  <a class="btn btn-primary" href="{{ url_for('forgot_password') }}">طلب رابط جديد</a>
+{% else %}
+  {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+  <form method="post">
+    {{ field('p1', 'password', 'كلمة المرور الجديدة (8 أحرف على الأقل)', 'fa-lock', type='password', autocomplete='new-password', ltr=False, minlength=8, autofocus=True) }}
+    {{ field('p2', 'password2', 'أعد كتابة كلمة المرور', 'fa-lock', type='password', autocomplete='new-password', ltr=False, minlength=8) }}
+    <button type="submit" class="btn btn-primary"><i class="fas fa-check" aria-hidden="true"></i> حفظ</button>
+  </form>
+{% endif %}
+{% endblock %}

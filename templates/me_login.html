@@ -1,39 +1,30 @@
-<!DOCTYPE html>
-<html lang="{{ ui_lang }}" dir="{{ ui_dir }}">
-<head>
-  {% include '_me_head.html' %}
-  <title>دخول الموظف — تسجيل الدوام</title>
-  <style>.hide{display:none}</style>
-</head>
-<body>
-{% include "_ticker.html" %}
-<div class="wrap" style="padding-top:8vh">
-  <div style="text-align:center;margin-bottom:18px">
-    {% if settings.org_logo_filename %}<img src="{{ url_for('static', filename='uploads/' + settings.org_logo_filename) }}" alt="شعار {{ settings.org_name or 'المؤسسة' }}" style="max-height:70px;max-width:220px">
-    {% else %}<div style="width:74px;height:74px;border-radius:22px;background:linear-gradient(135deg,var(--p),var(--s));color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:2rem"><i class="fas fa-fingerprint" aria-hidden="true"></i></div>{% endif %}
-    <h1 style="font-size:1.45rem;margin-top:12px;color:var(--pd)">تسجيل الدوام</h1>
-    <div class="muted">{{ org_display }}</div>
-  </div>
-  <div class="card">
-    {% if error %}<div class="err"><i class="fas fa-circle-exclamation" aria-hidden="true"></i> {{ error }}</div>{% endif %}
-    <div id="quick" class="hide" style="text-align:center">
-      <div style="font-size:1.1rem;font-weight:800;color:var(--pd)">أهلاً <span id="qName"></span></div>
-      <button type="button" class="btn btn-p" id="qBtn" style="width:100%;margin-top:14px;padding:18px;font-size:1.1rem"><i class="fas fa-fingerprint" aria-hidden="true"></i> الدخول بالبصمة / Face ID</button>
-      <div id="qMsg" class="muted" style="margin-top:8px;min-height:1.2em"></div>
-      <a href="#" id="qPw" class="muted" style="display:inline-block;margin-top:6px">الدخول باسم المستخدم وكلمة المرور</a>
-    </div>
-    <form method="post" id="f" autocomplete="on">
-      <label for="mu">اسم المستخدم</label>
-      <input id="mu" name="username" dir="ltr" autocomplete="username" autocapitalize="none" required autofocus>
-      <label for="mp">كلمة المرور</label>
-      <input id="mp" name="password" type="password" autocomplete="current-password" required>
-      <input type="hidden" name="device" id="dev">
-      <button class="btn btn-p" style="width:100%;margin-top:16px"><i class="fas fa-right-to-bracket" aria-hidden="true"></i> دخول</button>
-      <p style="text-align:center;margin-top:12px"><a href="{{ url_for('mobile.me_forgot') }}">نسيت كلمة المرور؟</a></p>
-    </form>
-    <p class="muted" style="margin-top:12px;line-height:1.7"><a href="/app"><i class="fas fa-download" aria-hidden="true"></i> تنزيل تطبيق الموظف (أندرويد)</a><br><i class="fas fa-mobile-screen" aria-hidden="true"></i> يرتبط حسابك بهذا الهاتف عند أول دخول، ولا يمكن استخدامه من هاتف آخر إلا بعد فكّ الربط من الإدارة.</p>
-  </div>
+{% extends '_auth.html' %}
+{% from '_auth_fields.html' import field %}
+{% block manifest %}<link rel="manifest" href="/manifest-me.json?v={{ icon_ver }}">
+  <meta name="apple-mobile-web-app-title" content="Check-in">{% endblock %}
+{% block systitle %}تسجيل الدوام{% endblock %}
+{% block sub %}تسجيل الدوام — تطبيق الموظف{% endblock %}
+{% block title %}دخول الموظف{% endblock %}
+{% block ticker %}{% include "_ticker.html" %}{% endblock %}
+{% block heading %}دخول الموظف{% endblock %}
+{% block body %}
+{% if error %}<div class="alert alert-error"><i class="fas fa-circle-exclamation" aria-hidden="true"></i> {{ error }}</div>{% endif %}
+<div id="quick" class="hide">
+  <div style="font-size:1.05rem;font-weight:800;color:var(--navy)">أهلاً <span id="qName" data-notr></span></div>
+  <button type="button" class="btn btn-primary" id="qBtn" style="margin-top:12px;padding:16px;font-size:1.05rem"><i class="fas fa-fingerprint" aria-hidden="true"></i> الدخول بالبصمة / Face ID</button>
+  <div id="qMsg" class="note" style="margin:8px 0 0;min-height:1.2em;text-align:center"></div>
+  <div class="links"><a href="#" id="qPw">الدخول باسم المستخدم وكلمة المرور</a></div>
 </div>
+<form method="post" id="f" autocomplete="on">
+  {{ field('mu', 'username', 'اسم المستخدم', 'fa-user', autocomplete='username', autofocus=True, extra='autocapitalize="none"') }}
+  {{ field('mp', 'password', 'كلمة المرور', 'fa-lock', type='password', autocomplete='current-password', ltr=False) }}
+  <input type="hidden" name="device" id="dev">
+  <button class="btn btn-primary" type="submit"><i class="fas fa-right-to-bracket" aria-hidden="true"></i> دخول</button>
+  <div class="links"><a href="{{ url_for('mobile.me_forgot') }}">نسيت كلمة المرور؟</a></div>
+</form>
+<p class="fine"><a href="/app"><i class="fas fa-download" aria-hidden="true"></i> تحميل تطبيق الموظف (أندرويد)</a><br><i class="fas fa-mobile-screen" aria-hidden="true"></i> يرتبط حسابك بهذا الهاتف عند أول دخول، ولا يمكن استخدامه من هاتف آخر إلا بعد فكّ الربط من الإدارة.</p>
+{% endblock %}
+{% block scripts %}
 <script>
 (function () {
   function hex(n) { var a = new Uint8Array(n); crypto.getRandomValues(a); return Array.prototype.map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); }
@@ -96,7 +87,4 @@
   $('qPw').addEventListener('click', function (e) { e.preventDefault(); showForm(); });
 })();
 </script>
-<p style="margin-top:10px;font-size:.85rem;text-align:center" data-notr><a href="#" onclick="toggleUiLang();return false">{{ 'العربية' if ui_lang == 'en' else 'English' }}</a></p>
-<button type="button" class="theme-toggle" onclick="var r=document.documentElement,d=r.getAttribute('data-theme')==='dark';r.setAttribute('data-theme',d?'light':'dark');try{localStorage.setItem('att_theme',d?'light':'dark');}catch(e){}this.querySelector('i').className=d?'fas fa-moon':'fas fa-sun';" style="position:fixed;top:12px;inset-inline-end:12px" aria-label="الوضع الداكن"><i class="fas fa-moon" aria-hidden="true"></i></button>
-</body>
-</html>
+{% endblock %}

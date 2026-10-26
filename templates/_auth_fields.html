@@ -1,0 +1,8 @@
+{# خانة إدخال بأيقونة؛ كلمة المرور لها زر إظهار/إخفاء (templates/_auth.html) #}
+{% macro field(id, name, text, icon, type='text', autocomplete='', autofocus=False, ltr=True, minlength=None, required=True, extra='') %}
+<div class="field"><label for="{{ id }}">{{ text }}</label>
+  <div class="input-group"><i class="fas {{ icon }}" aria-hidden="true"></i>
+    <input type="{{ type }}" id="{{ id }}" name="{{ name }}"{% if autocomplete %} autocomplete="{{ autocomplete }}"{% endif %}{% if ltr %} dir="ltr"{% endif %}{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{% if minlength %} minlength="{{ minlength }}"{% endif %}{% if type == 'password' %} class="has-eye"{% endif %} {{ extra|safe }}>
+    {% if type == 'password' %}<button type="button" class="eye" data-eye="{{ id }}" aria-pressed="false" aria-label="إظهار كلمة المرور"><i class="fas fa-eye" aria-hidden="true"></i></button>{% endif %}
+  </div></div>
+{% endmacro %}

@@ -4,7 +4,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
   <link rel="manifest" href="/manifest-me.json?v={{ icon_ver }}">
-  <meta name="theme-color" content="#1B6E8C">
+  <meta name="theme-color" content="#0C67EC">
   <link rel="icon" type="image/png" sizes="32x32" href="/app-icon/32.png?v={{ icon_ver }}">
   <link rel="apple-touch-icon" href="/app-icon/180.png?v={{ icon_ver }}">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -12,23 +12,35 @@
   <meta name="mobile-web-app-capable" content="yes">
   <script>(function(){try{var t=localStorage.getItem('att_theme');if(t==='dark'||(t===null&&window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches))document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
   <style>
-    :root{--p:#1B6E8C;--pd:#124A5F;--pl:#4FA3C0;--s:#2E4E7A;--bg:#f0f4f5;--t:#1e2a2b;--m:#6b7c7e;--b:#d4e4e6;--ok:#1e8e5a;--warn:#d9822b;--bad:#c0392b;--card:#fff;--chip:#eef4f6}
+    :root{--p:#0C67EC;--pd:#0847B0;--pdd:#0a3a8a;--pl:#3D8EF5;--s:#0847B0;--navy:#0f2a52;--bg:#f0f4fa;--t:#1e293b;--m:#64748b;--b:#d5deea;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--card:#fff;--chip:#e8f1fe}
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--t);min-height:100vh;-webkit-tap-highlight-color:transparent}
     .wrap{max-width:520px;margin:0 auto;padding:14px 14px calc(24px + env(safe-area-inset-bottom))}
-    .card{background:var(--card);border-radius:16px;box-shadow:0 2px 14px rgba(27,110,140,.10);padding:16px;margin-bottom:12px}
+    .card{background:var(--card);border-radius:14px;box-shadow:0 1px 2px rgba(15,42,82,.06),0 6px 20px rgba(15,42,82,.08);border:1px solid #e3e9f2;padding:16px;margin-bottom:12px}
     .btn{border:0;border-radius:12px;font:700 1rem 'Tajawal',sans-serif;padding:13px 16px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px}
-    .btn-p{background:var(--p);color:#fff}.btn-l{background:var(--chip);color:var(--pd)}
+    .btn-p{background:linear-gradient(135deg,var(--p),var(--pd));color:#fff;box-shadow:0 2px 6px rgba(12,103,236,.22)}.btn-l{background:var(--chip);color:var(--pd)}
     input,select,textarea{width:100%;padding:13px 14px;border:1.5px solid var(--b);border-radius:12px;font:500 1rem 'Tajawal',sans-serif;background:var(--card);color:var(--t)}
-    input:focus{outline:none;border-color:var(--p)}
+    input:focus,select:focus,textarea:focus{outline:none;border-color:var(--p);box-shadow:0 0 0 3px rgba(12,103,236,.15)}
     label{display:block;font-weight:700;font-size:.9rem;margin:10px 0 6px;color:var(--pd)}
     .muted{color:var(--m);font-size:.86rem}
     .err{background:#fdecea;color:var(--bad);border-radius:12px;padding:11px 13px;font-weight:700;font-size:.92rem;margin:10px 0}
-    :root[data-theme="dark"]{--bg:#0f1719;--card:#172225;--t:#e6edee;--m:#93a7a9;--b:#2a3a3d;--pd:#79c3dc;--pl:#6fb9d2;--chip:#10191b}
-    :root[data-theme="dark"] .tw thead th{background:#13201f}
-    :root[data-theme="dark"] .tabs button{background:#10191b;color:var(--t)}
-    :root[data-theme="dark"] .kpi div{background:#10191b}
+    :root[data-theme="dark"]{--bg:#0b1424;--card:#131f33;--t:#e2e8f0;--m:#94a3b8;--b:#26354d;--pd:#8fbaf8;--pl:#6aa8f7;--chip:#16294a;--navy:#dbe6f7}
+    :root[data-theme="dark"] .card{border-color:#26354d}
+    :root[data-theme="dark"] .tw thead th{background:#172a47}
+    :root[data-theme="dark"] .tabs button{background:#0e1829;color:var(--t)}
+    :root[data-theme="dark"] .kpi div{background:#0e1829}
     :root[data-theme="dark"] .top h1,:root[data-theme="dark"] label,:root[data-theme="dark"] .card b{color:var(--pd)}
     body.has-ticker{padding-top:38px}body.has-ticker .theme-toggle[style*="position:fixed"]{top:50px!important}   /* الشريط الإعلاني (templates/_ticker.html) ثابت أعلى الشاشة بارتفاع 38px */
     .theme-toggle{background:none;border:1.5px solid var(--b);color:var(--t);border-radius:10px;width:42px;height:42px;cursor:pointer;font-size:1.1rem}
+    /* شريط الهوية أعلى صفحة الموظف (نمط SAS) */
+    .me-head{display:flex;align-items:center;gap:12px;margin:-14px -14px 14px;padding:16px 14px 18px;color:#fff;border-radius:0 0 20px 20px;
+      background:linear-gradient(135deg,var(--p) 0%,var(--pd) 55%,var(--pdd) 100%);box-shadow:0 8px 24px rgba(10,58,138,.25)}
+    .me-head .brand-logo{width:48px;height:48px;object-fit:contain;background:#fff;border-radius:14px;padding:4px;flex:none;box-shadow:0 4px 12px rgba(0,0,0,.18)}
+    .me-head .brand-logo.sys-icon{padding:0;background:transparent}
+    .me-head .who{flex:1;min-width:0}.me-head h1{font-size:1.08rem;font-weight:800;color:#fff;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .me-head .who small{display:block;color:rgba(255,255,255,.8);font-size:.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .me-head .hbtn{width:42px;height:42px;border-radius:12px;border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.14);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:1rem;flex:none;text-decoration:none;cursor:pointer;font-family:inherit}
+    .me-head .lang-switch{height:42px;padding:0 12px;border-radius:12px;border:1px solid rgba(255,255,255,.35);background:#fff;color:var(--pd);font:800 .82rem 'Tajawal',sans-serif;cursor:pointer;flex:none}
+    .me-head .lang-switch i{display:none}
+    body.has-ticker .me-head{margin-top:-14px}
   </style>
