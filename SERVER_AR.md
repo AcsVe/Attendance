@@ -41,8 +41,7 @@ cd ~ && curl -sL -H "Authorization: Bearer $(cat ~/.iaj_github_token)" \
   bash ~/attendance/standby/phone.sh setup && bash ~/attendance/standby/phone.sh configure
 ```
 
-رمز GitHub يجب أن يشمل مستودع Attendance. الأزرار: `ATT 1` تشغيل/إنهاء الطوارئ، `ATT 2` إرجاع للكمبيوتر،
-`ATT 3` الحالة، `ATT 4` تحديث الكود، `ATT 5` رفع بيانات الهاتف، `ATT 6` استرجاع من Neon. القفل واللغة من أزرار `IAJ 0` و`IAJ 9`.
+رمز GitHub يجب أن يشمل مستودع Attendance. الأزرار في Termux:Widget: زر «ATT» يفتح قائمة النظام (حالته الآن، تشغيل الطوارئ وإنهاؤها، الإرجاع للكمبيوتر، تحديث الكود، النسخ إلى Drive)، و«★ لوحة الأنظمة» تعرض حالة كل المواقع، و«★ قفل أو فتح الأزرار» و«★ English - عربي» للقفل واللغة (`standby/widgets.sh` و`standby/panel.sh` في IAJ).
 
 ## تطبيق الموظفين على الهاتف (تسجيل الدوام + Geofence)
 

@@ -13,7 +13,7 @@
 #   bash ~/attendance/standby/phone.sh backup       # رفع بيانات الهاتف إلى Drive
 #   bash ~/attendance/standby/phone.sh try          # تجربة على الهاتف فقط: http://127.0.0.1:8003
 #
-#  القفل واللغة مشتركان مع أزرار IAJ (IAJ 0 / IAJ 9).
+#  القفل واللغة مشتركان مع زرّي «★ قفل أو فتح الأزرار» و«★ English - عربي» (standby/widgets.sh في IAJ).
 # ================================================================
 set -e
 SITE="$HOME/attendance"
@@ -31,7 +31,7 @@ say() { printf '\n\033[1;36m» %s\033[0m\n' "$*"; }
 die() { printf '\n\033[1;31m✖ %s\033[0m\n' "$*"; exit 1; }
 guard() {
   if [ -f "$HOME/.iaj_lock" ] && [ -z "$IAJ_NOGUARD" ]; then
-    die "$(T "🔒 الأزرار الحساسة مقفلة — اضغط «IAJ 0 - قفل أو فتح الأزرار» لفتحها" "🔒 Sensitive buttons are locked - press IAJ 0 to unlock")"
+    die "$(T "🔒 الأزرار الحساسة مقفلة — اضغط «★ قفل أو فتح الأزرار» لفتحها" "🔒 Sensitive buttons are locked - press Â«â ÙÙÙ Ø£Ù ÙØªØ­ Ø§ÙØ£Ø²Ø±Ø§Ø±Â» to unlock")"
   fi
 }
 need_code() { [ -f "$SITE/serve.py" ] || die "$(T "الكود غير موجود — شغّل: bash phone.sh update-code" "Code not found - run: bash phone.sh update-code")"; }
@@ -120,7 +120,7 @@ case "$1" in
     [ -n "$N" ] || die "$(T "لم يُنزَّل شيء" "Nothing was downloaded")"
     pkill -f "$SITE/serve.py" 2>/dev/null || true
     cd "$SITE" && python ops/restore.py --file "$N" --yes
-    say "$(T "تم. بيانات Neon على الهاتف الآن — للتشغيل للعامة: زر ATT 1" "Done. Neon data is on the phone - to serve it publicly: ATT 1")"
+    say "$(T "تم. بيانات Neon على الهاتف الآن — للتشغيل للعامة: زر «ATT» ← تشغيل الطوارئ" "Done. Neon data is on the phone - to serve it publicly: the ATT button > Emergency")"
     ;;
 
   try)
@@ -151,6 +151,8 @@ case "$1" in
     mk "ATT 4 - تحديث كود الحضور" "bash ~/attendance/standby/phone.sh update-code && bash ~/attendance/standby/phone.sh configure"
     mk "ATT 5 - نسخ بيانات الحضور إلى Drive" "bash ~/attendance/standby/phone.sh backup"
     mk "ATT 6 - استرجاع من Neon إلى الهاتف" "bash ~/attendance/standby/phone.sh neon"
+    # one button per system instead of one per action (when the award site is on this phone): ~/iaj/standby/widgets.sh
+    [ -f "$HOME/iaj/standby/widgets.sh" ] && WIDGETS_QUIET=1 bash "$HOME/iaj/standby/widgets.sh"
     say "$(T "تم. حدّث أداة Termux:Widget لتظهر أزرار ATT" "Done. Refresh the Termux:Widget to see the ATT buttons")"
     cd "$SITE" && python ops/cf.py status || true
     ;;
@@ -226,7 +228,7 @@ case "$1" in
     else
       die "$(T "لم يتم التحويل" "Switch failed")"
     fi
-    say "$(T "✅ الهاتف يشغّل 3.iajaward.org — لا تغلق النافذة. للإنهاء: زر «ATT 1 - إنهاء» أو Ctrl+C" "✅ The phone serves 3.iajaward.org - keep this window. To finish: ATT 1 - Stop, or Ctrl+C")"
+    say "$(T "✅ الهاتف يشغّل 3.iajaward.org — لا تغلق النافذة. للإنهاء: زر «ATT» ← إنهاء الطوارئ أو Ctrl+C" "✅ The phone serves 3.iajaward.org - keep this window. To finish: the ATT button > End emergency mode, or Ctrl+C")"
     while kill -0 $WEB 2>/dev/null && kill -0 $CF 2>/dev/null; do sleep 5; done
     say "$(T "توقف النظام أو النفق على الهاتف" "The system or tunnel stopped on the phone")"
     exit 0
