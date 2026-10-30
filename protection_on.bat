@@ -8,7 +8,7 @@ REM Turns ON: page encryption + developer-tools detection + right-click blocking
 "%PY%" ops\setenv.py PAGE_SHIELD 1 >nul
 "%PY%" ops\setenv.py DEVTOOLS_GUARD 1 >nul
 schtasks /end /tn "ATTENDANCE Website" >nul 2>nul
-timeout /t 2 >nul
+"%SystemRoot%\System32\timeout.exe" /t 2 >nul
 schtasks /run /tn "ATTENDANCE Website" >nul 2>nul
 echo.
 echo   Page protection is ON.
