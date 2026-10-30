@@ -74,8 +74,9 @@ case "$1" in
     fi
     if ! python -c "import pandas" 2>/dev/null; then
       say "$(T "بناء pandas على الهاتف (قد يستغرق 20–40 دقيقة — اترك النافذة مفتوحة)" "Building pandas on the phone (may take 20-40 minutes - keep the window open)")"
-      pkg install -y python-numpy clang make pkg-config >/dev/null 2>&1 || true
-      pip install meson-python meson ninja cython versioneer >/dev/null
+      # ninja from Termux (pip cannot build it on the phone); the rest are plain Python
+      pkg install -y python-numpy clang make pkg-config ninja binutils >/dev/null 2>&1 || true
+      pip install meson-python meson cython versioneer || die "$(T "تعذّر تثبيت أدوات البناء" "Could not install the build tools")"
       pip install --no-build-isolation "pandas>=2.2.2,<4" || die "$(T "تعذّر تثبيت pandas" "Could not install pandas")"
     fi
     pkg install -y python-cryptography >/dev/null 2>&1 || pip install cryptography || say "$(T "تنبيه: cryptography غير مثبتة — بصمة المتصفح (WebAuthn) معطّلة" "Note: cryptography missing — browser biometrics disabled")"
