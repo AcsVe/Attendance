@@ -61,11 +61,23 @@ ensure_env() {
 
 case "$1" in
   setup)
-    say "$(T "تثبيت المتطلبات (pandas قد يستغرق دقائق)" "Installing requirements (pandas may take a few minutes)")"
+    say "$(T "تثبيت المتطلبات " "Installing requirements")"
     pkg install -y python rclone cloudflared unzip python-pillow python-numpy >/dev/null || pkg install -y python rclone cloudflared unzip python-pillow
     pip install "Flask==3.0.3" "Werkzeug==3.0.3" "requests" "waitress==3.0.2" "pg8000==1.31.5" "APScheduler==3.10.4" tzdata \
                 "openpyxl>=3.1.5" "xlrd==2.0.1" "reportlab==4.2.2" "arabic-reshaper==3.0.0" "python-bidi==0.4.2"
-    pip install "pandas>=2.2.2,<4" || pkg install -y python-pandas || die "$(T "تعذّر تثبيت pandas" "Could not install pandas")"
+    # pandas has no ready-made build for Android on PyPI: pip would compile it AND numpy from source (an hour or
+    # more on a phone). So: a ready-made package first (Termux user repository), else compile pandas alone against
+    # the numpy already installed by pkg.
+    if ! python -c "import pandas" 2>/dev/null; then
+      say "$(T "تثبيت pandas (حزمة جاهزة)" "Installing pandas (ready-made package)")"
+      { pkg install -y tur-repo && pkg install -y python-pandas; } >/dev/null 2>&1 || true
+    fi
+    if ! python -c "import pandas" 2>/dev/null; then
+      say "$(T "بناء pandas على الهاتف (قد يستغرق 20–40 دقيقة — اترك النافذة مفتوحة)" "Building pandas on the phone (may take 20-40 minutes - keep the window open)")"
+      pkg install -y python-numpy clang make pkg-config >/dev/null 2>&1 || true
+      pip install meson-python meson ninja cython versioneer >/dev/null
+      pip install --no-build-isolation "pandas>=2.2.2,<4" || die "$(T "تعذّر تثبيت pandas" "Could not install pandas")"
+    fi
     pkg install -y python-cryptography >/dev/null 2>&1 || pip install cryptography || say "$(T "تنبيه: cryptography غير مثبتة — بصمة المتصفح (WebAuthn) معطّلة" "Note: cryptography missing — browser biometrics disabled")"
     pip install -q "pywebpush>=1.14" >/dev/null 2>&1 || true   # تنبيهات فحص الحضور (اختياري)
     say "$(T "تم. الخطوة التالية: bash ~/attendance/standby/phone.sh configure" "Done. Next: bash ~/attendance/standby/phone.sh configure")"
