@@ -25,7 +25,7 @@ def init_tables(conn):
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE,
         quota_days REAL NOT NULL DEFAULT 0,        -- الرصيد السنوي (0 = بلا حد)
-        paid INTEGER NOT NULL DEFAULT 1,           -- معلومة فقط (لا احتساب مالي)
+        paid INTEGER NOT NULL DEFAULT 1,           -- 0 = بلا راتب: تُخصم أيامه في الرواتب (payroll.py) إن فُعّلت القاعدة
         requires_approval INTEGER NOT NULL DEFAULT 1,
         employee_request INTEGER NOT NULL DEFAULT 1,
         active INTEGER NOT NULL DEFAULT 1,

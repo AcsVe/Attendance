@@ -26,7 +26,8 @@
       data-can-manage-employees="{{ perms.can_manage_employees|int }}"
       data-can-manage-departments="{{ perms.can_manage_departments|int }}"
       data-can-push-devices="{{ perms.can_push_devices|int }}"
-      data-can-edit-org-settings="{{ perms.can_edit_org_settings|int }}">
+      data-can-edit-org-settings="{{ perms.can_edit_org_settings|int }}"
+      data-can-payroll="{{ can_payroll|int }}">
 {% include "_ticker.html" %}
 <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
 <nav class="sidebar" id="sidebar">
@@ -65,6 +66,7 @@
       <div class="nav-group-items">
       <button class="nav-item" data-tab="reports" onclick="showTab('reports')"><i class="fas fa-table" aria-hidden="true"></i> التقارير</button>
       <button class="nav-item" data-tab="monthly" onclick="showTab('monthly')"><i class="fas fa-file-invoice-dollar" aria-hidden="true"></i> الكشف الشهري</button>
+      <button class="nav-item" data-tab="payroll" onclick="showTab('payroll')"><i class="fas fa-money-check-dollar" aria-hidden="true"></i> الرواتب</button>
       <button class="nav-item" data-tab="compare" onclick="showTab('compare')"><i class="fas fa-chart-bar" aria-hidden="true"></i> المقارنات</button>
       <button class="nav-item" data-tab="overtime" onclick="showTab('overtime')"><i class="fas fa-business-time" aria-hidden="true"></i> العمل الإضافي</button>
       <button class="nav-item" data-tab="blueprint" onclick="showTab('blueprint')"><i class="fas fa-map" aria-hidden="true"></i> النظرة الشاملة</button>
@@ -845,9 +847,156 @@
       </div>
       <div class="card">
         <div class="card-title"><i class="fas fa-list" aria-hidden="true"></i> أنواع الإجازات</div>
-        <p style="font-size:.8rem;color:var(--muted);margin-bottom:6px">الرصيد السنوي بالأيام (0 = بلا حد). «مدفوعة» معلومة للتقارير فقط — لا يوجد أي احتساب مالي. اضبط الأرصدة حسب سياستكم وقانون العمل.</p>
+        <p style="font-size:.8rem;color:var(--muted);margin-bottom:6px">الرصيد السنوي بالأيام (0 = بلا حد). الإجازة غير المدفوعة تُخصم أيامها في «الرواتب» إذا فُعّلت قاعدتها. اضبط الأرصدة حسب سياستكم وقانون العمل.</p>
         <div class="table-wrap"><table><thead><tr><th>الاسم</th><th>الرصيد السنوي</th><th>مدفوعة</th><th>تحتاج موافقة</th><th>يطلبها الموظف</th><th>مفعّل</th><th>حفظ</th></tr></thead>
           <tbody id="vaTypes"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- ============ الرواتب (بديل MenaPAY) والربط مع MenaPAY / MenaITech — payroll.py ============ -->
+    <div class="tab-panel" id="tab-payroll">
+      <div class="subtab-nav">
+        <button class="subtab-btn active" data-subtab="runs" onclick="prSub('runs')"><i class="fas fa-file-invoice-dollar" aria-hidden="true"></i> مسيرات الرواتب</button>
+        <button class="subtab-btn" data-subtab="profiles" onclick="prSub('profiles')"><i class="fas fa-id-card" aria-hidden="true"></i> رواتب الموظفين</button>
+        <button class="subtab-btn" data-subtab="rules" onclick="prSub('rules')"><i class="fas fa-sliders" aria-hidden="true"></i> قواعد الاحتساب</button>
+        <button class="subtab-btn" data-subtab="menapay" onclick="prSub('menapay')"><i class="fas fa-right-left" aria-hidden="true"></i> الربط مع MenaPAY</button>
+        <button class="subtab-btn" data-subtab="access" id="prAccessBtn" onclick="prSub('access')"><i class="fas fa-user-lock" aria-hidden="true"></i> الصلاحيات</button>
+      </div>
+
+      <div class="pr-sub active" id="prsub-runs">
+        <div class="card">
+          <div class="card-title"><i class="fas fa-calculator" aria-hidden="true"></i> احتساب مسيرة شهر</div>
+          <div class="filter-bar" style="margin-bottom:6px">
+            <input type="month" id="prMonth" class="search-input" style="min-width:150px" aria-label="الشهر">
+            <button class="btn btn-primary btn-sm" onclick="prCompute()"><i class="fas fa-play" aria-hidden="true"></i> احتساب / إعادة احتساب المسودة</button>
+          </div>
+          <p style="font-size:.8rem;color:var(--muted)">تُحسب المسودة من «الكشف الشهري» حسب «قواعد الاحتساب»، ولا يُعتمد أي خصم قبل مراجعتك. حدّث بيانات الحضور للشهر أولاً من «رفع البيانات والتحليل».</p>
+          <div class="table-wrap" style="max-height:240px;margin-top:8px"><table class="no-sort">
+            <thead><tr><th>الشهر</th><th>الحالة</th><th>عدد الموظفين</th><th>صافي الرواتب</th><th>أُنشئت</th><th>اعتُمدت</th></tr></thead>
+            <tbody id="prRuns"></tbody></table></div>
+        </div>
+
+        <div class="card hide" id="prRunCard">
+          <div class="card-title"><i class="fas fa-list-check" aria-hidden="true"></i> مسيرة <span id="prRunMonth"></span> — <span id="prRunStatus"></span></div>
+          <div class="stats-grid" id="prRunStats"></div>
+          <div class="filter-bar" style="margin-bottom:8px">
+            <button class="btn btn-primary btn-sm" id="prApproveBtn" onclick="prRunAction('approve')"><i class="fas fa-lock" aria-hidden="true"></i> اعتماد وإقفال</button>
+            <button class="btn btn-outline btn-sm" id="prReopenBtn" onclick="prRunAction('reopen')"><i class="fas fa-lock-open" aria-hidden="true"></i> فتح المسيرة</button>
+            <button class="btn btn-red btn-sm" id="prDeleteBtn" onclick="prRunAction('delete')"><i class="fas fa-trash" aria-hidden="true"></i> حذف المسودة</button>
+            <a class="btn btn-outline btn-sm" id="prRegLink" href="#"><i class="fas fa-file-excel" aria-hidden="true"></i> كشف الرواتب</a>
+            <a class="btn btn-outline btn-sm" id="prBankX" href="#"><i class="fas fa-building-columns" aria-hidden="true"></i> ملف البنك Excel</a>
+            <a class="btn btn-outline btn-sm" id="prBankC" href="#"><i class="fas fa-file-csv" aria-hidden="true"></i> ملف البنك CSV</a>
+            <button class="btn btn-outline btn-sm" onclick="prPayslips()"><i class="fas fa-print" aria-hidden="true"></i> قسائم الرواتب (المحددون أو الكل)</button>
+          </div>
+          <div class="filter-bar" id="prAdjBar" style="margin-bottom:8px">
+            <select id="prAdjKind" class="search-input" style="width:auto;min-width:0" aria-label="نوع التعديل"><option value="add">مكافأة / إضافة</option><option value="deduct">خصم</option></select>
+            <input type="number" id="prAdjAmount" class="search-input" style="width:120px;min-width:0" min="0" step="0.001" placeholder="المبلغ" aria-label="المبلغ">
+            <input type="text" id="prAdjReason" class="search-input" maxlength="200" placeholder="السبب (يظهر في القسيمة)" aria-label="السبب">
+            <button class="btn btn-primary btn-sm" onclick="prAdjust()"><i class="fas fa-plus" aria-hidden="true"></i> إضافة للمحددين</button>
+            <span style="font-size:.8rem;color:var(--muted)">المحددون: <b id="prSelCount">0</b></span>
+          </div>
+          <div class="table-wrap" style="max-height:520px"><table class="dt-filterable" id="prLinesTable">
+            <thead><tr><th class="no-filter"><input type="checkbox" aria-label="تحديد الكل" onchange="prCheckAll(this.checked)"></th>
+              <th>الرقم الوظيفي</th><th>الموظف</th><th>القسم</th><th>الأساسي</th><th>العلاوات</th><th>الإضافي والمكافآت</th>
+              <th>خصومات الحضور</th><th>الضمان والضريبة</th><th>تعديلات يدوية</th><th>الإجمالي</th><th>الاستقطاعات</th><th>الصافي</th></tr></thead>
+            <tbody id="prLines"></tbody></table></div>
+          <div id="prLineDetail" class="hide" style="margin-top:12px"></div>
+        </div>
+      </div>
+
+      <div class="pr-sub" id="prsub-profiles">
+        <div class="card">
+          <div class="card-title"><i class="fas fa-id-card" aria-hidden="true"></i> رواتب الموظفين — العدد: <span id="prProfCount">0</span> — لهم راتب: <span id="prProfPaid">0</span></div>
+          <div class="filter-bar" style="margin-bottom:8px">
+            <select id="prBulkAction" class="search-input" style="width:auto;min-width:0" aria-label="إجراء جماعي" onchange="prBulkUi()">
+              <option value="">إجراء جماعي للمحددين…</option>
+              <option value="raise_percent">زيادة الأساسي بنسبة %</option><option value="raise_amount">زيادة الأساسي بمبلغ</option>
+              <option value="ss_on">خاضع للضمان</option><option value="ss_off">غير خاضع للضمان</option>
+              <option value="pay_bank">الدفع: تحويل بنكي</option><option value="pay_cash">الدفع: نقداً</option>
+              <option value="bank_name">تعيين اسم البنك</option></select>
+            <input type="text" id="prBulkValue" class="search-input hide" style="width:160px;min-width:0" aria-label="القيمة" placeholder="القيمة">
+            <button class="btn btn-primary btn-sm" onclick="prBulk()"><i class="fas fa-check-double" aria-hidden="true"></i> تطبيق</button>
+            <span style="font-size:.8rem;color:var(--muted)">المحددون: <b id="prProfSel">0</b></span>
+          </div>
+          <div class="table-wrap" style="max-height:520px"><table class="dt-filterable" id="prProfTable">
+            <thead><tr><th class="no-filter"><input type="checkbox" aria-label="تحديد الكل" onchange="prProfCheckAll(this.checked)"></th>
+              <th>الرقم الوظيفي</th><th>الموظف</th><th>القسم</th><th>الأساسي</th><th>العلاوات</th><th>الضمان</th><th>الضريبة الشهرية</th>
+              <th>الدفع</th><th>البنك</th><th>IBAN</th><th>الحالة</th><th class="no-filter">تعديل</th></tr></thead>
+            <tbody id="prProfiles"></tbody></table></div>
+        </div>
+        <div class="card hide" id="prEditCard">
+          <div class="card-title"><i class="fas fa-pen" aria-hidden="true"></i> راتب: <span id="prEditName"></span></div>
+          <div class="form-grid quad">
+            <div class="form-group"><label for="prEdNo">الرقم الوظيفي (رمز الموظف في MenaPAY)</label><input type="text" id="prEdNo" maxlength="40"></div>
+            <div class="form-group"><label for="prEdBasic">الراتب الأساسي</label><input type="number" id="prEdBasic" min="0" step="0.001"></div>
+            <div class="form-group"><label for="prEdSsSalary">الراتب الخاضع للضمان (فارغ = الأساسي والعلاوات)</label><input type="number" id="prEdSsSalary" min="0" step="0.001"></div>
+            <div class="form-group"><label for="prEdTax">ضريبة الدخل الشهرية</label><input type="number" id="prEdTax" min="0" step="0.001"></div>
+            <div class="form-group"><label for="prEdPay">طريقة الدفع</label><select id="prEdPay"><option value="bank">تحويل بنكي</option><option value="cash">نقداً</option></select></div>
+            <div class="form-group"><label for="prEdBank">البنك</label><input type="text" id="prEdBank" maxlength="80"></div>
+            <div class="form-group"><label for="prEdIban">IBAN</label><input type="text" id="prEdIban" maxlength="40" dir="ltr"></div>
+            <div class="form-group"><label style="display:flex;gap:6px;align-items:center;margin-top:24px"><input type="checkbox" id="prEdSs"> خاضع للضمان الاجتماعي</label></div>
+          </div>
+          <div class="form-group"><label>العلاوات الثابتة</label>
+            <div id="prEdAllow"></div>
+            <button class="btn btn-outline btn-sm" type="button" onclick="prAllowRow()"><i class="fas fa-plus" aria-hidden="true"></i> إضافة علاوة</button></div>
+          <div class="form-group"><label for="prEdNotes">ملاحظات</label><input type="text" id="prEdNotes" maxlength="300"></div>
+          <button class="btn btn-primary" onclick="prSaveProfile()"><i class="fas fa-save" aria-hidden="true"></i> حفظ</button>
+          <button class="btn btn-outline" onclick="document.getElementById('prEditCard').classList.add('hide')">إغلاق</button>
+        </div>
+      </div>
+
+      <div class="pr-sub" id="prsub-rules">
+        <div class="card">
+          <div class="card-title"><i class="fas fa-sliders" aria-hidden="true"></i> قواعد الاحتساب</div>
+          <p style="font-size:.8rem;color:var(--muted);margin-bottom:10px">كل قاعدة تعمل فقط إذا فُعّلت. التغيير يسري على المسودات عند إعادة احتسابها، ولا يغيّر المسيرات المعتمدة. اضبط القواعد حسب سياسة المؤسسة وقانون العمل والضمان الاجتماعي.</p>
+          <div id="prRulesForm"></div>
+          <button class="btn btn-primary" onclick="prSaveRules()"><i class="fas fa-save" aria-hidden="true"></i> حفظ القواعد</button>
+        </div>
+      </div>
+
+      <div class="pr-sub" id="prsub-menapay">
+        <div class="card">
+          <div class="card-title"><i class="fas fa-file-export" aria-hidden="true"></i> تصدير متغيرات الحضور إلى MenaPAY</div>
+          <p style="font-size:.8rem;color:var(--muted);margin-bottom:8px">لمن يبقى على MenaPAY للرواتب: ملف بصيغة استيراد المتغيرات الشهرية (رمز الموظف، رمز البند، القيمة، الفترة). اكتب رمز كل بند كما هو معرَّف في MenaPAY.</p>
+          <div class="form-grid quad">
+            <div class="form-group"><label for="prMpLayout">شكل الملف</label><select id="prMpLayout"><option value="long">صف لكل بند (EmployeeCode, ItemCode, Value, Period)</option><option value="wide">صف لكل موظف (عمود لكل بند)</option></select></div>
+            <div class="form-group"><label for="prMpCode">رمز الموظف من</label><select id="prMpCode"><option value="employee_no">الرقم الوظيفي</option><option value="device_uid">رقم الموظف في جهاز البصمة</option><option value="name">الاسم</option></select></div>
+            <div class="form-group"><label for="prMpPeriod">صيغة الفترة</label><select id="prMpPeriod"><option value="%Y%m">202612</option><option value="%Y-%m">2026-12</option><option value="%m/%Y">12/2026</option><option value="%m%Y">122026</option></select></div>
+            <div class="form-group"><label for="prMpMonth">الشهر</label><input type="month" id="prMpMonth"></div>
+          </div>
+          <div class="table-wrap" style="max-height:360px"><table class="no-sort"><thead><tr><th>تصدير</th><th>البند</th><th>الوحدة</th><th>رمز البند في MenaPAY</th></tr></thead><tbody id="prMpItems"></tbody></table></div>
+          <div class="filter-bar" style="margin-top:10px">
+            <button class="btn btn-primary btn-sm" onclick="prSaveMenapay()"><i class="fas fa-save" aria-hidden="true"></i> حفظ الإعدادات</button>
+            <button class="btn btn-outline btn-sm" onclick="prMpExport('xlsx')"><i class="fas fa-file-excel" aria-hidden="true"></i> تصدير Excel</button>
+            <button class="btn btn-outline btn-sm" onclick="prMpExport('csv')"><i class="fas fa-file-csv" aria-hidden="true"></i> تصدير CSV</button>
+          </div>
+          <p style="font-size:.8rem;color:var(--muted);margin-top:6px">بنود المبالغ (الخصومات، الإضافي، الصافي) تُؤخذ من مسيرة الشهر إن احتُسبت؛ وبنود الأيام والدقائق والساعات من الحضور مباشرة.</p>
+        </div>
+        <div class="card">
+          <div class="card-title"><i class="fas fa-file-import" aria-hidden="true"></i> استيراد الموظفين والرواتب من MenaITech / MenaPAY</div>
+          <p style="font-size:.8rem;color:var(--muted);margin-bottom:8px">صدّر من MenaITech قائمة الموظفين (Excel أو CSV) بأعمدة مثل: Employee Code، Employee Name، Department، Basic Salary، Bank، IBAN — تُكتشف الأعمدة تلقائياً بالعربية أو الإنجليزية. يُطابق الموظف بالرقم الوظيفي ثم بالاسم.</p>
+          <div class="filter-bar">
+            <input type="file" id="prImpFile" accept=".xlsx,.csv" aria-label="ملف الاستيراد">
+            <label style="display:flex;gap:6px;align-items:center;font-size:.85rem"><input type="checkbox" id="prImpCreate"> إضافة الموظفين غير الموجودين</label>
+            <button class="btn btn-primary btn-sm" onclick="prImport()"><i class="fas fa-upload" aria-hidden="true"></i> استيراد</button>
+          </div>
+          <div id="prImpResult" style="margin-top:8px;font-size:.85rem"></div>
+        </div>
+      </div>
+
+      <div class="pr-sub" id="prsub-access">
+        <div class="card">
+          <div class="card-title"><i class="fas fa-user-lock" aria-hidden="true"></i> من يرى الرواتب ويديرها</div>
+          <p style="font-size:.8rem;color:var(--muted);margin-bottom:8px">الرواتب سرية: لا يراها إلا مدير النظام ومن تمنحه الصلاحية هنا. كل عملية تُسجَّل في سجل التدقيق.</p>
+          <div class="filter-bar" style="margin-bottom:8px">
+            <button class="btn btn-primary btn-sm" onclick="prAccess(true)"><i class="fas fa-check" aria-hidden="true"></i> منح المحددين</button>
+            <button class="btn btn-red btn-sm" onclick="prAccess(false)"><i class="fas fa-xmark" aria-hidden="true"></i> سحب من المحددين</button>
+          </div>
+          <div class="table-wrap" style="max-height:420px"><table class="dt-filterable">
+            <thead><tr><th class="no-filter"><input type="checkbox" aria-label="تحديد الكل" onchange="document.querySelectorAll('.pr-acc').forEach(c => { if (!c.disabled) c.checked = this.checked; })"></th>
+              <th>اسم المستخدم</th><th>الاسم</th><th>الدور</th><th>الصلاحية</th></tr></thead>
+            <tbody id="prAccessRows"></tbody></table></div>
+        </div>
       </div>
     </div>
 
@@ -1824,6 +1973,7 @@
 <script src="{{ url_for('static', filename='js/vacations_admin.js') }}"></script>
 <script src="{{ url_for('static', filename='js/displays_admin.js') }}"></script>
 <script src="{{ url_for('static', filename='js/dahua_admin.js') }}"></script>
+<script src="{{ url_for('static', filename='js/payroll_admin.js') }}"></script>
 <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
 <script src="{{ url_for('static', filename='js/ticker_admin.js') }}"></script>
 <script>

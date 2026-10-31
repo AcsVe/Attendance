@@ -27,7 +27,7 @@
     table{width:100%;border-collapse:collapse;font-size:.85rem}th,td{padding:8px 4px;border-bottom:1px solid #eef2f3;text-align:right}th{color:var(--m);font-weight:700}
     .tw{overflow:auto;max-height:62vh;-webkit-overflow-scrolling:touch}.tw thead th{position:sticky;top:0;background:#eaf1fc;color:var(--navy);z-index:2;box-shadow:inset 0 -1px 0 #e3eaec;cursor:pointer;user-select:none;white-space:nowrap}.tw th .ar{font-size:.7em;margin-inline-start:3px}
     .toast{position:fixed;left:14px;right:14px;bottom:calc(18px + env(safe-area-inset-bottom));max-width:490px;margin:0 auto;border-radius:14px;padding:14px 16px;font-weight:800;color:#fff;z-index:9;box-shadow:0 8px 24px rgba(0,0,0,.2);display:none}
-    .hide{display:none}#leaveSheet:not(.hide){display:flex}html:has(#leaveSheet:not(.hide)),html:has(#leaveSheet:not(.hide)) body{overflow:hidden;overscroll-behavior:none}#leaveSheet>*{overscroll-behavior:contain;max-height:90vh;overflow:auto}
+    .hide{display:none}#leaveSheet:not(.hide),#slipView:not(.hide){display:flex}html:has(#leaveSheet:not(.hide)),html:has(#leaveSheet:not(.hide)) body{overflow:hidden;overscroll-behavior:none}#leaveSheet>*{overscroll-behavior:contain;max-height:90vh;overflow:auto}
   </style>
 </head>
 <body>
@@ -126,6 +126,15 @@
         <button class="btn btn-p" id="vacSend" style="width:100%;margin-top:10px">إرسال طلب الإجازة</button>
       </div>
       <ul class="tl" id="vacList" style="margin-top:10px"></ul>
+    </div>
+    <div class="card hide" id="slipCard">
+      <b style="color:var(--pd)"><i class="fas fa-money-check-dollar" aria-hidden="true"></i> قسائم راتبي</b>
+      <ul class="tl" id="slipList" style="margin-top:8px"></ul>
+    </div>
+    <div id="slipView" class="hide" style="position:fixed;inset:0;z-index:9999;background:#fff;flex-direction:column">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid #e3e9f2">
+        <b>قسيمة الراتب</b><button class="btn" id="slipClose" type="button">إغلاق</button></div>
+      <iframe id="slipFrame" title="قسيمة الراتب" style="flex:1;border:0;width:100%"></iframe>
     </div>
     <div class="card" id="corrCard">
       <b style="color:var(--pd)"><i class="fas fa-pen-to-square" aria-hidden="true"></i> طلب تصحيح حضور / انصراف</b>
@@ -634,9 +643,30 @@
   });
   setTimeout(vacLoad, 1800);
 
+  // ===== قسائم الراتب (بعد اعتماد المسيرة، إن فعّلتها الإدارة) =====
+  function slipLoad() {
+    api('/me/api/payslips').then(function (d) {
+      if (!d || !d.ok) return;
+      $('slipCard').classList.toggle('hide', !d.enabled || !d.rows.length);
+      if (!d.enabled) return;
+      $('slipList').innerHTML = d.rows.map(function (r) {
+        return '<li><span dir="ltr"><b>' + esc(r.month) + '</b></span><span>' + Number(r.net).toFixed(3) + ' ' + esc(d.currency)
+          + ' <a href="#" onclick="slipOpen(' + r.run_id + ');return false">عرض</a></span></li>';
+      }).join('');
+    }).catch(function () {});
+  }
+  window.slipOpen = function (id) {
+    api('/me/api/payslips/' + id).then(function (d) {
+      if (!d || !d.ok) { toast((d && d.error) || 'تعذّر العرض'); return; }
+      $('slipFrame').srcdoc = d.html; $('slipView').classList.remove('hide');
+    }).catch(function () { toast('تعذّر العرض — تحقق من الإنترنت'); });
+  };
+  $('slipClose').addEventListener('click', function () { $('slipView').classList.add('hide'); $('slipFrame').srcdoc = ''; });
+  setTimeout(slipLoad, 2100);
+
   document.querySelectorAll('.tabs button').forEach(function (b) {
     b.addEventListener('click', function () {
-      if (b.dataset.t === 'month') { corrLoad(); vacLoad(); }
+      if (b.dataset.t === 'month') { corrLoad(); vacLoad(); slipLoad(); }
       document.querySelectorAll('.tabs button').forEach(function (x) { x.classList.toggle('on', x === b); });
       ['today', 'month', 'notes', 'acc'].forEach(function (t) { $('t-' + t).classList.toggle('hide', t !== b.dataset.t); });
       if (b.dataset.t === 'notes' && S && S.unread) { api('/me/api/notifications/read', { method: 'POST' }).then(load); }

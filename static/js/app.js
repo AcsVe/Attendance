@@ -153,7 +153,7 @@ const PAGE_TITLES = {
   permissions: 'أذونات التأخير والمغادرة', employees: 'الموظفون', devices: 'أجهزة البصمة',
   'dept-times': 'أوقات الأقسام', settings: 'الإعدادات العامة', schedule: 'الجدولة التلقائية',
   audit: 'سجل التدقيق', users: 'المستخدمون والصلاحيات', maintenance: 'أدوات الصيانة',
-  ticker: 'الشريط الإعلاني',
+  ticker: 'الشريط الإعلاني', payroll: 'الرواتب',
 };
 
 let currentTab = 'dashboard';
@@ -180,6 +180,7 @@ function applyRolePermissions() {
   if (CURRENT_ROLE !== 'admin') {
     document.querySelectorAll('[data-tab="users"], [data-tab="maintenance"], [data-tab="displays"]').forEach(el => { el.style.display = 'none'; });
   }
+  if (document.body.dataset.canPayroll !== '1') document.querySelectorAll('[data-tab="payroll"]').forEach(el => { el.style.display = 'none'; });
   if (!PERMS.can_manage_employees) {
     _disableContainer('#empAddCard');
     _disableContainer('#empImportCard');

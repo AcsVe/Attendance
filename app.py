@@ -100,6 +100,8 @@ import vacations as _vacations  # noqa: E402 — الإجازات وأرصدته
 app.register_blueprint(_vacations.bp)
 import displays as _displays  # noqa: E402 — شاشات العرض (مشاهدة فقط برابط سري)
 app.register_blueprint(_displays.bp)
+import payroll as _payroll  # noqa: E402 — الرواتب (بديل MenaPAY) والربط مع MenaPAY/MenaITech
+app.register_blueprint(_payroll.bp)
 try:
     _c = db.get_db()
     _adms.init_tables(_c)
@@ -109,6 +111,7 @@ try:
     _corrections.init_tables(_c)
     _vacations.init_tables(_c)
     _displays.init_tables(_c)
+    _payroll.init_tables(_c)
     _c.commit()
     _c.close()
 except Exception:
@@ -868,7 +871,8 @@ def dashboard():
     conn.close()
     fav = (row['fav_tabs'] if row and row['fav_tabs'] is not None else None)
     return render_template('dashboard.html', settings=settings, full_name=session.get('full_name', ''),
-                            role=session.get('role', 'viewer'), perms=perms, fav_tabs=fav)
+                            role=session.get('role', 'viewer'), perms=perms, fav_tabs=fav,
+                            can_payroll=_payroll.can_payroll())
 
 
 _FAV_DEFAULT = ['dashboard', 'mobile-moves', 'reports', 'employees']
