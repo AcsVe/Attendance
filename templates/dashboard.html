@@ -949,7 +949,18 @@
             <button class="btn btn-outline btn-sm" onclick="dhBulk('auto_on')">تشغيل السحب التلقائي</button>
             <button class="btn btn-outline btn-sm" onclick="dhBulk('auto_off')">إيقاف السحب التلقائي</button>
             <button class="btn btn-red btn-sm" onclick="dhBulk('delete')"><i class="fas fa-trash" aria-hidden="true"></i> حذف</button>
-            <span style="font-size:.85rem;color:var(--muted)">المحدد: <b id="dhSel">0</b></span>
+            <span style="font-size:.85rem;color:var(--muted)">المحدد: <b id="dhSel">0</b> من <b id="dhTotal">0</b></span>
+          </div>
+          <div class="filter-bar" style="margin-bottom:8px;flex-wrap:wrap">
+            <span style="font-size:.85rem;font-weight:700">إدارة الأجهزة المحددة:</span>
+            <button class="btn btn-outline btn-sm" onclick="dhManage('info')"><i class="fas fa-circle-info" aria-hidden="true"></i> معلومات الجهاز</button>
+            <button class="btn btn-outline btn-sm" onclick="dhManage('time_sync')"><i class="fas fa-clock" aria-hidden="true"></i> مزامنة الوقت</button>
+            <button class="btn btn-primary btn-sm" onclick="dhPushEmployees()"><i class="fas fa-user-plus" aria-hidden="true"></i> رفع الموظفين</button>
+            <button class="btn btn-outline btn-sm" onclick="dhManage('live_on')"><i class="fas fa-circle" style="color:#e74c3c" aria-hidden="true"></i> تشغيل المراقبة الحية</button>
+            <button class="btn btn-outline btn-sm" onclick="dhManage('live_off')">إيقاف المراقبة الحية</button>
+            <button class="btn btn-outline btn-sm" onclick="dhManage('open_door')"><i class="fas fa-door-open" aria-hidden="true"></i> فتح الباب</button>
+            <button class="btn btn-outline btn-sm" onclick="dhManage('reboot')"><i class="fas fa-power-off" aria-hidden="true"></i> إعادة التشغيل</button>
+            <button class="btn btn-red btn-sm" onclick="dhManage('clear_records')"><i class="fas fa-eraser" aria-hidden="true"></i> مسح سجلات الجهاز</button>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:.85rem;margin-bottom:8px">
             <label style="display:flex;gap:6px;align-items:center;font-weight:600"><input type="checkbox" id="dhAutoAll" onchange="dhSettings({auto_pull: this.checked})"> السحب التلقائي مفعّل</label>
@@ -961,11 +972,70 @@
           <div class="table-wrap" style="max-height:380px">
             <table class="dt-filterable">
               <thead><tr><th class="no-filter"><input type="checkbox" aria-label="تحديد الكل" onchange="dhCheckAll('dh-dev', this.checked)"></th>
-                <th>الاسم</th><th>العنوان</th><th>الطراز</th><th>الحالة</th><th>آخر سحب</th><th>آخر بصمة</th><th>اليوم</th><th>الإجمالي</th><th>أرقام غير مطابقة</th><th class="no-filter">تعديل</th></tr></thead>
+                <th>الاسم</th><th>العنوان</th><th>الطراز</th><th>الحالة</th><th>المراقبة الحية</th><th>آخر سحب</th><th>آخر بصمة</th><th>اليوم</th><th>الإجمالي</th><th>أرقام غير مطابقة</th><th class="no-filter">تعديل</th></tr></thead>
               <tbody id="dhDevices"></tbody>
             </table>
           </div>
           <div id="dhResult" style="font-size:.85rem;margin-top:8px"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><i class="fas fa-users" aria-hidden="true"></i> المستخدمون على جهاز Dahua (<span id="dhuCount">0</span>)</div>
+          <div class="filter-bar" style="margin-bottom:8px;flex-wrap:wrap">
+            <select id="dhuDevice" class="search-input" style="width:auto;min-width:180px" onchange="dhUsersLoad()" aria-label="الجهاز"></select>
+            <button class="btn btn-outline btn-sm" onclick="dhUsersLoad()"><i class="fas fa-sync" aria-hidden="true"></i> قراءة من الجهاز</button>
+            <button class="btn btn-red btn-sm" onclick="dhUsersDelete(false)"><i class="fas fa-trash" aria-hidden="true"></i> حذف المحدد من الجهاز</button>
+            <button class="btn btn-red btn-sm" onclick="dhUsersDelete(true)">حذف كل المستخدمين</button>
+            <span style="font-size:.85rem;color:var(--muted)">المحدد: <b id="dhuSel">0</b> من <b id="dhuTotal">0</b></span>
+          </div>
+          <div id="dhuNote" style="font-size:.85rem;margin-bottom:6px;color:var(--muted)">اختر جهازاً لقراءة المستخدمين المسجّلين فيه.</div>
+          <div class="table-wrap" style="max-height:360px">
+            <table class="dt-filterable">
+              <thead><tr><th class="no-filter"><input type="checkbox" aria-label="تحديد الكل" onchange="dhCheckAll('dh-user', this.checked)"></th>
+                <th>رقم المستخدم</th><th>الاسم في الجهاز</th><th>الموظف المطابق</th><th>وجه</th><th>بطاقة</th><th>بصمات الإصبع</th></tr></thead>
+              <tbody id="dhUsers"></tbody>
+            </table>
+          </div>
+          <div id="dhuMissing" style="font-size:.85rem;margin-top:8px"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><i class="fas fa-clone" aria-hidden="true"></i> نسخ الوجوه والبطاقات وبصمات الإصبع بين أجهزة Dahua</div>
+          <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">يُسجَّل الوجه مرة واحدة على جهاز، ثم يُنسخ إلى بقية الأجهزة مع اسم المستخدم ورقمه.
+            المستخدمون المحددون في الجدول أعلاه فقط إن حُدِّد بعضهم، وإلا فكل مستخدمي الجهاز المصدر.</p>
+          <div class="form-grid quad">
+            <div class="form-group"><label>الجهاز المصدر</label><select id="dhcSource"></select></div>
+            <div class="form-group" style="grid-column:span 2"><label>الأجهزة الهدف</label><div id="dhcTargets" style="display:flex;flex-wrap:wrap;gap:10px"></div></div>
+            <div class="form-group"><label>ما يُنسخ</label>
+              <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" class="dhc-what" value="face" checked> الوجوه</label>
+              <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" class="dhc-what" value="card" checked> البطاقات</label>
+              <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" class="dhc-what" value="fingerprint" checked> بصمات الإصبع</label></div>
+          </div>
+          <button class="btn btn-primary" onclick="dhCopyRun()"><i class="fas fa-clone" aria-hidden="true"></i> نسخ</button>
+          <div id="dhcResult" style="font-size:.85rem;margin-top:8px"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><i class="fas fa-camera" aria-hidden="true"></i> تسجيل وجه موظف من صورة</div>
+          <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">صورة واضحة للوجه من الأمام بإضاءة جيدة؛ تُصغَّر تلقائياً إلى الحجم الذي يقبله الجهاز، وتُرفع إلى الأجهزة المحددة في جدول الأجهزة.</p>
+          <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+            <div class="form-group" style="min-width:240px"><label>الموظف (من لديه «رقم بصمة»)</label><input type="text" id="dhfName" list="dhfNames" placeholder="ابحث بالاسم"><datalist id="dhfNames"></datalist></div>
+            <div class="form-group"><label>الصورة</label><input type="file" id="dhfPhoto" accept="image/*" onchange="dhFacePreview()"></div>
+            <img id="dhfPreview" alt="" style="display:none;width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid var(--border)">
+            <button class="btn btn-primary" onclick="dhFaceUpload()"><i class="fas fa-upload" aria-hidden="true"></i> رفع إلى الأجهزة المحددة</button>
+          </div>
+          <div id="dhfResult" style="font-size:.85rem;margin-top:8px"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><i class="fas fa-circle" style="color:#e74c3c" aria-hidden="true"></i> المراقبة الحية لأجهزة Dahua (<span id="dhlCount">0</span>)</div>
+          <p style="font-size:.85rem;color:var(--muted);margin-bottom:8px">للأجهزة التي شُغّلت لها المراقبة الحية: تُسجَّل كل بصمة لحظة حدوثها، ويعيد الخادم الاتصال تلقائياً إن انقطع.</p>
+          <div class="table-wrap" style="max-height:300px">
+            <table class="dt-filterable">
+              <thead><tr><th>الوقت</th><th>الجهاز</th><th>رقم المستخدم</th><th>الموظف</th><th>النتيجة</th></tr></thead>
+              <tbody id="dhLive"><tr><td colspan="5" style="color:var(--muted)">لا أحداث بعد</td></tr></tbody>
+            </table>
+          </div>
         </div>
 
         <div class="card">

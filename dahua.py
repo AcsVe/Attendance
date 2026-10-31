@@ -89,6 +89,10 @@ def init_tables(conn):
         received_at TEXT DEFAULT (datetime('now')),
         UNIQUE (user_id, ts)
     )''')
+    try:
+        conn.execute("ALTER TABLE dahua_devices ADD COLUMN live INTEGER NOT NULL DEFAULT 0")   # المراقبة الحية
+    except Exception:   # noqa: BLE001 — موجود
+        pass
     conn.execute("CREATE INDEX IF NOT EXISTS idx_dahua_logs_src ON dahua_logs (source, applied)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_dahua_logs_ts ON dahua_logs (ts)")
 
@@ -414,6 +418,11 @@ def pull_all(conn, ids=None, start=None, end=None, auto_only=False):
 
 def tick():
     """من المجدول كل دقيقة: سحب تلقائي من أجهزة الشبكة كل N دقيقة (قراءة فقط، خفيف على الجهاز)"""
+    try:
+        import dahua_ops
+        dahua_ops.ensure_live()       # المراقبة الحية للأجهزة المفعّلة لها (يعيد تشغيلها بعد إقلاع الخادم)
+    except Exception:   # noqa: BLE001
+        pass
     try:
         every = max(1, int(db.get_setting('dahua_pull_every', '5') or 5))
     except ValueError:
@@ -751,7 +760,7 @@ def parse_file(filename, data):
 # ---------------------------------------------------------------
 #   واجهة الإدارة
 # ---------------------------------------------------------------
-_PUBLIC = ('id', 'name', 'host', 'port', 'use_https', 'username', 'time_mode', 'auto_pull', 'active', 'location',
+_PUBLIC = ('id', 'name', 'host', 'port', 'use_https', 'username', 'time_mode', 'auto_pull', 'active', 'live', 'location',
            'model', 'serial', 'last_pull', 'last_rec_ts', 'last_error')
 
 
@@ -791,7 +800,7 @@ def api_overview():
             if not _admin_ok():
                 s.pop('last_raw', None)
             senders.append(s)
-        out = {'ok': True, 'devices': devs, 'senders': senders,
+        out = {'ok': True, 'devices': devs, 'senders': senders, 'live': dahua_ops.live_state(),
                'auto_pull': db.get_setting('dahua_auto_pull', '1') == '1',
                'pull_every': db.get_setting('dahua_pull_every', '5') or '5'}
         if _admin_ok():
@@ -1036,3 +1045,6 @@ def api_import():
     days = sorted({it[1].strftime('%Y-%m-%d') for it in items})
     return jsonify({'ok': True, **res, 'columns': {k: (str(v) if v is not None else None) for k, v in (desc or {}).items()},
                     'date_from': days[0], 'date_to': days[-1]})
+
+
+import dahua_ops  # noqa: E402,F401 — إدارة الأجهزة (المستخدمون، الوجوه، الوقت، الباب، المراقبة الحية)

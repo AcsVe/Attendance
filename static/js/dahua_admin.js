@@ -32,10 +32,13 @@ async function dhLoad() {
     <td dir="ltr" data-notr>${x.use_https ? 'https://' : ''}${escapeHtml(x.host)}:${x.port}</td>
     <td dir="ltr" data-notr>${escapeHtml(x.model || '—')}</td>
     <td>${dhStatus(x)}${x.auto_pull ? '' : ' <small style="color:var(--muted)">(يدوي)</small>'}</td>
+    <td>${dhLiveCell(x, d.live || {})}</td>
     <td dir="ltr">${escapeHtml(x.last_pull || '—')}</td><td dir="ltr">${escapeHtml(x.last_rec_ts || '—')}</td>
     <td>${x.today}</td><td>${x.total}</td><td>${dhUnmatched(x.unmatched)}</td>
     <td><button class="btn btn-outline btn-sm" onclick="dhEdit(${x.id})" aria-label="تعديل"><i class="fas fa-pen" aria-hidden="true"></i></button></td></tr>`).join('')
-    || '<tr><td colspan="11" style="color:var(--muted)">لا توجد أجهزة Dahua مضافة بعد</td></tr>';
+    || '<tr><td colspan="12" style="color:var(--muted)">لا توجد أجهزة Dahua مضافة بعد</td></tr>';
+  dhFillDeviceLists(d.devices);
+  if (d.push_url) dhLivePoll();          // المدير فقط
   document.getElementById('dhSenders').innerHTML = d.senders.map(x => `<tr>
     <td><input type="checkbox" class="dh-send" data-key="${escapeHtml(x.key)}" ${keepSend.has(x.key) ? 'checked' : ''} onchange="dhCount()"></td>
     <td><a href="#" onclick="dhRename('${escapeHtml(x.key)}');return false" title="تعديل الاسم">${escapeHtml(x.name || x.key)}</a></td>
@@ -54,6 +57,9 @@ async function dhLoad() {
 function dhChecked(cls, attr) { return [...document.querySelectorAll('.' + cls + ':checked')].map(c => c.dataset[attr]); }
 function dhCount() {
   document.getElementById('dhSel').textContent = dhChecked('dh-dev', 'id').length;
+  document.getElementById('dhTotal').textContent = document.querySelectorAll('.dh-dev').length;
+  const us = document.getElementById('dhuSel');
+  if (us) { us.textContent = dhChecked('dh-user', 'uid').length; document.getElementById('dhuTotal').textContent = document.querySelectorAll('.dh-user').length; }
   document.getElementById('dhSendSel').textContent = dhChecked('dh-send', 'key').length;
 }
 function dhCheckAll(cls, on) {
@@ -204,4 +210,185 @@ async function dhRematch() {
   const d = await api('/api/dahua/rematch', { method: 'POST', body: '{}' }).catch(() => null);
   if (d) toast(`طوبق ${d.matched} سجل`);
   dhLoad();
+}
+
+/* ===== إدارة الأجهزة: المعلومات، الوقت، الموظفون، الباب، المراقبة الحية، الصيانة (dahua_ops.py) ===== */
+function dhLiveCell(x, live) {
+  if (!x.live) return '<span style="color:var(--muted)">متوقفة</span>';
+  const st = live[String(x.id)];
+  if (st && st.state === 'connected') return `<span style="color:#1e8e5a;font-weight:700" title="منذ ${escapeHtml(st.since)}">متصلة</span>`;
+  return `<span style="color:#b45309;font-weight:700" title="${escapeHtml(st ? st.state : '')}">جارٍ الاتصال</span>`;
+}
+function dhFillDeviceLists(devs) {
+  const opts = devs.map(x => `<option value="${x.id}">${escapeHtml(x.name)}</option>`).join('');
+  for (const id of ['dhuDevice', 'dhcSource']) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const keep = el.value;
+    el.innerHTML = opts || '<option value="">لا توجد أجهزة</option>';
+    if (keep && devs.some(x => String(x.id) === keep)) el.value = keep;
+  }
+  const t = document.getElementById('dhcTargets');
+  if (t) {
+    const keep = new Set([...t.querySelectorAll('input:checked')].map(c => c.value));
+    t.innerHTML = devs.map(x => `<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" value="${x.id}" ${keep.has(String(x.id)) ? 'checked' : ''}> ${escapeHtml(x.name)}</label>`).join('')
+      || '<span style="color:var(--muted)">أضف جهازين على الأقل</span>';
+  }
+  dhLoadNames();
+}
+async function dhLoadNames() {
+  const dl = document.getElementById('dhfNames');
+  if (!dl || dl.dataset.loaded) return;
+  const d = await api('/api/employees').catch(() => null);
+  if (!d) return;
+  dl.innerHTML = d.rows.filter(e => e.active && e.device_uid).map(e => `<option value="${escapeHtml(e.name)}">${escapeHtml(e.device_uid)}</option>`).join('');
+  dl.dataset.loaded = '1';
+}
+
+function dhResults(results, okText) {
+  const box = document.getElementById('dhResult');
+  box.innerHTML = results.map(r => r.ok
+    ? `<div style="color:#1e8e5a"><b>${escapeHtml(r.device)}:</b> ${okText(r)}</div>`
+    : `<div style="color:#c0392b"><b>${escapeHtml(r.device)}:</b> ${escapeHtml(r.error)}</div>`).join('');
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+const DH_COUNT = v => (v === null || v === undefined) ? '—' : v;
+
+async function dhManage(action) {
+  const ids = dhChecked('dh-dev', 'id');
+  if (!ids.length) { toast('حدّد جهازاً واحداً على الأقل', true); return; }
+  const body = { ids, action };
+  if (action === 'reboot' && !confirm(`إعادة تشغيل ${ids.length} جهاز؟ يتوقف الجهاز نحو دقيقة.`)) return;
+  if (action === 'open_door' && !confirm('فتح الباب الآن من الأجهزة المحددة؟')) return;
+  if (action === 'clear_records') {
+    const w = prompt(`مسح كل سجلات الحضور المخزنة في ${ids.length} جهاز. تُسحب سجلات كل جهاز أولاً، ولا يُمسح جهاز تعذّر سحب سجلاته.\nاكتب «مسح» للتأكيد:`);
+    if (w !== 'مسح') return;
+    body.confirm = w;
+  }
+  document.getElementById('dhResult').textContent = 'جارٍ الاتصال بالأجهزة…';
+  const d = await api('/api/dahua/manage', { method: 'POST', body: JSON.stringify(body) }).catch(() => null);
+  if (!d) { document.getElementById('dhResult').textContent = ''; return; }
+  if (d.results) {
+    dhResults(d.results, r => ({
+      info: () => `<span dir="ltr">${escapeHtml(r.model || '')} — ${escapeHtml(r.serial || '')}</span>، الإصدار <span dir="ltr">${escapeHtml(r.version || '—')}</span>،
+        وقت الجهاز <span dir="ltr">${escapeHtml(r.device_time || '—')}</span> (الخادم <span dir="ltr">${escapeHtml(r.server_time)}</span>)<br>
+        المستخدمون ${DH_COUNT(r.users)}، الوجوه ${DH_COUNT(r.faces)}، البطاقات ${DH_COUNT(r.cards)}، بصمات الإصبع ${DH_COUNT(r.fingerprints)}، السجلات ${DH_COUNT(r.records)}`,
+      time_sync: () => `ضُبط وقت الجهاز على <span dir="ltr">${escapeHtml(r.device_time)}</span>`,
+      reboot: () => 'يُعاد تشغيله الآن',
+      open_door: () => 'فُتح الباب',
+      clear_records: () => 'سُحبت السجلات ثم مُسحت من الجهاز',
+    }[action] || (() => 'تم'))());
+  } else toast(action === 'live_on' ? 'شُغّلت المراقبة الحية' : 'أُوقفت المراقبة الحية');
+  dhLoad();
+}
+
+async function dhPushEmployees() {
+  const ids = dhChecked('dh-dev', 'id');
+  if (!ids.length) { toast('حدّد جهازاً واحداً على الأقل', true); return; }
+  if (!confirm(`رفع كل الموظفين النشطين الذين لديهم «رقم بصمة» إلى ${ids.length} جهاز؟ يُضاف الجديد ويُحدَّث الاسم المختلف، ولا يُحذف شيء.`)) return;
+  document.getElementById('dhResult').textContent = 'جارٍ الرفع…';
+  const d = await api('/api/dahua/push-employees', { method: 'POST', body: JSON.stringify({ ids }) }).catch(() => null);
+  if (!d) { document.getElementById('dhResult').textContent = ''; return; }
+  dhResults(d.results, r => `${d.employees} موظف: أُضيف ${r.added}، حُدِّث ${r.updated}${r.unchanged !== undefined ? `، دون تغيير ${r.unchanged}` : ''}${r.failed ? `، <span style="color:#c0392b">تعذّر ${r.failed}</span>` : ''}`);
+  dhUsersLoad();
+}
+
+async function dhUsersLoad() {
+  const id = document.getElementById('dhuDevice').value;
+  const tb = document.getElementById('dhUsers'), note = document.getElementById('dhuNote');
+  if (!id) return;
+  note.textContent = 'جارٍ القراءة من الجهاز…';
+  const res = await fetch(`/api/dahua/devices/${id}/users`);
+  const d = await res.json().catch(() => ({ ok: false, error: 'رد غير متوقع' }));
+  if (!d.ok) { note.innerHTML = `<span style="color:#c0392b">${escapeHtml(d.error)}</span>`; tb.innerHTML = ''; dhCount(); return; }
+  const yes = v => v === null || v === undefined ? '—' : (v ? '<span style="color:#1e8e5a">✓</span>' : '');
+  tb.innerHTML = d.rows.map(u => `<tr>
+    <td><input type="checkbox" class="dh-user" data-uid="${escapeHtml(u.uid)}" onchange="dhCount()"></td>
+    <td dir="ltr">${escapeHtml(u.uid)}</td><td>${escapeHtml(u.name)}</td>
+    <td>${u.employee ? escapeHtml(u.employee) : '<span style="color:#c0392b">غير مطابق</span>'}</td>
+    <td>${yes(u.has_face)}</td><td dir="ltr">${escapeHtml(u.card || '')}</td><td>${u.fingerprints === null ? '—' : (u.fingerprints || '')}</td></tr>`).join('')
+    || '<tr><td colspan="7" style="color:var(--muted)">لا يوجد مستخدمون في الجهاز</td></tr>';
+  document.getElementById('dhuCount').textContent = d.rows.length;
+  note.textContent = d.mode === 'legacy' ? 'إصدار أقدم من برنامج الجهاز: تظهر الأسماء والبطاقات فقط.' : '';
+  const miss = document.getElementById('dhuMissing');
+  miss.innerHTML = d.missing.length
+    ? `<span style="color:#b45309">${d.missing.length} موظف لديه «رقم بصمة» وغير مسجّل في هذا الجهاز:</span> ${d.missing.slice(0, 25).map(m => escapeHtml(m.name)).join('، ')}${d.missing.length > 25 ? '…' : ''}
+       — حدّد الجهاز في جدول الأجهزة واضغط «رفع الموظفين».`
+    : '';
+  dhCount();
+  if (typeof initTableFilters === 'function') initTableFilters();
+  if (typeof initTableSorting === 'function') initTableSorting(document.getElementById('devsub-dev-dahua'));
+}
+
+async function dhUsersDelete(all) {
+  const id = document.getElementById('dhuDevice').value;
+  if (!id) return;
+  const body = {};
+  if (all) {
+    const w = prompt('حذف كل المستخدمين من الجهاز مع وجوههم وبطاقاتهم وبصماتهم (السجلات السابقة تبقى في النظام).\nاكتب «حذف الكل» للتأكيد:');
+    if (w !== 'حذف الكل') return;
+    body.all = true; body.confirm = w;
+  } else {
+    body.uids = dhChecked('dh-user', 'uid');
+    if (!body.uids.length) { toast('حدّد مستخدماً واحداً على الأقل', true); return; }
+    if (!confirm(`حذف ${body.uids.length} مستخدم من الجهاز مع وجوههم وبصماتهم؟`)) return;
+  }
+  const d = await api(`/api/dahua/devices/${id}/users/delete`, { method: 'POST', body: JSON.stringify(body) }).catch(() => null);
+  if (d) toast(`حُذف ${d.deleted} مستخدم من الجهاز`);
+  dhUsersLoad();
+}
+
+async function dhCopyRun() {
+  const source_id = document.getElementById('dhcSource').value;
+  const target_ids = [...document.querySelectorAll('#dhcTargets input:checked')].map(c => c.value).filter(v => v !== source_id);
+  const what = [...document.querySelectorAll('.dhc-what:checked')].map(c => c.value);
+  if (!source_id || !target_ids.length) { toast('حدّد الجهاز المصدر وجهازاً هدفاً واحداً على الأقل', true); return; }
+  if (!what.length) { toast('اختر ما يُنسخ', true); return; }
+  const uids = document.getElementById('dhuDevice').value === source_id ? dhChecked('dh-user', 'uid') : [];
+  const box = document.getElementById('dhcResult');
+  box.textContent = 'جارٍ النسخ… (قد يستغرق دقائق مع عدد كبير من الوجوه)';
+  const d = await api('/api/dahua/copy', { method: 'POST', body: JSON.stringify({ source_id, target_ids, what, uids }) }).catch(() => null);
+  if (!d) { box.textContent = ''; return; }
+  box.innerHTML = `<div>${d.users} مستخدم من الجهاز المصدر:</div>` + Object.entries(d.per_target).map(([name, r]) =>
+    `<div style="color:${r.errors.length ? '#b45309' : '#1e8e5a'}"><b>${escapeHtml(name)}:</b> وجوه ${r.faces}، بطاقات ${r.cards}، بصمات إصبع ${r.fingerprints}، مستخدمون جدد ${r.users}${r.errors.length ? ` — ${escapeHtml(r.errors.join('؛ '))}` : ''}</div>`).join('');
+}
+
+function dhFacePreview() {
+  const f = document.getElementById('dhfPhoto').files[0], img = document.getElementById('dhfPreview');
+  if (!f) { img.style.display = 'none'; return; }
+  img.src = URL.createObjectURL(f); img.style.display = '';
+}
+async function dhFaceUpload() {
+  const name = document.getElementById('dhfName').value.trim();
+  const f = document.getElementById('dhfPhoto').files[0];
+  const ids = dhChecked('dh-dev', 'id');
+  if (!name || !f) { toast('اختر الموظف والصورة', true); return; }
+  if (!ids.length) { toast('حدّد جهازاً واحداً على الأقل في جدول الأجهزة', true); return; }
+  const fd = new FormData(); fd.append('name', name); fd.append('ids', ids.join(',')); fd.append('photo', f);
+  const box = document.getElementById('dhfResult');
+  box.textContent = 'جارٍ الرفع…';
+  const res = await fetch('/api/dahua/face-photo', { method: 'POST', body: fd });
+  const d = await res.json().catch(() => ({ ok: false, error: 'رد غير متوقع' }));
+  if (!d.ok) { box.innerHTML = `<span style="color:#c0392b">${escapeHtml(d.error)}</span>`; return; }
+  box.innerHTML = d.results.map(r => `<div style="color:${r.ok ? '#1e8e5a' : '#c0392b'}"><b>${escapeHtml(r.device)}:</b> ${r.ok ? 'سُجّل الوجه' : escapeHtml(r.error)}</div>`).join('');
+}
+
+let dhLiveSince = 0, dhLiveTimer = null;
+const dhLiveRows = [];
+async function dhLivePoll() {
+  clearTimeout(dhLiveTimer);
+  const panel = document.getElementById('devsub-dev-dahua');
+  if (!panel || !panel.classList.contains('active') || document.hidden) { dhLiveTimer = setTimeout(dhLivePoll, 5000); return; }
+  const d = await fetch('/api/dahua/live?since=' + dhLiveSince).then(r => r.ok ? r.json() : null).catch(() => null);
+  if (d && d.events.length) {
+    dhLiveSince = d.events[d.events.length - 1].id;
+    dhLiveRows.unshift(...d.events.reverse());
+    dhLiveRows.length = Math.min(dhLiveRows.length, 200);
+    document.getElementById('dhLive').innerHTML = dhLiveRows.map(e => `<tr>
+      <td dir="ltr">${escapeHtml(e.time)}</td><td>${escapeHtml(e.device)}</td><td dir="ltr">${escapeHtml(e.uid)}</td>
+      <td>${e.name ? escapeHtml(e.name) : '<span style="color:#c0392b">غير مطابق</span>'}</td>
+      <td>${e.ok ? '<span style="color:#1e8e5a">مقبولة</span>' : '<span style="color:#c0392b">مرفوضة</span>'}</td></tr>`).join('');
+    document.getElementById('dhlCount').textContent = dhLiveRows.length;
+  }
+  dhLiveTimer = setTimeout(dhLivePoll, 3000);
 }
