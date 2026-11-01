@@ -8,7 +8,7 @@
 نفس منطق التجميع المستخدم بسحب الأجهزة/استيراد att.mdb بالضبط: أول/آخر
 بصمة باليوم لكل (موظف، تاريخ).
 
-بالإضافة: يقرأ أيضاً جدول USERINFO (+ DEPARTMENTS لو موجود بنفس الملف)
+بالإضافة: يقرأ أيضاً جدول USERINFO (+ DEPARTMENTS إن وُجد في الملف نفسه)
 لإرجاع قائمة موظفين (device_uid/name/dept) جاهزة لإنشاء/تحديث الموظفين
 تلقائياً وقت الاستيراد، بدل اشتراط إضافتهم يدوياً بتبويب الموظفين أولاً.
 """
@@ -33,7 +33,7 @@ def _table_columns(conn, name):
 
 
 def _get_department_map(conn):
-    """يقرأ جدول DEPARTMENTS (لو موجود) ويُرجع dict {dept_id: dept_name} -
+    """يقرأ جدول DEPARTMENTS (إن وُجد) ويُرجع dict {dept_id: dept_name} -
     أسماء الأعمدة الفعلية تختلف بين برامج التصدير، فنجرّب المرشَّحين
     الأكثر شيوعاً بدل افتراض اسم واحد ثابت."""
     if not _table_exists(conn, 'DEPARTMENTS'):
@@ -53,7 +53,7 @@ def _get_department_map(conn):
 def read_employees(conn):
     """يقرأ USERINFO (+ DEPARTMENTS) لإرجاع قائمة موظفين جاهزة
     [{'device_uid', 'name', 'dept'}, ...] مباشرة من ملف SQLite - قائمة
-    فاضية لو الجدول غير موجود أو ناقص الأعمدة الأساسية (USERID/NAME)."""
+    فارغة إن كان الجدول غير موجود أو ناقص الأعمدة الأساسية (USERID/NAME)."""
     if not _table_exists(conn, 'USERINFO'):
         return []
     cols = _table_columns(conn, 'USERINFO')
@@ -86,7 +86,7 @@ def read_employees(conn):
 def read_employees_only(path):
     """يفتح ملف SQLite ويقرأ منه USERINFO/DEPARTMENTS فقط (بدون اشتراط
     وجود CHECKINOUT) - تستخدمها ميزة استيراد الموظفين عندما يتضح أن الملف
-    المرفوع/المنزَّل هو فعلياً قاعدة بيانات جهاز بصمة (SQLite) بدل ملف
+    المرفوع/المحمَّل هو فعلياً قاعدة بيانات جهاز بصمة (SQLite) بدل ملف
     Excel/CSV، فبدل رفض الاستيراد نستخرج الموظفين مباشرة من نفس الملف."""
     if not path or not os.path.exists(path):
         return {'ok': False, 'error': f'الملف غير موجود بالمسار المحدَّد: {path}'}
@@ -138,14 +138,14 @@ def read_source(path):
 
 def aggregate_punches(raw_rows, uid_to_employee, date_from=None, date_to=None):
     """يجمّع سجلات CHECKINOUT الخام (من read_source) لكل (موظف، تاريخ) -
-    أول/آخر بصمة باليوم، بعد فلترة الفترة الزمنية (لو محدَّدة) والمطابقة
+    أول/آخر بصمة باليوم، بعد فلترة الفترة الزمنية (إن حُدِّدت) والمطابقة
     بموظفي النظام (uid_to_employee: device_uid -> name). يُرجع dict:
     {ok, rows, unmatched_uids, skipped_bad_time} أو {ok: False, error}.
 
     ===== محسَّنة للأداء: أجهزة البصمة تراكم غالباً مئات الآلاف/ملايين
     السجلات على مدى سنوات، وكان الإصدار السابق يمرّ عليها سجل-سجل
     بحلقة بايثون عادية، ويستدعي pd.to_datetime() لكل سجل على حدة (حمل
-    استدعاء دالة ضخم يتكرر ملايين المرات) - وهذا يحصل حتى لو المستخدم
+    استدعاء دالة ضخم يتكرر ملايين المرات) - وهذا يحدث حتى لو كان المستخدم قد
     حدَّد فترة زمنية ضيقة، لأن فلترة التاريخ كانت تتم بعد التفسير لكل
     سجل بدل قبله. الحل: نبني DataFrame واحد ونستخدم عمليات pandas
     المجمَّعة (vectorized) بدل الحلقة - فرق قد يصل لعشرات/مئات

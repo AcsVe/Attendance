@@ -51,7 +51,7 @@ function applyAllTableFilters() {
 
 /* ===== فرز عام لكل الجداول - يُضاف تلقائياً لأي <table class="dt-filterable">
    (نفس آلية الفلترة العامة أعلاه بالضبط): الضغط على عنوان أي عمود يفرز
-   صفوف الجدول تصاعدياً/تنازلياً حسب محتوى ذلك العمود (رقمياً لو كل القيم
+   صفوف الجدول تصاعدياً/تنازلياً حسب محتوى ذلك العمود (رقمياً إذا كانت كل القيم
    أرقام، وإلا أبجدياً عربياً) - عمود صندوق الاختيار (no-filter) يُستثنى
    تلقائياً لأنه غير قابل للفرز أصلاً ===== */
 function initTableSorting(root) {
@@ -163,7 +163,7 @@ let reportState = { type: 'all', page: 1, sort: '', dir: 'asc' };
    لأي مستخدم مسجَّل دخول عدا "المستخدمون" (admin فقط)، وأزرار/حقول
    محدَّدة تُعطَّل حسب 4 صلاحيات دقيقة (can_manage_employees/
    can_push_devices/can_edit_org_settings) - نفس فلسفة تعطيل الأزرار
-   هناك، فرق إنه هنا مُطبَّق أيضاً بالخادم (403) لأن هذا تطبيق ويب. */
+   هناك، والفرق أنه هنا مُطبَّق أيضاً بالخادم (403) لأن هذا تطبيق ويب. */
 const CURRENT_ROLE = document.body.dataset.role || 'viewer';
 const PERMS = {
   can_manage_employees: document.body.dataset.canManageEmployees === '1',
@@ -275,11 +275,11 @@ function showTab(tab, opts) {
   }
   if (!opts.keepScroll) setTimeout(() => _restoreScroll(tab), 0);
   // ===== نسجّل التبويب الحالي بعنوان الصفحة (hash) وبتاريخ التصفّح
-  // (history) بدل تركه بذاكرة JS فقط - هيك زر "رجوع" بالتلفون يتنقّل
-  // بين التبويبات داخل نفس التطبيق (بدل ما يطلع فوراً لصفحة تسجيل
+  // (history) بدل تركه في ذاكرة JS فقط - وبذلك يتنقّل زر "رجوع" في الهاتف
+  // بين التبويبات داخل نفس التطبيق (بدلاً من الخروج فوراً إلى صفحة تسجيل
   // الدخول بذاكرة المتصفح ويبدو وكأن المستخدم خرج من حسابه)، وتحديث
-  // الصفحة (refresh) يرجّع نفس التبويب المفتوح (بدل الرجوع دائماً
-  // للوحة التحكم) لأن العنوان بعد التحديث بيضل فيه اسم التبويب =====
+  // الصفحة (refresh) يُعيد التبويب نفسه المفتوح (بدل الرجوع دائماً
+  // للوحة التحكم) لأن العنوان يبقى بعد التحديث حاملاً اسم التبويب =====
   try { sessionStorage.setItem('att_last_tab', tab); } catch (e) {}
   if (!opts.skipHistory) {
     const newHash = '#' + tab;
@@ -331,8 +331,8 @@ function goToReport(rt) {
 
 /* ===== إشعار "آخر سحب/استيراد بصمات" عند فتح التطبيق - يمنع تكرار نفس
    عملية السحب/الاستيراد الطويلة (خصوصاً ملفات SQLite ضخمة عبر رابط سحابي
-   قد تأخذ دقائق) بدون داعٍ لو أصلاً صارت مؤخراً. يظهر مرة وحدة بالجلسة
-   (sessionStorage) حتى لا يتكرر إزعاجه كل ما تبدّل المستخدم تبويب ===== */
+   قد تأخذ دقائق) دون داعٍ إذا كانت قد جرت مؤخراً. يظهر مرة واحدة في الجلسة
+   (sessionStorage) حتى لا يتكرر كلما غيّر المستخدم التبويب ===== */
 async function loadLastImportNotice() {
   const box = document.getElementById('lastImportNotice');
   if (!box) return;
@@ -426,7 +426,7 @@ function refreshEmployeeOptionsForDept(deptId, empId) {
 }
 
 // ===== يحدّد كل الأسماء المعروضة حالياً بقائمة موظف متعددة الاختيار
-// (بعد تصفيتها حسب القسم المجاور) دفعة وحدة - يلبّي طلب "شخصين أو أكثر
+// (بعد تصفيتها حسب القسم المجاور) دفعة واحدة - يلبّي طلب "شخصين أو أكثر
 // من نفس القسم" بضغطة واحدة بدل تحديدهم واحداً واحداً بـCtrl+ضغط =====
 function selectAllFilteredEmployees(deptId, empId) {
   const empEl = document.getElementById(empId);
@@ -455,7 +455,7 @@ async function loadMetaInto() {
   LATE_LABELS = data.late_labels || [];
   ABSENCE_REASON_OPTIONS = data.absence_reason_options || [];
   deptSelects.forEach(id => fillSelect(id, data.departments, 'كل الأقسام'));
-  // ===== كل حقل موظف يُملأ بموظفي القسم المختار حالياً بجانبه فقط (فاضي =
+  // ===== كل حقل موظف يُملأ بموظفي القسم المختار حالياً بجانبه فقط (فارغ =
   // كل الموظفين) بدل قائمة موظفي القاعدة الكاملة دائماً =====
   DEPT_EMPLOYEE_PAIRS.forEach(([deptId, empId]) => refreshEmployeeOptionsForDept(deptId, empId));
   _wireDeptEmployeeFilters();
@@ -635,7 +635,7 @@ function repParams(page) {
   p.set('page_size', 50);
   if (reportState.sort) { p.set('sort', reportState.sort); p.set('dir', reportState.dir); }
   const dept = document.getElementById('repDept').value;
-  // ===== repEmployee صار قائمة متعددة الاختيار (multi-select) - نجمع كل
+  // ===== repEmployee أصبح قائمة متعددة الاختيار (multi-select) - نجمع كل
   // الأسماء المحدَّدة معاً كقائمة employees مفصولة بفاصلة، بدل موظف واحد
   // فقط - بدون أي تحديد = كل الموظفين (نفس السلوك السابق) =====
   const empSelected = Array.from(document.getElementById('repEmployee').selectedOptions).map(o => o.value).filter(Boolean);
@@ -760,7 +760,7 @@ async function saveEventModal() {
       toast('تم حفظ سبب الغياب');
     }
     closeEventModal();
-    loadMetaInto(); // لتحديث قوائم الأسباب السابقة بإضافة السبب الجديد لو كان يدوياً
+    loadMetaInto(); // لتحديث قوائم الأسباب السابقة بإضافة السبب الجديد إذا كان يدوياً
     if (currentTab === 'reports') loadReports(reportState.page);
   } catch (e) {
     resultEl.innerHTML = `<div class="alert alert-error">${escapeHtml(e.message || 'حدث خطأ غير متوقع')}</div>`;
@@ -1658,7 +1658,7 @@ function _showEmployeeMapping(data) {
   if (d.ac_no_col) document.getElementById('empMapAcNo').value = d.ac_no_col;
   const box = document.getElementById('empMappingBox');
   box.style.display = 'block';
-  // ===== المربع يظهر أسفل حقلي الملف/الرابط، وقد لا يلاحظه المستخدم لو
+  // ===== المربع يظهر أسفل حقلي الملف/الرابط، وقد لا يلاحظه المستخدم إذا
   // كان خارج الجزء الظاهر من الشاشة فيظن أن الاستيراد "فشل" بلا أي إجراء
   // ممكن - نمرّر الشاشة إليه تلقائياً ونبرزه بإطار لوقت قصير =====
   box.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1701,7 +1701,7 @@ function importEmployeesFromUrl() {
 
 // ===== استيراد من مسار ملف على نفس جهاز الخادم مباشرة (بدون رفع عبر
 // المتصفح) - نفس فكرة حقل local_path بميزتي استيراد att.mdb/SQLite،
-// مفيد خصوصاً لما النظام يعمل مباشرة على جهاز المستخدم (Termux/ويندوز) =====
+// مفيد خصوصاً عندما يعمل النظام مباشرة على جهاز المستخدم (Termux/ويندوز) =====
 function importEmployeesFromLocalPath() {
   const path = document.getElementById('empLocalPath').value.trim();
   if (!path) { toast('يرجى إدخال مسار الملف على جهاز الخادم', true); return; }
@@ -2757,10 +2757,10 @@ document.addEventListener('DOMContentLoaded', () => {
   loadStats();
   loadLastImportNotice();
   // نجلب الإعدادات فوراً (وليس فقط عند فتح تبويب "الإعدادات") حتى يظهر
-  // زر "نشر ومزامنة" في تبويب "رفع البيانات" مباشرة لو هذه نسخة فرع مُعدَّة
+  // زر "نشر ومزامنة" في تبويب "رفع البيانات" مباشرة إذا كانت هذه نسخة فرع مُعدَّة
   loadSettings();
 
-  // ===== نستعيد التبويب المفتوح من عنوان الصفحة (#tab) لو موجود - يحصل
+  // ===== نستعيد التبويب المفتوح من عنوان الصفحة (#tab) إن وُجد - يحدث
   // بعد إعادة تحميل الصفحة (F5) أو رجوع من فتح رابط مباشر بهذا التبويب.
   // replaceState (وليس push) حتى لا نضيف خطوة زائدة بتاريخ التصفّح =====
   applyRolePermissions();
@@ -2782,9 +2782,9 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ===== نفس معالجة bfcache بصفحة تسجيل الدخول، لكن بالاتجاه المعاكس:
-// لو صفحة لوحة التحكم نفسها ظهرت من ذاكرة المتصفح (bfcache) - مثلاً
+// إذا ظهرت صفحة لوحة التحكم نفسها من ذاكرة المتصفح (bfcache) - مثلاً
 // المستخدم سجَّل خروج في تبويب آخر ثم رجع بزر "رجوع" - نعيد تحميلها من
-// السيرفر لضمان تحويلها لصفحة الدخول فوراً لو الجلسة لم تعد صالحة،
+// الخادم لضمان تحويلها لصفحة الدخول فوراً إذا لم تعد الجلسة صالحة،
 // بدل عرض لوحة تحكم قديمة مخزَّنة كأن المستخدم ما زال داخلاً =====
 window.addEventListener('pageshow', (event) => {
   if (event.persisted) {

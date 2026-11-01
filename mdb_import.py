@@ -6,7 +6,7 @@ CHECKTYPE) مربوط بجدول USERINFO (اسم الموظف المسجَّل 
 
 يعتمد على pyodbc + "Microsoft Access Database Engine" (سائق ODBC) المثبَّت
 على جهاز ويندوز - ميزة متاحة فقط على ويندوز (تماماً كما بالنسخة المكتبية)،
-فنتحقق من توفرها بأمان ونُرجع رسالة عربية واضحة بدل انهيار البرنامج لو
+فنتحقق من توفرها بأمان ونُرجع رسالة عربية واضحة بدلاً من انهيار البرنامج إن كانت
 غير متاحة.
 """
 try:
@@ -31,8 +31,8 @@ def import_from_mdb(path, date_from=None, date_to=None, uid_to_employee=None):
     السحب - أساسي لأداء مقبول بملفات فيها ملايين السجلات)، ويجمّعها لكل
     (موظف، تاريخ) بنفس منطق pull_attendance تماماً.
 
-    المطابقة تفضّل اسم الموظف المسجَّل على الجهاز (USERINFO.NAME) لو
-    موجود ومطابق لموظف نشط بالنظام، وإلا تعتمد على device_uid
+    المطابقة تفضّل اسم الموظف المسجَّل على الجهاز (USERINFO.NAME) إن كان
+    موجوداً ومطابقاً لموظف نشط بالنظام، وإلا تعتمد على device_uid
     (employees.device_uid == CHECKINOUT.USERID) كما بباقي الميزات.
 
     يُرجع dict: {ok, rows, unmatched_uids, error}
@@ -85,7 +85,7 @@ def import_from_mdb(path, date_from=None, date_to=None, uid_to_employee=None):
         return {'ok': False, 'error': f'تعذّر قراءة ملف att.mdb: {e}'}
 
     # ===== نفس التجميع المستخدم بسحب الأجهزة مباشرة: أول/آخر بصمة باليوم
-    # لكل موظف؛ CHECKTYPE (I=دخول, O=خروج) يُستخدم فقط لو موجود ومفيد -
+    # لكل موظف؛ CHECKTYPE (I=دخول, O=خروج) يُستخدم فقط إن وُجد وكان مفيداً -
     # التجميع بالوقت وحده كافٍ ومطابق لمنطق pull_attendance =====
     buckets = {}
     unmatched_uids = set()

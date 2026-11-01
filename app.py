@@ -131,7 +131,7 @@ _MAX_LOGO_BYTES = 15 * 1024 * 1024  # يُقبل حتى 15MB ثم يُصغَّر
 
 
 def get_logo_path(settings=None):
-    """يُعيد المسار المطلق لملف الشعار الحالي لو محفوظاً وموجوداً فعلياً
+    """يُعيد المسار المطلق لملف الشعار الحالي إن كان محفوظاً وموجوداً فعلياً
     على القرص، وإلا None - تستخدمه كل نقاط تضمين الشعار (PDF/بريد)."""
     settings = settings or db.get_all_settings()
     filename = settings.get('org_logo_filename')
@@ -184,9 +184,9 @@ RT_LABELS = {
 # (admin/dept_manager/viewer) + 4 صلاحيات دقيقة مستقلة عن الدور نفسه
 # (can_manage_employees/can_manage_departments/can_push_devices/
 # can_edit_org_settings)، بالإضافة لتقييد اختياري بالأقسام لكل مستخدم
-# (user_departments - قائمة فاضية = بدون قيد). في home.py كل التبويبات
+# (user_departments - قائمة فارغة = بدون قيد). في home.py كل التبويبات
 # ظاهرة لأي مستخدم مسجَّل دخول عدا "المستخدمون" (admin فقط)، والصلاحيات
-# الأربع تُعطِّل/تُفعِّل أزراراً محدَّدة بس (موظفين/أجهزة/إعدادات المؤسسة) -
+# الأربع تُعطِّل/تُفعِّل أزراراً محدَّدة فقط (موظفين/أجهزة/إعدادات المؤسسة) -
 # نفس الفلسفة هنا، لكن التطبيق فعلي بالخادم (403) لأن هذا تطبيق ويب
 # معرَّض على الشبكة، بعكس الأصل المكتبي المحلي الذي يكتفي بتعطيل الزر.
 #
@@ -263,7 +263,7 @@ VIEWER_ALLOWED_WRITES = {'api_overtime', 'api_overtime_export_csv', 'api_change_
 ADMIN_ONLY_ENDPOINTS = {'api_users', 'api_user_edit', 'api_users_review', 'api_users_bulk', 'api_reset_requests', 'api_reset_request_action', 'api_maintenance_counts', 'api_maintenance_purge'}
 
 # مسارات القراءة الخاضعة لتقييد "الأقسام المسموحة" - تُصفَّى بياناتها
-# تلقائياً حسب user_departments لو المستخدم مقيَّد (راجع scoped_dept_filter)
+# تلقائياً حسب user_departments إن كان المستخدم مقيَّداً (راجع scoped_dept_filter)
 DEPT_SCOPED_ENDPOINTS = {
     'api_meta', 'api_stats', 'api_reports', 'api_reports_export_csv', 'api_reports_export_pdf',
     'api_overtime', 'api_overtime_export_csv', 'api_compare', 'api_blueprint',
@@ -292,14 +292,14 @@ def user_can(permission):
 
 
 def allowed_departments():
-    """قائمة الأقسام المسموحة للمستخدم الحالي - فاضية تعني بدون أي قيد
-    (يشوف كل الأقسام)، تماماً كنفس منطق النسخة المكتبية."""
+    """قائمة الأقسام المسموحة للمستخدم الحالي - الفارغة تعني بدون أي قيد
+    (يرى كل الأقسام)، وفق منطق النسخة المكتبية نفسه."""
     return session.get('allowed_depts') or []
 
 
 def scoped_dept_filter(rows, dept_key='dept'):
     """يُطبَّق على أي قائمة قواميس فيها مفتاح قسم - يُصفّي حسب الأقسام
-    المسموحة للمستخدم الحالي لو مقيَّداً، وإلا يُعيدها كما هي (بدون قيد)."""
+    المسموحة للمستخدم الحالي إن كان مقيَّداً، وإلا يُعيدها كما هي (بدون قيد)."""
     allowed = allowed_departments()
     if not allowed:
         return rows
@@ -350,7 +350,7 @@ def enforce_role_permissions():
     required_perm = PERMISSION_REQUIRED_ENDPOINTS.get(endpoint)
     # GET على مسارات القراءة (قائمة الأجهزة/الأقسام...) مسموح للجميع -
     # القيد على التعديل فقط (POST/PUT/DELETE)، تماماً كأزرار home.py
-    # المعطَّلة بس (العرض نفسه ما كان مقيَّداً هناك)
+    # المعطَّلة فقط (العرض نفسه لم يكن مقيَّداً هناك)
     if required_perm and request.method != 'GET' and not user_can(required_perm):
         return jsonify({'ok': False, 'error': 'ليس لديك صلاحية لهذا الإجراء'}), 403
 
@@ -473,9 +473,9 @@ def _translate_messages(resp):
 
 @app.after_request
 def _no_cache_login(resp):
-    """يمنع متصفحات الموبايل من تخزين صفحة تسجيل الدخول بذاكرة bfcache -
-    بدونه، زر "رجوع" بالتلفون بعد الدخول للنظام قد يُرجع نسخة قديمة من
-    شاشة الدخول مباشرة من ذاكرة المتصفح (بدون أي طلب فعلي للسيرفر)
+    """يمنع متصفحات الهاتف من تخزين صفحة تسجيل الدخول بذاكرة bfcache -
+    بدونه، زر "رجوع" في الهاتف بعد الدخول للنظام قد يُرجع نسخة قديمة من
+    شاشة الدخول مباشرة من ذاكرة المتصفح (بدون أي طلب فعلي للخادم)
     فتظهر وكأن المستخدم سُجِّل خروجه رغم أن جلسته ما زالت صالحة فعلياً."""
     if request.path in ('/login', '/'):
         resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
@@ -918,7 +918,7 @@ def _apply_common_filters(rows, args):
 
     # ===== قيد الأقسام المسموحة يُطبَّق دائماً أولاً وبغض النظر عن فلتر
     # القسم المختار بالواجهة (حتى "الكل") - تماماً كتعليق النسخة المكتبية:
-    # "هذا يطبَّق دايماً بغض النظر عن اختيار الكل بالفلتر" =====
+    # "هذا يطبَّق دائماً بغض النظر عن اختيار الكل بالفلتر" =====
     rows = scoped_dept_filter(rows)
 
     out = []
@@ -1494,7 +1494,7 @@ def api_meta():
     employees = [dict(r) for r in conn.execute(
         "SELECT name, dept FROM employees WHERE active = 1 ORDER BY name").fetchall()]
     conn.close()
-    # ===== قيد الأقسام المسموحة (لو مقيَّداً) - نفس _refresh_dept_filter_options
+    # ===== قيد الأقسام المسموحة (إن كان مقيَّداً) - نفس _refresh_dept_filter_options
     # بالنسخة المكتبية: قوائم الفلترة نفسها لا تعرض أقساماً/موظفين خارج
     # نطاق المستخدم أصلاً =====
     allowed = allowed_departments()
@@ -1752,8 +1752,8 @@ _IMPORT_DEPT_KEYS = ('dept', 'department', 'قسم', 'إدارة')
 # ===== "code"/"id"/"number"/"badge" أُضيفت بعد ملاحظة ملف حقيقي بعمود
 # "Employee_Code" (رقم البصمة فعلياً) - كلمة "employee" وحدها بـ
 # _IMPORT_NAME_KEYS كانت تلتقطه خطأً كعمود اسم (لاحتوائه على "employee")
-# قبل ما يوصل الدور لعمود "Employee_Name" الحقيقي، فحُذفت من هناك، وأُضيف
-# هنا كل ما يدل فعلياً على رقم/كود تعريف الموظف بجهاز البصمة =====
+# قبل أن يصل الدور إلى عمود "Employee_Name" الحقيقي، فحُذفت من هناك، وأُضيف
+# هنا كلُّ ما يدل فعلياً على رقم/كود تعريف الموظف بجهاز البصمة =====
 _IMPORT_AC_NO_KEYS = ('ac_no', 'ac-no', 'ac no', 'رقم الموظف', 'employee number', 'employee id',
                       'employee_id', 'employee code', 'employee_code', 'badge', 'card no', 'card_no',
                       'رقم البصمة', 'كود الموظف')
@@ -1807,7 +1807,7 @@ def api_employees_import():
     tmp_path = src['path']
     update_existing = request.form.get('update_existing') == '1'
 
-    # ===== لو الملف/الرابط المُدخَل ببطاقة "استيراد الموظفين" هو فعلياً
+    # ===== إذا كان الملف/الرابط المُدخَل ببطاقة "استيراد الموظفين" هو فعلياً
     # قاعدة بيانات SQLite (تصدير جهاز بصمة - نفس الملف المستخدَم ببطاقة
     # "استيراد من جهاز البصمة") - نستخرج الموظفين من USERINFO مباشرة بدل
     # رفض الاستيراد، حتى يعمل استيراد الموظفين بنفس الرابط/الملف بغض النظر
@@ -1961,8 +1961,8 @@ def _upsert_employees_from_source(conn, employees, update_existing):
 
 def _resolve_import_file(forced_ext=None):
     """يدعم ثلاثة مصادر لملف الاستيراد: ملف مرفوع مباشرة (حقل file)، رابط
-    سحابي (حقل cloud_url: Google Drive/OneDrive/Dropbox أو أي رابط تنزيل
-    مباشر آخر) - يُنزَّل الملف من الرابط لمسار مؤقت، أو مسار محلي على نفس
+    سحابي (حقل cloud_url: Google Drive/OneDrive/Dropbox أو أي رابط تحميل
+    مباشر آخر) - يُحمَّل الملف من الرابط لمسار مؤقت، أو مسار محلي على نفس
     جهاز الخادم (حقل local_path) - مفيد جداً لملفات ضخمة (مثل SQLite
     بحجم غيغابايت) عندما يعمل النظام مباشرة على نفس جهاز المستخدم
     (Termux/ويندوز): رفع الملف عبر المتصفح بهذه الحالة عملية زائدة تماماً
@@ -1970,14 +1970,14 @@ def _resolve_import_file(forced_ext=None):
     قد يقطع الاتصال بملف ضخم) بينما الخادم يقدر يقرأه من القرص مباشرة.
 
     forced_ext: امتداد يُفرَض على المسار المؤقت بغض النظر عن اسم الملف
-    الأصلي (تستخدمه ميزات att.mdb/SQLite اللي تعتمد على الامتداد لا
-    المحتوى) - لو None نحاول اكتشاف الامتداد من اسم الملف نفسه (تستخدمه
+    الأصلي (تستخدمه ميزات att.mdb/SQLite التي تعتمد على الامتداد لا
+    المحتوى) - إن كانت None نحاول اكتشاف الامتداد من اسم الملف نفسه (تستخدمه
     ميزات Excel/CSV لتحديد محرك القراءة المناسب).
 
     يُرجع dict: {ok, path, filename, is_temp} - is_temp=True فقط للملف
-    المرفوع/المنزَّل من رابط (يُحذف بعد الاستخدام)، أما مسار محلي فهو ملف
+    المرفوع/المحمَّل من رابط (يُحذف بعد الاستخدام)، أما مسار محلي فهو ملف
     المستخدم الحقيقي على القرص ولا يُحذف أبداً - أو {ok: False, error}
-    لو لا يوجد أي مصدر، أو فشل تنزيل الرابط، أو المسار المحلي غير موجود."""
+    إذا لم يوجد أي مصدر، أو فشل تحميل الرابط، أو المسار المحلي غير موجود."""
     f = request.files.get('file')
     if f:
         filename = f.filename or ''
@@ -2022,7 +2022,7 @@ def _resolve_import_file(forced_ext=None):
         return {'ok': True, 'path': local_path, 'filename': filename, 'is_temp': False}
 
     return {'ok': False, 'error': 'يرجى اختيار ملف أو إدخال رابط الملف (Google Drive / OneDrive / '
-                                   'Dropbox / أو أي رابط تنزيل مباشر)'}
+                                   'Dropbox / أو أي رابط تحميل مباشر)'}
 
 
 def _friendly_read_error(e):
@@ -2045,7 +2045,7 @@ def _read_csv_with_encoding(path, encoding):
     يجرّب الفاصلة (,) أولاً، وإن فشل بخطأ "عدد أعمدة غير متطابق" (Error
     tokenizing data) يُعيد المحاولة بكشف الفاصل تلقائياً (csv.Sniffer عبر
     sep=None) بدل افتراض الفاصلة دائماً، لأن بعض ملفات Excel المصدَّرة
-    بإعدادات عربية/أوروبية تستخدم الفاصلة المنقوطة (;) كفاصل. ولو ما زال
+    بإعدادات عربية/أوروبية تستخدم الفاصلة المنقوطة (;) كفاصل. وإذا ظل
     الخطأ قائماً حتى بعد كشف الفاصل (سطر تالف فعلياً بالملف - حقل ناقص/
     زائد حقيقي، وليس مجرد فاصل خاطئ) نتجاهل ذلك السطر تحديداً بدل رفض
     الملف كاملاً، ونُرجع رقمه ليظهر للمستخدم بعد نجاح الاستيراد."""
@@ -2061,7 +2061,7 @@ def _read_csv_with_encoding(path, encoding):
 
     def _on_bad_line(bad_line):
         skipped.append(bad_line)
-        return None  # يعني: تجاهل هذا السطر ومتابعة الباقي
+        return None  # أي: تجاهل هذا السطر ومتابعة الباقي
 
     df = pd.read_csv(path, encoding=encoding, sep=None, engine='python',
                       on_bad_lines=_on_bad_line)
@@ -2070,11 +2070,11 @@ def _read_csv_with_encoding(path, encoding):
 
 def _read_csv_auto_encoding(path):
     """يقرأ ملف CSV/TXT بأي ترميز - ملفات مصدَّرة من Excel على ويندوز عربي
-    غالباً بترميز Windows-1256 (وليس UTF-8)، وأحياناً UTF-16 (لو حُفظت
+    غالباً بترميز Windows-1256 (وليس UTF-8)، وأحياناً UTF-16 (إذا حُفظت
     كـ"Unicode Text") أو UTF-8 بـBOM - فيفشل pandas.read_csv الافتراضي
     (UTF-8 صارم) برسالة "invalid continuation byte" رغم أن الملف سليم
     تماماً بترميزه الأصلي. نجرّب عدة ترميزات شائعة بالترتيب، ونستعين
-    بمكتبة charset-normalizer لتخمين الترميز الفعلي لو كلها فشلت. بكل
+    بمكتبة charset-normalizer لتخمين الترميز الفعلي إذا فشلت كلها. بكل
     ترميز نجرّب أيضاً كشف الفاصل تلقائياً (انظر _read_csv_with_encoding)
     لأن مشكلة الفاصل قد تظهر مع أي ترميز."""
     encodings = ['utf-8-sig', 'utf-16', 'windows-1256', 'cp720', 'windows-1252']
@@ -2108,7 +2108,7 @@ _SQLITE_MAGIC = b'SQLite format 3\x00'
 
 
 class _BinaryFileDetected(Exception):
-    """يُرفَع لو الملف المطلوب قراءته كـCSV/TXT هو فعلياً ملف ثنائي (قاعدة
+    """يُرفَع إذا كان الملف المطلوب قراءته كـCSV/TXT هو فعلياً ملف ثنائي (قاعدة
     بيانات SQLite، أو أي ملف آخر). ترميز Windows-1256 يقبل أي بايت بدون أي
     خطأ (بعكس UTF-8 الصارم)، فكان ملف SQLite ثنائي (مثل تصدير جهاز بصمة
     بامتداد .sqlite بُدّل اسمه أو استُخدم رابطه بالخطأ ببطاقة استيراد
@@ -2143,12 +2143,12 @@ def _check_not_binary(path):
 
 def _read_table_file(f, filename):
     """يقرأ ملف مرفوع (Excel أو CSV) إلى (DataFrame, أرقام الأسطر
-    المتجاهَلة) - قائمة فاضية دائماً لملفات Excel. نحدّد محرك القراءة
+    المتجاهَلة) - قائمة فارغة دائماً لملفات Excel. نحدّد محرك القراءة
     صراحةً حسب امتداد الملف (xlrd لـ.xls، openpyxl لـ.xlsx) بدل الاعتماد
     على اكتشاف pandas التلقائي لصيغة الملف من محتواه، لأنه أحياناً يفشل
     (ValueError: Excel file format cannot be determined) مع ملفات .xls
     قديمة مصدَّرة من بعض برامج الحضور/الأجهزة رغم أن xlrd نفسه يقدر يقرأها
-    بلا مشاكل لو استُدعي مباشرة. أما CSV/TXT فيُقرأ بمحاولة عدة ترميزات
+    بلا مشاكل إذا استُدعي مباشرة. أما CSV/TXT فيُقرأ بمحاولة عدة ترميزات
     (انظر _read_csv_auto_encoding) بدل افتراض UTF-8 دائماً."""
     name_lower = (filename or '').lower()
     if name_lower.endswith('.xls'):
@@ -2187,7 +2187,7 @@ def api_upload():
             except OSError:
                 pass
 
-    # ===== لو المستخدم ما حدد الأعمدة بعد، نرجّع أسماء الأعمدة الفعلية
+    # ===== إذا لم يحدد المستخدم الأعمدة بعد، نُرجع أسماء الأعمدة الفعلية
     # بالملف حتى تُعرض بقوائم الاختيار بالواجهة (خطوة تعيين الأعمدة) =====
     if not (name_col and date_col and time_in_col and time_out_col):
         return jsonify({'ok': True, 'needs_mapping': True, 'columns': list(map(str, raw_df.columns))})
@@ -2211,7 +2211,7 @@ def api_upload():
         "INSERT INTO punches (name, date, dept, time_in, time_out, batch_id) VALUES (?, ?, ?, ?, ?, ?)",
         [(r.name, r.date, r.dept, r.time_in, r.time_out, batch_id) for r in df.itertuples()]
     )
-    # ===== نُنشئ/نحدّث سجل الموظف تلقائياً لو غير موجود، حتى تظهر قوائم
+    # ===== نُنشئ/نحدّث سجل الموظف تلقائياً إن لم يكن موجوداً، حتى تظهر قوائم
     # الأقسام/الموظفين بالفلاتر فور أول رفع بيانات =====
     for _, row in df.drop_duplicates('name').iterrows():
         try:
@@ -2357,9 +2357,9 @@ def run_full_analysis(conn):
 
     # ===== تطبيق "الغياب الإجباري" - يُجبر أي (موظف، تاريخ) مسجَّل بجدول
     # forced_absences يُحسب "غائب" فعلياً، بما في ذلك تحويل "عطلة أسبوعية"
-    # (لمناوب كان مفروض يحضر) إلى "غائب" حقيقي - إلا لو كان اليوم استثناءً
+    # (لمناوب كان يُفترض أن يحضر) إلى "غائب" حقيقي - إلا إذا كان اليوم استثناءً
     # شخصياً أو عطلة رسمية (هذان يبقيان أعلى أولوية دائماً). يشمل أيضاً
-    # تركيب صف جديد بالكامل لو الموظف بلا أي بصمة إطلاقاً لهذا التاريخ
+    # تركيب صف جديد بالكامل إذا كان الموظف بلا أي بصمة إطلاقاً لهذا التاريخ
     # (بعكس النسخة المكتبية التي تتطلب صفاً موجوداً مسبقاً فقط) =====
     extra_rows = []
     if forced_set:
@@ -2664,7 +2664,7 @@ def api_sync_push():
     """جانب الفرع (النسخة المحلية): يرفع كل التعديلات المحلية غير
     المرفوعة بعد (موظفون/بصمات) للقاعدة الرئيسية المضبوطة بالإعدادات
     (sync_central_url/sync_api_key)، وعند النجاح يعلّمها "تم رفعها" محلياً
-    حتى لا تتكرر بالمرة القادمة."""
+    حتى لا تتكرر في المرة القادمة."""
     settings = db.get_all_settings()
     conn = db.get_db()
     payload = sync_engine.get_unsynced_payload(conn)
@@ -2876,7 +2876,7 @@ def api_date_exceptions_bulk_cancel():
 def api_absence_reasons():
     """
     يُرجع كل صفوف report_cache بحالة "غائب" (مع فلترة اختيارية بقسم/
-    موظف/فترة تاريخ)، مربوطة بسبب الغياب المسجَّل لها لو موجود -
+    موظف/فترة تاريخ)، مربوطة بسبب الغياب المسجَّل لها إن وُجد -
     مصدر تبويب "تصفح الغيابات وتحديد سبب كل يوم".
     """
     conn = db.get_db()
@@ -2981,7 +2981,7 @@ def api_forced_absences_bulk():
     """
     يُسجّل غياباً إجبارياً لعدة موظفين معاً وعلى كل يوم ضمن فترة تاريخ
     محدَّدة دفعة واحدة - مطابق لميزة "الغياب الإجباري" بالنسخة المكتبية،
-    مع تحسين: يُنشئ سجلاً حتى لو الموظف بلا أي بصمة إطلاقاً لهذا التاريخ
+    مع تحسين: يُنشئ سجلاً حتى لو كان الموظف بلا أي بصمة إطلاقاً لهذا التاريخ
     (راجع run_full_analysis بأعلى الملف).
     """
     data = request.get_json(force=True) or {}
@@ -3412,7 +3412,7 @@ def api_reports_export_pdf():
     filters_desc = ' | '.join(parts) if parts else 'كل السجلات (بدون فلترة)'
 
     # ===== سطر يوضّح أي وقت حضور/انصراف طُبِّق فعلياً على هذا التقرير -
-    # وقت القسم الخاص لو محدَّد قسم وله وقت مخصَّص، وإلا الوقت العام =====
+    # وقت القسم الخاص إن حُدِّد قسم له وقت مخصَّص، وإلا الوقت العام =====
     general_att = settings.get('attendance_time', '')
     general_dep = settings.get('departure_time', '')
     if dept and dept != 'الكل' and dept in dept_time_rows and \
@@ -3583,7 +3583,7 @@ def api_export_send_email():
 # ===== إدارة الأجهزة (ZKTeco) =====
 # ============================================================
 def _uid_employee_map(conn):
-    """{device_uid: employee_name} لكل الموظفين النشطين اللي عندهم رقم
+    """{device_uid: employee_name} لكل الموظفين النشطين الذين لديهم رقم
     بصمة مسجَّل - نفس المفتاح المستخدم بكل عمليات المطابقة (سحب/دفع/نسخ)."""
     rows = conn.execute(
         "SELECT device_uid, name FROM employees WHERE active = 1 AND device_uid IS NOT NULL AND device_uid != ''"
@@ -3664,8 +3664,8 @@ def api_device_test(dev_id):
 
 def pull_from_devices(conn, device_ids=None, d_from=None, d_to=None):
     """
-    يسحب البصمات من الأجهزة المحدَّدة (أو كل الأجهزة المفعَّلة لو
-    device_ids فاضية) ويُدرجها بجدول punches - مُستخرَجة بشكل مشترك من
+    يسحب البصمات من الأجهزة المحدَّدة (أو كل الأجهزة المفعَّلة إذا كانت
+    device_ids فارغة) ويُدرجها بجدول punches - مُستخرَجة بشكل مشترك من
     /api/devices/pull حتى تُستخدم أيضاً من مهمة الجدولة التلقائية
     (scheduler.py) بخطوة "اسحب من الأجهزة قبل الإرسال" الاختيارية.
     لا تفتح/تُغلق اتصال قاعدة البيانات (تستخدم conn المُمرَّر) ولا تعمل
@@ -3906,7 +3906,7 @@ def _is_sqlite_file(path):
 def _do_sqlite_device_import(tmp_path, date_from, date_to, create_employees, update_existing_employees):
     """المنطق المشترَك لاستيراد بصمات + موظفين من ملف SQLite - يُستدعى من
     /api/devices/import-sqlite مباشرة، ومن /api/devices/import-mdb أيضاً
-    لو اتضح أن الملف المُدخَل هناك (رغم التسمية) هو SQLite فعلياً وليس
+    إذا اتضح أن الملف المُدخَل هناك (رغم التسمية) هو SQLite فعلياً وليس
     att.mdb. يُرجع dict جاهز للإرجاع كـJSON (يحوي 'ok' دائماً)."""
     employees_added = employees_updated = 0
     source = sqlite_import.read_source(tmp_path)
@@ -3930,9 +3930,9 @@ def _do_sqlite_device_import(tmp_path, date_from, date_to, create_employees, upd
                 [(r['name'], r['date'], emp_dept.get(r['name'], ''), r['time_in'], r['time_out'], batch_id)
                  for r in result['rows']]
             )
-        # ===== نسجّل بسجل التدقيق دائماً (حتى لو صفر سجل استورد فعلياً) -
+        # ===== نسجّل بسجل التدقيق دائماً (حتى لو لم يُستورد أي سجل فعلياً) -
         # خصوصاً حالة "كل شيء غير مطابَق" (رقم بصمة الملف ما يطابق أي موظف)
-        # يلي المستخدم أكثر ما يحتاجها لاحقاً، وكانت سابقاً لا تُسجَّل إطلاقاً
+        # التي يحتاجها المستخدم أكثر من غيرها لاحقاً، وكانت سابقاً لا تُسجَّل إطلاقاً
         # لأن التسجيل كان مربوطاً بوجود صفوف مستورَدة فعلياً =====
         note = (f"{len(result['rows'])} سجل مستورَد من أصل {result['raw_count']} خام، "
                 f"{employees_added} موظف جديد، {employees_updated} تحديث - من ملف SQLite")
@@ -4017,7 +4017,7 @@ def api_devices_import_sqlite():
     المستخدم بـatt.mdb لكن بصيغة SQLite) - يعمل على أي نظام تشغيل بدون أي
     سائق خارجي، بعكس استيراد att.mdb المقيَّد بويندوز.
 
-    بالإضافة: لو الملف يحتوي USERINFO (+ DEPARTMENTS اختياري)، يُنشئ/يحدّث
+    بالإضافة: إذا احتوى الملف على USERINFO (+ DEPARTMENTS اختياري)، يُنشئ/يحدّث
     الموظفين تلقائياً منه قبل مطابقة البصمات - بدل اشتراط إضافتهم يدوياً
     بتبويب الموظفين أولاً (create_employees/update_existing_employees
     قابلان للتعطيل من الواجهة، ومفعَّلان افتراضياً)."""
@@ -4053,8 +4053,8 @@ def api_devices_import_sqlite():
 _VALID_ROLES = ('admin', 'dept_manager', 'viewer')
 
 # ===== قيم افتراضية للصلاحيات الأربع حسب الدور - نفس _apply_role_defaults
-# بالنسخة المكتبية بالضبط: تُطبَّق فقط لو الطلب ما بعث قيماً صريحة لكل
-# صلاحية (يعني تعبئة أولية)، وتبقى قابلة للتخصيص اليدوي بعدها =====
+# بالنسخة المكتبية بالضبط: تُطبَّق فقط إذا لم يرسل الطلب قيماً صريحة لكل
+# صلاحية (أي تعبئة أولية)، وتبقى قابلة للتخصيص اليدوي بعدها =====
 _ROLE_PERMISSION_DEFAULTS = {
     'admin': {'can_manage_employees': True, 'can_manage_departments': True,
               'can_push_devices': True, 'can_edit_org_settings': True},
@@ -4268,7 +4268,7 @@ def service_worker():
 
 @app.route('/app')
 def app_download_page():
-    """صفحة تنزيل التطبيقات (APK للموظف وللإدارة + تثبيت على Windows)"""
+    """صفحة تحميل التطبيقات (APK للموظف وللإدارة + تثبيت على Windows)"""
     apk_dir = os.path.join(app.static_folder, 'apk')
     files = {}
     for key, name in (('employee', 'attendance-employee.apk'), ('admin', 'attendance-admin.apk')):

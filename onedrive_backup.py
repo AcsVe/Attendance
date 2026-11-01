@@ -26,7 +26,7 @@ def _drive_item_url(upn, folder, filename):
 
 
 def upload_file(tenant_id, client_id, client_secret, upn, folder, local_path, remote_filename=None):
-    """يرفع local_path لمجلد folder بـOneDrive تبع upn - يستخدم PUT مباشر
+    """يرفع local_path لمجلد folder في OneDrive الخاص بـ upn - يستخدم PUT مباشراً
     للملفات الصغيرة (<4MB) وجلسة رفع مجزَّأة (upload session) للملفات
     الأكبر (قاعدة بيانات فيها آلاف البصمات قد تتجاوز هذا الحد بسهولة).
     يُرجع dict: {ok, webUrl} أو {ok: False, error}."""

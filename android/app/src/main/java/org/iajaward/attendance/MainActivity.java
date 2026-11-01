@@ -62,7 +62,7 @@ import javax.crypto.spec.SecretKeySpec;
 /**
  * تطبيق نظام الحضور: نافذة ويب لموقع النظام + جسر صغير للهاتف.
  * • نسخة الموظف (employee): موقع أندرويد الأصلي مع كشف الموقع الوهمي (Fake GPS) وتوقيع كل حركة.
- * • نسخة الإدارة (admin): لوحة التحكم مع تنزيل الملفات ورفعها وتحديد الموقع لمواقع العمل.
+ * • نسخة الإدارة (admin): لوحة التحكم مع تحميل الملفات ورفعها وتحديد الموقع لمواقع العمل.
  */
 public class MainActivity extends Activity {
 
@@ -437,7 +437,7 @@ public class MainActivity extends Activity {
         }
         if (Build.VERSION.SDK_INT < 29 && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQ_STORAGE);
-            Toast.makeText(this, "اسمح بالتخزين ثم أعد التنزيل", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "اسمح بالتخزين ثم أعد التحميل", Toast.LENGTH_LONG).show();
             return;
         }
         try {
@@ -451,9 +451,9 @@ public class MainActivity extends Activity {
             req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name);
             DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
             if (dm != null) dm.enqueue(req);
-            Toast.makeText(this, "جارٍ التنزيل: " + name, Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "جارٍ التحميل: " + name, Toast.LENGTH_SHORT).show();
         } catch (Exception e) {
-            Toast.makeText(this, "تعذّر التنزيل", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "تعذّر التحميل", Toast.LENGTH_SHORT).show();
         }
     }
 

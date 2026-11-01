@@ -1,7 +1,7 @@
 """نسخة احتياطية سحابية ثانية في Neon (بجانب Google Drive) — تعمل من الكمبيوتر ومن الهاتف.
 
     python neon_store.py push FILE      # رفع ملف نسخة (يتخطى إن لم تتغير البيانات منذ آخر رفع)
-    python neon_store.py pull DIR       # تنزيل أحدث نسخة إلى مجلد (بنفس اسمها الأصلي)
+    python neon_store.py pull DIR       # تحميل أحدث نسخة إلى مجلد (بنفس اسمها الأصلي)
     python neon_store.py info           # آخر نسخة محفوظة في Neon
     python neon_store.py test           # فحص الاتصال
 

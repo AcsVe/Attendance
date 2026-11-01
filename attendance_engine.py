@@ -11,7 +11,7 @@ import pandas as pd
 
 
 def parse_time_str(s):
-    """يحوّل نص وقت HH:MM إلى datetime.time - يرمي ValueError لو غير صالح."""
+    """يحوّل نص وقت HH:MM إلى datetime.time - يرمي ValueError إن كان غير صالح."""
     if not s:
         return None
     s = str(s).strip()
@@ -24,7 +24,7 @@ def parse_time_str(s):
 
 
 def parse_time_val(v):
-    """يحوّل قيمة وقت (نص أو datetime أو NaN) لكائن time، أو None لو فاضية/غير صالحة."""
+    """يحوّل قيمة وقت (نص أو datetime أو NaN) لكائن time، أو None إن كانت فارغة/غير صالحة."""
     if v is None:
         return None
     if isinstance(v, float) and pd.isna(v):
@@ -130,9 +130,9 @@ def analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
     official_holidays: set of date_str
     shift1_names / shift2_names: قوائم أسماء المناوبين (اختياري)
     late_permissions: {(name, date_str): {'minutes': int, 'custom_attendance_time': str|None}}
-        - custom_attendance_time (لو موجود): يُعاد حساب التأخير بالكامل بمقارنة
+        - custom_attendance_time (إن وُجد): يُعاد حساب التأخير بالكامل بمقارنة
           وقت الحضور الفعلي بهذا الوقت بدل الوقت الافتراضي/وقت القسم/وقت السبت.
-        - minutes (لو مافي custom_attendance_time أو بالإضافة له): تُخصم من
+        - minutes (إن لم يوجد custom_attendance_time أو بالإضافة له): تُخصم من
           دقائق التأخير الخام (لا تقل عن صفر).
         - يُطبَّق بعد الحساب الأولي للتأخير وقبل تحديد الحالة، لذا قد يُعيد
           الحالة من "متأخر" إلى "في الوقت".
@@ -442,7 +442,7 @@ def analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
     df['weekday'] = df['date_parsed'].dt.weekday
 
     # ===== عمود فترة المناوبة - نص وصفي يوضّح للمستخدم أي مناوبة (وأي
-    # فترة زمنية) طُبِّقت على هذا الصف بالتحديد؛ فاضي لغير المناوبين أو
+    # فترة زمنية) طُبِّقت على هذا الصف بالتحديد؛ فارغ لغير المناوبين أو
     # عند تعطيل نظام المناوبتين بالكامل =====
     shift1_start_s = settings.get('shift1_start', '') or ''
     shift1_end_s = settings.get('shift1_end', '') or ''

@@ -230,7 +230,7 @@ function maPrintNow() {
   if (window.AttNative && typeof AttNative.printHtml === 'function') {   // تطبيق الإدارة (الإصدار الجديد)
     try { AttNative.printHtml(html, 'employee-app-logins'); return; } catch (e) {}
   } else if (window.AttNative) {   // إصدار قديم من التطبيق لا يدعم الطباعة
-    toast('حدّث تطبيق الإدارة لآخر إصدار للطباعة من الهاتف — أو نزّل CSV، أو اطبع من المتصفح', true);
+    toast('حدّث تطبيق الإدارة لآخر إصدار للطباعة من الهاتف — أو حمِّل ملف CSV، أو اطبع من المتصفح', true);
     return;
   }
   const old = document.getElementById('printFrame'); if (old) old.remove();
@@ -244,7 +244,7 @@ function maPrintNow() {
   // ننتظر رسم الإطار (onload لا يُطلق دائماً بعد document.write)
   setTimeout(() => {
     try { f.contentWindow.focus(); f.contentWindow.print(); }
-    catch (e) { toast('تعذّرت الطباعة — نزّل CSV واطبعه', true); }
+    catch (e) { toast('تعذّرت الطباعة — حمِّل ملف CSV واطبعه', true); }
     setTimeout(() => f.remove(), 60000);
   }, 250);
 }

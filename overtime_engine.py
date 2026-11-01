@@ -22,9 +22,9 @@ def calculate(rows, settings, dept_times, shift1_names, shift2_names,
     shift1_names / shift2_names: قوائم أسماء المناوبين
     grace_minutes: فترة السماح بالدقائق - أي فرق أقل أو يساوي هذا الحد لا
         يُحتسب عملاً إضافياً إطلاقاً
-    use_custom_hours: لو True، يُستخدم custom_end كوقت انصراف مقرر موحّد
+    use_custom_hours: إذا كانت True، يُستخدم custom_end كوقت انصراف مقرر موحّد
         لكل الصفوف (يتجاوز وقت القسم/المناوبة)
-    custom_end: نص وقت HH:MM (مطلوب لو use_custom_hours=True)
+    custom_end: نص وقت HH:MM (مطلوب إذا كانت use_custom_hours=True)
 
     يُرجع قائمة قواميس: name, dept, date, time_out, scheduled_end,
     ot_minutes, is_weekend - فقط للصفوف التي لها عمل إضافي فعلي (> 0)

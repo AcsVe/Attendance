@@ -192,7 +192,7 @@
           <input type="file" id="uploadFile" accept=".csv,.xlsx,.xls" onchange="onUploadFileChange()">
         </div>
         <div class="form-group" style="max-width:520px">
-          <label>أو الصق رابط الملف (Google Drive / OneDrive / Dropbox / أي رابط تنزيل مباشر)</label>
+          <label>أو الصق رابط الملف (Google Drive / OneDrive / Dropbox / أي رابط تحميل مباشر)</label>
           <div style="display:flex;gap:8px">
             <input type="text" id="uploadUrl" dir="ltr" placeholder="https://drive.google.com/file/d/...">
             <button class="btn btn-primary btn-sm" onclick="loadUploadFromUrl()"><i class="fas fa-cloud-download-alt" aria-hidden="true"></i> تحميل</button>
@@ -710,7 +710,7 @@
           </div>
         </div>
         <div class="form-group" style="max-width:520px;margin-top:10px">
-          <label>أو الصق رابط الملف (Google Drive / OneDrive / Dropbox / أي رابط تنزيل مباشر)</label>
+          <label>أو الصق رابط الملف (Google Drive / OneDrive / Dropbox / أي رابط تحميل مباشر)</label>
           <div style="display:flex;gap:8px">
             <input type="text" id="empImportUrl" dir="ltr" placeholder="https://drive.google.com/file/d/...">
             <button class="btn btn-primary btn-sm" onclick="importEmployeesFromUrl()"><i class="fas fa-cloud-download-alt" aria-hidden="true"></i> استيراد</button>
@@ -1239,7 +1239,7 @@
           </p>
           <div class="form-group" style="max-width:400px"><label>ملف att.mdb</label><input type="file" id="mdbFile" accept=".mdb,.accdb"></div>
           <div class="form-group" style="max-width:520px">
-            <label>أو الصق رابط الملف (Google Drive / OneDrive / Dropbox / أي رابط تنزيل مباشر)</label>
+            <label>أو الصق رابط الملف (Google Drive / OneDrive / Dropbox / أي رابط تحميل مباشر)</label>
             <input type="text" id="mdbUrl" dir="ltr" placeholder="https://drive.google.com/file/d/...">
           </div>
           <div class="form-group" style="max-width:520px">
@@ -1261,7 +1261,7 @@
           </p>
           <div class="form-group" style="max-width:400px"><label>ملف SQLite</label><input type="file" id="sqliteFile" accept=".db,.sqlite,.sqlite3"></div>
           <div class="form-group" style="max-width:520px">
-            <label>أو الصق رابط الملف (Google Drive / OneDrive / Dropbox / أي رابط تنزيل مباشر)</label>
+            <label>أو الصق رابط الملف (Google Drive / OneDrive / Dropbox / أي رابط تحميل مباشر)</label>
             <input type="text" id="sqliteUrl" dir="ltr" placeholder="https://drive.google.com/file/d/...">
           </div>
           <div class="form-group" style="max-width:520px">
@@ -1713,7 +1713,7 @@
         <div class="card-title"><i class="fab fa-google-drive" aria-hidden="true"></i> نسخة احتياطية على Google Drive</div>
         <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">
           بديل عن OneDrive أعلاه - لا يحتاج صلاحية "Global Admin" على أي مستأجر، لكنه يتطلب حساب Google Cloud
-          (مجاني) لإنشاء "Service Account" وتنزيل ملف JSON صغير منه، ومشاركة مجلد على Drive معه. ضع مسار
+          (مجاني) لإنشاء "Service Account" وتحميل ملف JSON صغير منه، ومشاركة مجلد على Drive معه. ضع مسار
           ملف الـJSON على جهاز الخادم مباشرة (لا يُرفَع عبر المتصفح لأنه سرّي).
         </p>
         <div class="form-grid quad">
@@ -1895,7 +1895,7 @@
 
 <!-- ===== نافذة تسجيل تأخير/غياب سريعة - تُفتَح مباشرة بالضغط على كلمة
      "متأخر"/"غائب" بجدول التقارير، بدون الانتقال لتبويب آخر. تدعم اختيار
-     سبب سبق إدخاله من قائمة منسدلة (لو المستخدم مُدخِل أسباب من قبل) أو
+     سبب سبق إدخاله من قائمة منسدلة (إذا كان المستخدم قد أدخل أسباباً من قبل) أو
      كتابته يدوياً ===== -->
 <div class="modal-overlay" id="rrModal">
   <div class="modal" style="max-width:720px">

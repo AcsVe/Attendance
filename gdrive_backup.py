@@ -11,7 +11,7 @@ pyodbc سابقاً بهذا المشروع، فتُستبعَد لنفس الس
 
 الإعداد المطلوب من المستخدم (لمرة واحدة، بواجهة Google Cloud Console):
   1. إنشاء مشروع + تفعيل Google Drive API.
-  2. إنشاء Service Account وتنزيل ملف JSON (Keys -> Add Key -> JSON).
+  2. إنشاء Service Account وتحميل ملف JSON (Keys -> Add Key -> JSON).
   3. مشاركة مجلد على Drive الشخصي مع بريد الـService Account (حقل
      client_email بملف JSON) بصلاحية Editor.
   4. نسخ معرّف ذلك المجلد (Folder ID) من رابطه على Drive.
@@ -38,7 +38,7 @@ def _load_service_account(json_path):
         return None, f'تعذّر قراءة ملف بيانات الاعتماد: {e}'
     if info.get('type') != 'service_account' or not info.get('private_key') or not info.get('client_email'):
         return None, ('ملف JSON هذا ليس بيانات اعتماد Service Account صالحة - تأكد أنه نفس الملف الذي '
-                       'نزّلته من Google Cloud Console (Keys -> Add Key -> JSON)')
+                       'حمّلته من Google Cloud Console (Keys -> Add Key -> JSON)')
     return info, None
 
 

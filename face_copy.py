@@ -7,7 +7,7 @@
 
 ميزة Windows حصراً (COM automation + عادةً بايثون 32-bit تحديداً حسب نسخة
 الجهاز) - نفس القيد الموجود بالنسخة المكتبية بالضبط، فنتحقق من توفرها بأمان
-ونُرجع رسالة عربية واضحة بدل انهيار الطلب لو غير متاحة (مثلاً أثناء التشغيل
+ونُرجع رسالة عربية واضحة بدلاً من انهيار الطلب إن كانت غير متاحة (مثلاً أثناء التشغيل
 على خادم لينكس بمرحلة النشر الثانية).
 """
 from zk import ZK
@@ -27,8 +27,8 @@ FACE_INDEX = 50  # ثابت مؤكَّد من تجربة فعلية بالنسخ
 
 def copy_face_templates(source_device_row, target_device_rows, employees, manual_password=''):
     """
-    employees: قائمة قواميس {device_uid, name} - لازم device_uid رقمي.
-    manual_password: كلمة سر مشتركة تُستخدم عند الكتابة لو كلمة سر الجهاز
+    employees: قائمة قواميس {device_uid, name} - يجب أن يكون device_uid رقمياً.
+    manual_password: كلمة سر مشتركة تُستخدم عند الكتابة إذا كانت كلمة سر الجهاز
         المصدر "للكتابة فقط" (Write-Only - الحالة الشائعة بمعظم الأجهزة).
 
     يُرجع dict: {ok, log: [نص لكل خطوة], results: {device_name: {success, failed}}}

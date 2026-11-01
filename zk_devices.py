@@ -7,8 +7,8 @@
 (افتراضياً 4370).
 
 كل الدوال هنا "أفضل جهد" (best-effort): أي خطأ اتصال أو استثناء من الجهاز
-يُلتقط ويُعاد كنص عربي واضح بدل ما يكسر الطلب بالكامل - المستخدم يشوف بالضبط
-أي جهاز فشل ولماذا، تماماً متل تنبيهات النسخة المكتبية.
+يُلتقط ويُعاد كنص عربي واضح بدلاً من أن يُفشل الطلب بالكامل - فيرى المستخدم بالضبط
+أي جهاز فشل ولماذا، تماماً مثل تنبيهات النسخة المكتبية.
 """
 import threading
 from collections import deque
@@ -26,11 +26,11 @@ CONNECT_TIMEOUT = 15   # شبكات موجّهة بين أكثر من نطاق (
 def set_user_overwrite(conn, uid, name, privilege=0, password='', group_id='', user_id='', card=0):
     """نفس conn.set_user لكن بمنطق "استبدال/overwrite" فعلي بدل الاعتماد على
     أن الجهاز يقبل CMD_USER_WRQ كإنشاء أو تحديث تلقائياً - بعض أجهزة ZKTeco
-    (أو بعض حالات تعارض uid/user_id) ترفض الأمر برسالة "Can't set user" لو
+    (أو بعض حالات تعارض uid/user_id) ترفض الأمر برسالة "Can't set user" إذا
     كان الرقم محجوزاً ببيانات متعارضة. نحاول set_user مباشرة أولاً (أسرع،
-    ويحافظ على القوالب الحيوية المرتبطة بنفس uid لو الجهاز قبِلها)، ولو فشل
-    نحذف المستخدم بنفس uid (نتجاهل فشل الحذف - يعني مو موجود أصلاً) ثم نعيد
-    محاولة set_user مرة وحدة - لو فشلت هالمرة كمان، نرفع الاستثناء الأصلي
+    ويحافظ على القوالب الحيوية المرتبطة بالـ uid نفسه إن قبِلها الجهاز)، وإن فشل
+    نحذف المستخدم بنفس uid (نتجاهل فشل الحذف - أي أنه غير موجود أصلاً) ثم نعيد
+    محاولة set_user مرة واحدة - وإن فشلت هذه المرة أيضاً، نرفع الاستثناء الأصلي
     حتى تظهر رسالة واضحة للمستخدم بدل صمت أو رسالة مضلِّلة."""
     try:
         conn.set_user(uid=uid, name=name, privilege=privilege, password=password,
@@ -179,7 +179,7 @@ def pull_attendance(device_row, date_from=None, date_to=None, uid_to_employee=No
 
     uid_to_employee: {device_uid_str: employee_name} - خريطة المطابقة
     (من جدول employees.device_uid) - أي بصمة لرقم غير مسجَّل بالخريطة تُرجَع
-    ضمن unmatched_uids بدل ما تُفقد بصمت.
+    ضمن unmatched_uids بدلاً من أن تُفقد بصمت.
 
     يُرجع dict: {ok, rows: [{name, date, time_in, time_out}], unmatched_uids, error}
     """
@@ -229,7 +229,7 @@ def pull_attendance(device_row, date_from=None, date_to=None, uid_to_employee=No
 
 
 def push_employees(device_row, employees):
-    """يرفع قائمة موظفين (لازم device_uid رقمي لكل واحد) كمستخدمين على
+    """يرفع قائمة موظفين (يجب أن يكون device_uid رقمياً لكل واحد) كمستخدمين على
     الجهاز مباشرة - set_user لكل موظف. يُرجع نتيجة كل موظف على حدة."""
     try:
         conn = _connect(device_row)
@@ -271,8 +271,8 @@ def clear_device_attendance(device_row):
 def query_device_users(device_row):
     """يستعلم من الجهاز نفسه عن قائمة المستخدمين المسجَّلين عليه فعلياً
     (uid الداخلي، رقم البصمة/user_id، الاسم، الصلاحية) - عكس قائمة الموظفين
-    المحفوظة بقاعدة بيانات التطبيق، هاي القائمة تعكس الواقع الفعلي على
-    الجهاز، وتساعد تحديد/حذف مستخدمين موجودين على الجهاز بس مو بالتطبيق (أو
+    المحفوظة في قاعدة بيانات التطبيق، هذه القائمة تعكس الواقع الفعلي على
+    الجهاز، وتساعد تحديد/حذف مستخدمين موجودين على الجهاز فقط وغير موجودين في التطبيق (أو
     العكس) بدل الاعتماد على كتابة أرقام البصمة يدوياً."""
     try:
         conn = _connect(device_row)
@@ -292,7 +292,7 @@ def query_device_users(device_row):
 
 def delete_device_users(device_row, device_uids=None):
     """يحذف مستخدمين محدَّدين من الجهاز (device_uids)، أو كل المستخدمين
-    لو تُركت فارغة - عملية لا يمكن التراجع عنها."""
+    إن تُركت فارغة - عملية لا يمكن التراجع عنها."""
     try:
         conn = _connect(device_row)
     except Exception as e:
@@ -317,7 +317,7 @@ def delete_device_users(device_row, device_uids=None):
 
 def unlock_door(device_row, seconds=3):
     """يفتح قفل الباب المتصل بالجهاز (ريليه) - يعمل فقط للأجهزة التي لديها
-    قفل فعلي موصول؛ غير ذلك بيرجع نجاح بدون أي أثر مرئي."""
+    قفل فعلي موصول؛ وفي غير ذلك يُرجع نجاحاً دون أي أثر مرئي."""
     try:
         conn = _connect(device_row)
         try:
@@ -335,7 +335,7 @@ def copy_fingerprint_templates(source_device_row, target_device_rows, device_uid
     لمستخدمين محدَّدين من جهاز مصدر لعدة أجهزة هدف. تعتمد على get_templates
     (تُرجع كل القوالب المخزَّنة على الجهاز المصدر دفعة واحدة) ثم
     save_user_template لكل جهاز هدف - أبطأ وأقل ضماناً من pyzk نفسها،
-    فأي فشل لموظف/جهاز بعينه يُسجَّل بدون ما يوقف بقية العملية.
+    فأي فشل لموظف/جهاز بعينه يُسجَّل دون أن يوقف بقية العملية.
     """
     try:
         src = _connect(source_device_row)
@@ -348,7 +348,7 @@ def copy_fingerprint_templates(source_device_row, target_device_rows, device_uid
         # ===== users: نفس "رقم البصمة" المخزَّن بجدول الموظفين
         # (employees.device_uid) هو user_id بمصطلح pyzk، أما uid فهو رقم
         # الخانة الداخلي على الجهاز نفسه (قد يختلف بين جهازين لنفس
-        # الموظف) - لازم نربط القوالب (مفهرَسة بـuid الداخلي) بـuser_id
+        # الموظف) - يجب أن نربط القوالب (مفهرَسة بـuid الداخلي) بـuser_id
         # الحقيقي حتى تُطابق device_uid المُدخَل من الواجهة بشكل صحيح =====
         uid_to_userid = {u.uid: str(u.user_id or u.uid) for u in all_users}
         users = {str(u.user_id or u.uid): u for u in all_users}

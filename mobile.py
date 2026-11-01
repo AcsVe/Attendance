@@ -285,7 +285,7 @@ def check_integrity(conn, emp, kind, data, lat, lng, accuracy, site, cfg):
     if source == 'app' and data.get('rooted'):
         flags.append('الهاتف معدّل (root)')
     if source != 'app' and require_app(cfg):
-        return 'على هواتف أندرويد يتم التسجيل من تطبيق Check-in فقط — نزّله من صفحة التطبيقات ثم سجّل منه', flags, source
+        return 'على هواتف أندرويد يتم التسجيل من تطبيق Check-in فقط — حمِّله من صفحة التطبيقات ثم سجّل منه', flags, source
     # 2) شبكة العمل: الموقع قد يشترط الاتصال بشبكة Wi-Fi المؤسسة (لا يزوّرها تطبيق الموقع الوهمي)
     if site and (site.get('ips') or '').strip():
         if not _ip_in(_ip(), site['ips']):

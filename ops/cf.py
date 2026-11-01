@@ -1,6 +1,6 @@
 """ربط 3.iajaward.org بالكمبيوتر أو بالهاتف عبر Cloudflare API (بدون لوحة Cloudflare).
 
-    python ops/cf.py setup      # مرة واحدة: سجل DNS + ربط الاسم بنفق السيرفر + إنشاء نفق الهاتف attendance-standby
+    python ops/cf.py setup      # مرة واحدة: سجل DNS + ربط الاسم بنفق الخادم + إنشاء نفق الهاتف attendance-standby
     python ops/cf.py status     # أين يعمل 3.iajaward.org الآن + تشخيص
     python ops/cf.py phone      # 3.iajaward.org ← الهاتف
     python ops/cf.py server     # 3.iajaward.org ← الكمبيوتر

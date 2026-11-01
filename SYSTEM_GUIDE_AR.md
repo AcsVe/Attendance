@@ -56,7 +56,7 @@
 2. الدفع إلى `main` يشغّل **GitHub Actions** (`android.yml`) الذي يبني ملفّي APK:
    - **تطبيق الموظف:** Check-in
    - **تطبيق الإدارة:** Att Dashboard
-3. تُنزّل ملفات APK من صفحة **Actions ← آخر Run ← Artifacts** (أو Releases) وتُثبَّت على الهواتف.
+3. تُحمَّل ملفات APK من صفحة **Actions ← آخر Run ← Artifacts** (أو Releases) وتُثبَّت على الهواتف.
 
 > أي تعديل محلي على الكمبيوتر يُفقد عند `update.bat` — لا تعدّل مباشرة.
 

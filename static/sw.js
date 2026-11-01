@@ -71,7 +71,7 @@ self.addEventListener('fetch', (event) => {
           if (networkResp && networkResp.ok) cache.put(req, networkResp.clone());
           return networkResp;
         }).catch(() => cached);
-        // stale-while-revalidate: نعرض النسخة المخزَّنة فوراً لو موجودة
+        // stale-while-revalidate: نعرض النسخة المخزَّنة فوراً إن وُجدت
         // (أسرع)، وبنفس الوقت نحدّثها بالخلفية من الشبكة
         return cached || fetchPromise;
       })
