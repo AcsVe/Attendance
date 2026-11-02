@@ -289,6 +289,12 @@ body.auth::before { content: ''; position: fixed; inset: 0; pointer-events: none
 .input-group .eye { position: absolute; inset-inline-end: 6px; width: 32px; height: 32px; border: 0; background: none; color: #94a3b8; cursor: pointer; border-radius: 8px; }
 .input-group .eye:hover { color: var(--primary); background: var(--primary-soft); }
 .input-group input.has-eye { padding-inline-end: 40px !important; }
+/* أيقونة الحقل في جهة بداية الصفحة، والحشوة تتبعها مهما كان اتجاه كتابة الحقل نفسه: حقل اسم المستخدم وكلمة المرور يُكتب من اليسار، فكانت الحشوة المنطقية تذهب إلى الجهة الأخرى ويقع النص تحت الأيقونة. */
+html[dir=rtl] .input-group input{padding-right:36px!important;padding-left:12px!important}
+html[dir=rtl] .input-group input.has-eye{padding-left:40px!important}
+html[dir=ltr] .input-group input{padding-left:36px!important;padding-right:12px!important}
+html[dir=ltr] .input-group input.has-eye{padding-right:40px!important}
+
 [dir=rtl] .input-group input[dir=ltr] { text-align: right; }
 .auth-card .btn { width: 100%; padding: 11px; margin-top: 4px; font-size: .98rem; min-height: 44px; }
 .auth-card .btn-primary { background: linear-gradient(135deg, var(--primary), var(--primary-dark)); }
