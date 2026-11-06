@@ -268,6 +268,116 @@ def clear_device_attendance(device_row):
         return {'ok': False, 'error': f'تعذّر مسح بيانات الجهاز: {e}'}
 
 
+def restart_device(device_row):
+    """يعيد تشغيل الجهاز عن بعد (يعود للعمل خلال دقيقة تقريباً)، دون أن يمس بياناته."""
+    try:
+        conn = _connect(device_row)
+        try:
+            conn.restart()
+            return {'ok': True}
+        finally:
+            try:
+                conn.disconnect()   # الجهاز يقطع الاتصال بنفسه بعد أمر إعادة التشغيل
+            except Exception:
+                pass
+    except Exception as e:
+        return {'ok': False, 'error': f'تعذّرت إعادة تشغيل الجهاز: {e}'}
+
+
+def _local_networks():
+    """شبكات IPv4 المحلية لهذا الخادم (‎/24 لكل عنوان)، دون إرسال أي بيانات خارجها."""
+    import ipaddress
+    import socket as _so
+    ips = set()
+    try:
+        for ip in _so.gethostbyname_ex(_so.gethostname())[2]:
+            ips.add(ip)
+    except OSError:
+        pass
+    try:   # العنوان الذي يُستعمل للخروج إلى الشبكة (لا يُرسل شيئاً فعلياً)
+        s = _so.socket(_so.AF_INET, _so.SOCK_DGRAM)
+        s.connect(('10.255.255.255', 1))
+        ips.add(s.getsockname()[0])
+        s.close()
+    except OSError:
+        pass
+    nets = []
+    for ip in ips:
+        try:
+            a = ipaddress.ip_address(ip)
+        except ValueError:
+            continue
+        if a.is_loopback or a.is_link_local or not a.is_private:
+            continue
+        n = ipaddress.ip_network(f'{ip}/24', strict=False)
+        if n not in nets:
+            nets.append(n)
+    return nets
+
+
+def _parse_ranges(text):
+    """«192.168.1.0/24» أو «192.168.1.» أو «192.168.1.10-60»، وعدة نطاقات بفاصلة."""
+    import ipaddress
+    hosts = []
+    for part in [x.strip() for x in (text or '').replace('،', ',').split(',') if x.strip()]:
+        if '-' in part:
+            base, _, end = part.rpartition('-')
+            start = ipaddress.ip_address(base.strip())
+            last = int(end.strip())
+            prefix = str(start).rsplit('.', 1)[0]
+            hosts += [f'{prefix}.{i}' for i in range(int(str(start).rsplit('.', 1)[1]), min(last, 254) + 1)]
+        else:
+            if part.endswith('.'):
+                part += '0/24'
+            elif '/' not in part:
+                hosts.append(str(ipaddress.ip_address(part)))
+                continue
+            hosts += [str(h) for h in ipaddress.ip_network(part, strict=False).hosts()]
+    return hosts
+
+
+def discover_devices(ranges=None, port=4370, scan_timeout=0.6, max_hosts=1024):
+    """يبحث عن أجهزة البصمة في الشبكة المحلية: يفحص المنفذ (4370) على كل عنوان، ثم يتعرّف على كل
+    جهاز يستجيب (الاسم، الرقم التسلسلي، الإصدار). يرجع {'ok', 'networks', 'found': [...]}."""
+    import socket as _so
+    from concurrent.futures import ThreadPoolExecutor
+    try:
+        hosts = _parse_ranges(ranges) if ranges else [str(h) for n in _local_networks() for h in n.hosts()]
+    except ValueError:
+        return {'ok': False, 'error': 'نطاق العناوين غير صحيح — مثال: 192.168.1.0/24 أو 192.168.1.10-60'}
+    if not hosts:
+        return {'ok': False, 'error': 'لم تُعرف شبكة محلية لهذا الخادم — اكتب نطاق العناوين يدوياً'}
+    hosts = hosts[:max_hosts]
+
+    def is_open(ip):
+        try:
+            _so.create_connection((ip, port), timeout=scan_timeout).close()
+            return ip
+        except OSError:
+            return None
+
+    with ThreadPoolExecutor(max_workers=128) as ex:
+        open_ips = [ip for ip in ex.map(is_open, hosts) if ip]
+
+    def identify(ip):
+        info = {'ip': ip, 'port': port, 'name': '', 'serial': '', 'firmware': '', 'identified': False}
+        try:
+            conn = ZK(ip, port=port, timeout=4, password=0, ommit_ping=True).connect()
+            try:
+                info.update(name=_safe(conn.get_device_name), serial=_safe(conn.get_serialnumber),
+                            firmware=_safe(conn.get_firmware_version), identified=True)
+            finally:
+                conn.disconnect()
+        except Exception:
+            pass   # المنفذ مفتوح لكن الجهاز محمي بكلمة سر أو مشغول: يظهر دون تفاصيل
+        return info
+
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        found = list(ex.map(identify, open_ips))
+    nets = sorted({h.rsplit('.', 1)[0] + '.0/24' for h in hosts})
+    return {'ok': True, 'networks': nets, 'scanned': len(hosts), 'found': found}
+
+
 def query_device_users(device_row):
     """يستعلم من الجهاز نفسه عن قائمة المستخدمين المسجَّلين عليه فعلياً
     (uid الداخلي، رقم البصمة/user_id، الاسم، الصلاحية) - عكس قائمة الموظفين

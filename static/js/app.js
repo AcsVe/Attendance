@@ -1547,6 +1547,8 @@ async function deleteDeparturePermission(id) {
 
 /* ============ AUDIT LOG ============ */
 const AUDIT_ACTION_LABELS = {
+  device_restart: 'إعادة تشغيل جهاز البصمة', payroll_advance_add: 'إضافة سلفة', payroll_advance_edit: 'تعديل سلفة',
+  payroll_advance_stop: 'إيقاف خصم سلفة', payroll_advance_activate: 'استئناف خصم سلفة', payroll_advance_delete: 'حذف سلفة',
   create: 'إضافة', update: 'تعديل', delete: 'حذف', login: 'تسجيل دخول', login_failed: 'محاولة دخول فاشلة',
   backup: 'نسخ احتياطي', import: 'استيراد', sync: 'مزامنة', pull: 'سحب من الجهاز', users_bulk: 'إجراء جماعي على المستخدمين',
   employee_edit: 'تعديل بيانات موظف', employee_delete: 'حذف موظف', employees_suspend: 'تعليق موظفين', employees_activate: 'إلغاء تعليق',
@@ -1820,8 +1822,9 @@ async function loadDevices() {
       <td>${escapeHtml(d.location || '')}</td>
       <td><span class="badge ${d.active ? 'badge-ontime' : 'badge-none'}">${d.active ? 'مفعَّل' : 'معطَّل'}</span></td>
       <td><button class="btn btn-outline btn-sm" onclick="testDevice(${d.id}, this)"><i class="fas fa-plug" aria-hidden="true"></i> اختبار</button></td>
+      <td><button class="btn btn-outline btn-sm" onclick="restartDevice(${d.id}, this)"><i class="fas fa-power-off" aria-hidden="true"></i> إعادة تشغيل</button></td>
       <td><button class="btn btn-red btn-sm" onclick="deleteDevice(${d.id})" aria-label="حذف" title="حذف"><i class="fas fa-trash" aria-hidden="true"></i></button></td>
-    </tr>`).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:16px">لا توجد أجهزة مسجَّلة بعد</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:16px">لا توجد أجهزة مسجَّلة بعد</td></tr>';
 
   const selects = ['fingerSourceDevice', 'doorDevice', 'clearAttDevice', 'deleteUsersDevice', 'faceSourceDevice'];
   const optsHtml = devicesCache.map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
@@ -1836,6 +1839,51 @@ async function loadDevices() {
 
 function getCheckedDeviceIds(containerId) {
   return Array.from(document.querySelectorAll(`#${containerId} input[type=checkbox]:checked`)).map(el => parseInt(el.value));
+}
+
+async function restartDevice(id, btn) {
+  const d = devicesCache.find(x => x.id === id);
+  if (!confirm(`إعادة تشغيل الجهاز «${d ? d.name : id}»؟ يتوقف عن تسجيل البصمات نحو دقيقة، ولا تتأثر بياناته.`)) return;
+  btn.disabled = true;
+  try {
+    const data = await api(`/api/devices/${id}/restart`, { method: 'POST' });
+    if (data && data.ok) toast('أُرسل أمر إعادة التشغيل — يعود الجهاز خلال دقيقة تقريباً');
+    else if (data) toast(data.error || 'تعذّرت إعادة التشغيل', true);
+  } catch (e) {} finally { btn.disabled = false; }
+}
+
+let discFound = [];
+async function discoverDevices() {
+  const btn = document.getElementById('discBtn'), info = document.getElementById('discInfo');
+  btn.disabled = true; info.textContent = 'جارٍ البحث… قد يستغرق دقيقة';
+  let d;
+  try {
+    d = await api('/api/devices/discover', { method: 'POST', body: JSON.stringify({
+      ranges: document.getElementById('discRanges').value.trim(), port: document.getElementById('discPort').value || 4370 }) });
+  } catch (e) { d = null; } finally { btn.disabled = false; }
+  if (!d) { info.textContent = ''; return; }
+  if (!d.ok) { info.textContent = ''; toast(d.error, true); return; }
+  discFound = d.found;
+  info.textContent = `العناوين المفحوصة: ${d.scanned} (${d.networks.join('، ')}) — الأجهزة المكتشفة: ${d.found.length}`;
+  document.getElementById('discWrap').classList.remove('hide');
+  document.getElementById('discTable').innerHTML = d.found.map((f, i) => `<tr>
+      <td dir="ltr" style="text-align:right">${escapeHtml(f.ip)}:${f.port}</td><td>${escapeHtml(f.name || '—')}</td>
+      <td dir="ltr" style="text-align:right">${escapeHtml(f.serial || '—')}</td><td dir="ltr" style="text-align:right">${escapeHtml(f.firmware || '—')}</td>
+      <td>${f.registered_as ? `<span class="badge badge-ontime">مسجَّل: ${escapeHtml(f.registered_as)}</span>`
+        : (f.identified ? '<span class="badge badge-late">جديد</span>' : '<span class="badge badge-none">يستجيب (محمي بكلمة سر أو مشغول)</span>')}</td>
+      <td>${f.registered_as ? '' : `<button class="btn btn-primary btn-sm" onclick="useDiscovered(${i})"><i class="fas fa-plus" aria-hidden="true"></i> إضافة</button>`}</td></tr>`).join('')
+    || '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:14px">لم يُعثر على أجهزة — تأكد أن الأجهزة تعمل وعلى نفس الشبكة، أو اكتب نطاقها</td></tr>';
+}
+
+function useDiscovered(i) {
+  const f = discFound[i];
+  if (!f) return;
+  document.getElementById('devName').value = f.name || `جهاز ${f.ip}`;
+  document.getElementById('devIp').value = f.ip;
+  document.getElementById('devPort').value = f.port;
+  document.getElementById('devLocation').value = f.serial ? `الرقم التسلسلي ${f.serial}` : '';
+  document.getElementById('devAddCard').scrollIntoView({ block: 'center', behavior: 'smooth' });
+  document.getElementById('devName').focus();
 }
 
 async function addDevice() {
