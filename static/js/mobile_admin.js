@@ -672,7 +672,7 @@ async function openEmployeeCard(id) {
   if (!d) return;
   ecData = d;
   const e = d.employee, a = d.account, s = d.summary;
-  ec$('ecTitle').innerHTML = `${mEsc(e.name)} <small style="color:var(--muted);font-weight:600">${mEsc(e.dept || 'بدون قسم')}${e.job_title ? ' · ' + mEsc(e.job_title) : ''}</small> ${e.active ? '<span class="badge badge-ontime">فعّال</span>' : '<span class="badge badge-absent">معلّق</span>'}`;
+  ec$('ecTitle').innerHTML = `${mEsc(e.name)} <small style="color:var(--muted);font-weight:600">${mEsc(e.dept || 'بدون قسم')}${e.job_title ? ' · ' + mEsc(e.job_title) : ''}</small> ${e.end_date ? `<span class="badge badge-absent">موظف سابق منذ ${mEsc(e.end_date)}</span>` : (e.active ? '<span class="badge badge-ontime">فعّال</span>' : '<span class="badge badge-absent">معلّق</span>')}`;
   const can = PERMS.can_manage_employees ? '' : 'disabled';
   ec$('ec-info').innerHTML = `
     <div class="form-grid trio">
@@ -691,11 +691,26 @@ async function openEmployeeCard(id) {
         <option value="mobile_qr">الهاتف + رمز QR</option></select></div>
       <div class="form-group"><label>الحالة</label><select id="ecActive" class="search-input" ${can}><option value="1">فعّال</option><option value="0">معلّق (لا يدخل التطبيق ولا يظهر في المتابعة)</option></select></div>
       <div class="form-group"><label>ملاحظات</label><input type="text" id="ecNotes" value="${mEsc(e.notes || '')}" ${can}></div>
+      <div class="form-group"><label>الرقم الوطني</label><input type="text" id="ecNatId" dir="ltr" maxlength="40" value="${mEsc(e.national_id || '')}" ${can}></div>
+      <div class="form-group"><label>تاريخ التعيين</label><input type="date" id="ecHire" value="${mEsc(e.hire_date || '')}" aria-label="تاريخ التعيين" ${can}></div>
       <div class="form-group"><label>التحقق من التواجد أثناء الدوام</label>
         <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="ecPresence" ${e.presence_monitor ? 'checked' : ''} ${can}> مشمول بالاسم</label>
         <small style="color:var(--muted)">${d.presence && d.presence.monitored ? '✓ مشمول حالياً' : (d.presence && !d.presence.enabled ? 'التحقق متوقف عموماً' : 'غير مشمول حالياً')}${d.presence && d.presence.scope === 'all' ? ' (الإعداد: كل الموظفين)' : ''}</small></div>
     </div>
+    <div class="card" style="margin:4px 0 12px;background:#fbf8f8">
+      <div class="card-title"><i class="fas fa-user-clock" aria-hidden="true"></i> انتهاء الخدمة</div>
+      <div class="form-grid trio">
+        <div class="form-group"><label>تاريخ انتهاء الخدمة</label><input type="date" id="ecEnd" value="${mEsc(e.end_date || '')}" aria-label="تاريخ انتهاء الخدمة" ${can}></div>
+        <div class="form-group"><label>السبب</label><select id="ecEndReason" class="search-input" ${can}>
+          <option value="">—</option><option>استقالة</option><option>إنهاء خدمة</option><option>تقاعد</option><option>انتهاء العقد</option><option>أخرى</option></select></div>
+      </div>
+      <small style="color:var(--muted)">تسجيل تاريخ انتهاء الخدمة ينقل الموظف إلى «الموظفون السابقون» ويعلّق دخوله ومتابعته، وتبقى سجلاته كاملة. لإعادته: امسح التاريخ واجعل حالته «فعّال».</small>
+    </div>
     <button class="btn btn-primary" onclick="ecSave()" ${can}><i class="fas fa-save" aria-hidden="true"></i> حفظ</button>
+    <h4 style="margin:14px 0 6px;color:var(--primary-dark)">تنقلات الأقسام</h4>
+    <div class="table-wrap" style="max-height:200px;overflow:auto"><table><thead><tr><th>التاريخ</th><th>من قسم</th><th>إلى قسم</th><th>بواسطة</th></tr></thead><tbody>
+      ${(d.dept_history || []).map(h => `<tr><td dir="ltr">${mEsc((h.changed_at || '').slice(0, 16))}</td><td>${mEsc(h.from_dept || '—')}</td><td>${mEsc(h.to_dept || '—')}</td><td>${mEsc(h.changed_by || '—')}</td></tr>`).join('') || '<tr><td colspan="4" style="color:var(--muted)">لم يُنقل بين الأقسام</td></tr>'}
+    </tbody></table></div>
     <div class="card" style="margin-top:14px;background:#f8fbfc">
       <div class="card-title"><i class="fas fa-mobile-screen" aria-hidden="true"></i> حساب التطبيق</div>
       ${a ? `<div style="line-height:2">اسم المستخدم: <b dir="ltr">${mEsc(a.username)}</b> · ${a.active ? 'مفعّل' : '<b style="color:#c0392b">موقوف</b>'}${a.anywhere ? ' · يسجّل من أي مكان' : ''}<br>
@@ -708,6 +723,7 @@ async function openEmployeeCard(id) {
     </div>`;
   ec$('ecMode').value = e.attendance_mode || 'both';
   ec$('ecActive').value = e.active ? '1' : '0';
+  ec$('ecEndReason').value = e.end_reason || '';
   ec$('ec-att').innerHTML = `
     <div class="stats-grid" style="margin-bottom:10px">
       <div class="stat-card green" style="cursor:default"><div class="stat-val">${s.days}</div><div class="stat-label">أيام حضور (الشهر)</div></div>
@@ -768,7 +784,9 @@ async function ecSave() {
   const e = ecData.employee;
   const body = { name: ec$('ecName').value.trim(), dept: ec$('ecDept').value.trim(), device_uid: ec$('ecUid').value.trim(), job_title: ec$('ecJob').value,
     phone: ec$('ecPhone').value, email: ec$('ecEmail').value, notes: ec$('ecNotes').value, attendance_mode: ec$('ecMode').value, active: ec$('ecActive').value === '1',
-    presence_monitor: ec$('ecPresence').checked };
+    presence_monitor: ec$('ecPresence').checked, national_id: ec$('ecNatId').value.trim(), hire_date: ec$('ecHire').value,
+    end_date: ec$('ecEnd').value, end_reason: ec$('ecEndReason').value };
+  if (body.end_date && !e.end_date && !confirm(`تسجيل انتهاء خدمة «${e.name}» بتاريخ ${body.end_date}؟ يُعلَّق دخوله ومتابعته، وتبقى سجلاته.`)) return;
   if (body.name !== e.name && !confirm(`تغيير الاسم إلى «${body.name}»؟ ينتقل الاسم الجديد إلى كل سجلاته السابقة.`)) return;
   const d = await api('/api/mobile/employee/' + e.id, { method: 'PUT', body: JSON.stringify(body) });
   if (!d) return;

@@ -1311,6 +1311,8 @@ def api_employees_bulk_dept():
         names = [r['name'] for r in conn.execute(
             f"SELECT name FROM employees WHERE id IN ({','.join('?' * len(ids))})", ids).fetchall()]
         conn.execute(f"UPDATE employees SET dept = ?, synced = 0 WHERE id IN ({','.join('?' * len(ids))})", [dept] + ids)
+        conn.execute(f"UPDATE employee_dept_history SET changed_by = ? WHERE changed_by IS NULL AND employee_id IN ({','.join('?' * len(ids))})",
+                     [session.get('username', '')] + ids)
         if data.get('history', True) and names:
             ph = ','.join('?' * len(names))
             conn.execute(f"UPDATE punches SET dept = ?, synced = 0 WHERE name IN ({ph})", [dept] + names)
@@ -1866,7 +1868,11 @@ def api_employee_card(emp_id):
         audit = [dict(r) for r in conn.execute(
             "SELECT timestamp, username, action_type, old_value, new_value, reason FROM audit_log WHERE employee_name = ? ORDER BY id DESC LIMIT 60",
             (emp['name'],)).fetchall()]
+        dept_history = [dict(r) for r in conn.execute(
+            "SELECT from_dept, to_dept, changed_at, changed_by FROM employee_dept_history WHERE employee_id = ? ORDER BY id DESC LIMIT 50",
+            (emp_id,))]
         return jsonify({'ok': True, 'employee': dict(emp), 'account': dict(acc) if acc else None, 'days': days, 'moves': moves,
+                        'dept_history': dept_history,
                         'overrides': overrides, 'notifications': notes, 'sources': sources, 'audit': audit,
                         'bio': conn.execute("SELECT COUNT(*) FROM webauthn_credentials WHERE employee_id = ?", (emp_id,)).fetchone()[0],
                         'presence': {'monitored': presence_monitored(settings(), emp), 'enabled': _pcfg(settings())['enabled'],
@@ -1899,18 +1905,38 @@ def api_employee_update(emp_id):
         mode = d.get('attendance_mode', emp['attendance_mode'] or 'both')
         if mode not in MODE_SOURCES:
             mode = 'both'
+        dates = {}
+        for k in ('hire_date', 'end_date'):
+            v = (d.get(k, emp[k]) or '').strip()[:10]
+            if v:
+                try:
+                    datetime.strptime(v, '%Y-%m-%d')
+                except ValueError:
+                    return jsonify({'ok': False, 'error': 'صيغة التاريخ غير صحيحة'}), 400
+            dates[k] = v
+        if dates['hire_date'] and dates['end_date'] and dates['end_date'] < dates['hire_date']:
+            return jsonify({'ok': False, 'error': 'تاريخ انتهاء الخدمة قبل تاريخ التعيين'}), 400
+        end_reason = (d.get('end_reason', emp['end_reason']) or '').strip()[:120] if dates['end_date'] else ''
+        active = 1 if d.get('active', emp['active']) else 0
+        if dates['end_date'] and not emp['end_date']:
+            active = 0   # تسجيل انتهاء الخدمة ينقله إلى «الموظفون السابقون» ويوقف دخوله ومتابعته
         fields = {
             'name': name, 'dept': (d.get('dept', emp['dept']) or '').strip(),
             'device_uid': (d.get('device_uid', emp['device_uid']) or '').strip(),
-            'active': 1 if d.get('active', emp['active']) else 0, 'attendance_mode': mode,
+            'active': active, 'attendance_mode': mode,
             'job_title': (d.get('job_title', emp['job_title']) or '').strip()[:120],
             'phone': (d.get('phone', emp['phone']) or '').strip()[:40],
             'email': (d.get('email', emp['email']) or '').strip()[:120],
             'notes': (d.get('notes', emp['notes']) or '').strip()[:2000],
             'presence_monitor': 1 if d.get('presence_monitor', emp['presence_monitor']) else 0,
+            'national_id': (d.get('national_id', emp['national_id']) or '').strip()[:40],
+            'hire_date': dates['hire_date'], 'end_date': dates['end_date'], 'end_reason': end_reason,
         }
         conn.execute("UPDATE employees SET name = ?, dept = ?, device_uid = ?, active = ?, attendance_mode = ?, job_title = ?, "
-                     "phone = ?, email = ?, notes = ?, presence_monitor = ?, synced = 0 WHERE id = ?", (*fields.values(), emp_id))
+                     "phone = ?, email = ?, notes = ?, presence_monitor = ?, national_id = ?, hire_date = ?, end_date = ?, "
+                     "end_reason = ?, synced = 0 WHERE id = ?", (*fields.values(), emp_id))
+        conn.execute("UPDATE employee_dept_history SET changed_by = ? WHERE employee_id = ? AND changed_by IS NULL",
+                     (session.get('username', ''), emp_id))
         changed = [k for k in fields if str(fields[k] or '') != str(emp[k] or '')]
         if name != emp['name']:   # تغيير الاسم ينتقل إلى كل السجلات المرتبطة به
             tables = {r['name'] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
