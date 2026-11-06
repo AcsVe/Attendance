@@ -1725,14 +1725,31 @@ function confirmEmployeeImportMapping() {
   }).catch(() => toast('تعذّر الاستيراد', true));
 }
 
+let empStatusFilter = '';
+const empStatusOf = r => r.end_date ? 'former' : (r.active === 0 ? 'suspended' : 'active');
+
 async function loadEmployees() {
   const data = await api('/api/employees');
   if (!data) return;
+  const rows = data.rows, n = st => rows.filter(r => empStatusOf(r) === st).length;
+  // كل رقم يصفّي القائمة بحالته؛ «السابقون» = أرشيف من انتهت خدمتهم
+  document.getElementById('empStatusStats').innerHTML = [
+    ['', rows.length, 'كل الموظفين', ''], ['green', n('active'), 'فعّالون', 'active'],
+    ['orange', n('suspended'), 'معلّقون', 'suspended'], ['red', n('former'), 'الموظفون السابقون', 'former'],
+  ].map(([c, v, l, f]) => `<div class="stat-card ${c}${empStatusFilter === f ? ' active' : ''}" style="cursor:pointer" onclick="empStatusFilter = empStatusFilter === '${f}' ? '' : '${f}'; loadEmployees()">
+      <div class="stat-val">${v}</div><div class="stat-label">${l}</div></div>`).join('');
+  const label = r => r.end_date ? `<span class="badge badge-absent">سابق · ${escapeHtml(r.end_date)}</span>${r.end_reason ? ' <small style="color:var(--muted)">' + escapeHtml(r.end_reason) + '</small>' : ''}`
+    : (r.active === 0 ? '<span class="badge badge-late">معلّق</span>' : '<span class="badge badge-ontime">فعّال</span>');
   const tbody = document.getElementById('employeesTable');
-  tbody.innerHTML = data.rows.map(r => `
-    <tr><td><input type="checkbox" class="row-check" data-id="${r.id}"></td><td><a href="#" onclick="openEmployeeCard(${r.id});return false" style="font-weight:700;color:var(--primary-dark)">${escapeHtml(r.name)}</a>${r.active === 0 ? ' <span class="badge badge-absent">معلّق</span>' : ''}</td><td>${escapeHtml(r.dept || '')}</td><td dir="ltr" style="text-align:right">${escapeHtml(r.device_uid || '—')}</td>
-    <td style="white-space:nowrap"><button class="btn btn-outline btn-sm" title="ملف الموظف" onclick="openEmployeeCard(${r.id})" aria-label="ملف الموظف"><i class="fas fa-id-card" aria-hidden="true"></i></button> <button class="btn btn-red btn-sm" onclick="deleteEmployee(${r.id})" ${PERMS.can_manage_employees ? '' : 'disabled title="ليس لديك صلاحية لهذا الإجراء"'} aria-label="ليس لديك صلاحية لهذا الإجراء"><i class="fas fa-trash" aria-hidden="true"></i></button></td></tr>
-  `).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">لا يوجد موظفون بعد</td></tr>';
+  tbody.innerHTML = rows.map(r => {
+    const hide = empStatusFilter && empStatusOf(r) !== empStatusFilter;
+    return `
+    <tr${hide ? ' data-hidden-status="1" style="display:none"' : ''}><td><input type="checkbox" class="row-check" data-id="${r.id}"></td><td><a href="#" onclick="openEmployeeCard(${r.id});return false" style="font-weight:700;color:var(--primary-dark)">${escapeHtml(r.name)}</a></td><td>${escapeHtml(r.dept || '')}</td><td dir="ltr" style="text-align:right">${escapeHtml(r.device_uid || '—')}</td>
+    <td dir="ltr" style="text-align:right">${escapeHtml(r.hire_date || '—')}</td><td>${label(r)}</td>
+    <td style="white-space:nowrap"><button class="btn btn-outline btn-sm" title="ملف الموظف" onclick="openEmployeeCard(${r.id})" aria-label="ملف الموظف"><i class="fas fa-id-card" aria-hidden="true"></i></button> <button class="btn btn-red btn-sm" onclick="deleteEmployee(${r.id})" ${PERMS.can_manage_employees ? '' : 'disabled title="ليس لديك صلاحية لهذا الإجراء"'} aria-label="ليس لديك صلاحية لهذا الإجراء"><i class="fas fa-trash" aria-hidden="true"></i></button></td></tr>`;
+  }).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px">لا يوجد موظفون بعد</td></tr>';
+  if (typeof applyAllTableFilters === 'function') applyAllTableFilters();
+  tbody.querySelectorAll('tr[data-hidden-status]').forEach(tr => { tr.style.display = 'none'; });
 }
 
 async function deleteEmployee(id) {

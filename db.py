@@ -334,6 +334,27 @@ def init_db():
             cur.execute(f"ALTER TABLE employees ADD COLUMN {col} TEXT")
     if 'presence_monitor' not in emp_cols:   # مراقبة الحضور أثناء الدوام لهذا الموظف (عند اختيار «موظفون محددون»)
         cur.execute("ALTER TABLE employees ADD COLUMN presence_monitor INTEGER NOT NULL DEFAULT 0")
+    # ===== ملف الموظف الوظيفي: الرقم الوطني وتاريخ التعيين وانتهاء الخدمة (الموظفون السابقون) =====
+    for col in ('national_id', 'hire_date', 'end_date', 'end_reason'):
+        if col not in emp_cols:
+            cur.execute(f"ALTER TABLE employees ADD COLUMN {col} TEXT")
+    # ===== سجل تنقلات الأقسام: يملؤه trigger عند أي تغيير في القسم مهما كان مصدره
+    # (ملف الموظف، النقل الجماعي، الاستيراد، المزامنة)، ويُكمَل اسم المستخدم من الواجهة =====
+    cur.execute('''CREATE TABLE IF NOT EXISTS employee_dept_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id INTEGER NOT NULL,
+        from_dept TEXT,
+        to_dept TEXT,
+        changed_at TEXT,
+        changed_by TEXT
+    )''')
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_dept_history_emp ON employee_dept_history (employee_id)")
+    cur.execute('''CREATE TRIGGER IF NOT EXISTS trg_employee_dept_history AFTER UPDATE OF dept ON employees
+        WHEN COALESCE(OLD.dept, '') <> COALESCE(NEW.dept, '')
+        BEGIN
+            INSERT INTO employee_dept_history (employee_id, from_dept, to_dept, changed_at)
+            VALUES (NEW.id, OLD.dept, NEW.dept, datetime('now', 'localtime'));
+        END''')
     # ===== مراقبة الحضور أثناء الدوام: قراءات موقع دورية + تنبيهات + فحوص عشوائية =====
     cur.execute('''CREATE TABLE IF NOT EXISTS presence_pings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
