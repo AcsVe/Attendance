@@ -218,6 +218,8 @@ PERMISSION_REQUIRED_ENDPOINTS = {
     'api_devices_pull': 'can_push_devices',
     'api_devices_push': 'can_push_devices',
     'api_device_unlock': 'can_push_devices',
+    'api_device_restart': 'can_push_devices',
+    'api_devices_discover': 'can_push_devices',
     'api_device_clear_attendance': 'can_push_devices',
     'api_device_delete_users': 'can_push_devices',
     'api_devices_live_start': 'can_push_devices',
@@ -3767,6 +3769,44 @@ def api_device_unlock(dev_id):
     if not dev:
         return jsonify({'ok': False, 'error': 'الجهاز غير موجود'}), 404
     return jsonify(zk_devices.unlock_door(dict(dev), data.get('seconds', 3)))
+
+
+@app.route('/api/devices/<int:dev_id>/restart', methods=['POST'])
+@login_required
+def api_device_restart(dev_id):
+    conn = db.get_db()
+    try:
+        dev = conn.execute("SELECT * FROM devices WHERE id = ?", (dev_id,)).fetchone()
+        if not dev:
+            return jsonify({'ok': False, 'error': 'الجهاز غير موجود'}), 404
+        result = zk_devices.restart_device(dict(dev))
+        if result.get('ok'):
+            log_audit(conn, 'device_restart', 'device', new_value=dev['name'])
+            conn.commit()
+        return jsonify(result)
+    finally:
+        conn.close()
+
+
+@app.route('/api/devices/discover', methods=['POST'])
+@login_required
+def api_devices_discover():
+    """البحث عن أجهزة البصمة في الشبكة المحلية، مع تعليم المسجَّل منها مسبقاً"""
+    data = request.get_json(silent=True) or {}
+    try:
+        port = int(data.get('port') or 4370)
+    except (TypeError, ValueError):
+        port = 4370
+    result = zk_devices.discover_devices((data.get('ranges') or '').strip() or None, port=port)
+    if result.get('ok'):
+        conn = db.get_db()
+        try:
+            known = {(r['ip'], int(r['port'] or 4370)): r['name'] for r in conn.execute("SELECT name, ip, port FROM devices")}
+        finally:
+            conn.close()
+        for f in result['found']:
+            f['registered_as'] = known.get((f['ip'], f['port']), '')
+    return jsonify(result)
 
 
 @app.route('/api/devices/<int:dev_id>/clear-attendance', methods=['POST'])

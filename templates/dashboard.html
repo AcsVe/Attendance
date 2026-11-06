@@ -1052,6 +1052,19 @@
       <!-- ===== الأجهزة المسجَّلة ===== -->
       <div class="device-subtab active" id="devsub-dev-list">
         <div class="card">
+          <div class="card-title"><i class="fas fa-magnifying-glass" aria-hidden="true"></i> البحث عن أجهزة في الشبكة</div>
+          <p style="font-size:.82rem;color:var(--muted);margin-bottom:8px">يفحص شبكة الخادم المحلية بحثاً عن أجهزة البصمة، ويعرض اسم كل جهاز ورقمه التسلسلي. اترك النطاق فارغاً للبحث في شبكة الخادم، أو اكتب نطاقاً آخر.</p>
+          <div class="filter-bar" style="margin-bottom:8px">
+            <input type="text" id="discRanges" class="search-input" dir="ltr" placeholder="192.168.1.0/24 — 192.168.1.10-60" aria-label="نطاق العناوين" style="min-width:240px">
+            <input type="number" id="discPort" class="search-input" dir="ltr" value="4370" aria-label="المنفذ" style="width:100px;min-width:0">
+            <button class="btn btn-primary btn-sm" id="discBtn" onclick="discoverDevices()"><i class="fas fa-magnifying-glass" aria-hidden="true"></i> بحث</button>
+            <span id="discInfo" style="font-size:.82rem;color:var(--muted)"></span>
+          </div>
+          <div class="table-wrap hide" id="discWrap"><table class="dt-filterable">
+            <thead><tr><th>IP</th><th>اسم الجهاز</th><th>الرقم التسلسلي</th><th>الإصدار</th><th>الحالة</th><th class="no-filter">إضافة</th></tr></thead>
+            <tbody id="discTable"></tbody></table></div>
+        </div>
+        <div class="card" id="devAddCard">
           <div class="card-title"><i class="fas fa-plus" aria-hidden="true"></i> إضافة جهاز</div>
           <div class="form-grid quad">
             <div class="form-group"><label>اسم الجهاز <span style="color:#c0392b">*</span></label><input type="text" id="devName"></div>
@@ -1068,7 +1081,7 @@
           <button class="btn btn-red btn-sm" style="margin-bottom:8px" onclick="bulkDeleteSelected('devicesTable', id => '/api/devices/' + id, loadDevices)"><i class="fas fa-trash" aria-hidden="true"></i> حذف المحدد</button>
           <div class="table-wrap">
             <table class="dt-filterable">
-              <thead><tr><th class="no-filter"><input type="checkbox" onchange="toggleSelectAll('devicesTable', this.checked)"></th><th>الاسم</th><th>IP</th><th>Port</th><th>الموقع</th><th>الحالة</th><th>اختبار الاتصال</th><th>حذف</th></tr></thead>
+              <thead><tr><th class="no-filter"><input type="checkbox" onchange="toggleSelectAll('devicesTable', this.checked)"></th><th>الاسم</th><th>IP</th><th>Port</th><th>الموقع</th><th>الحالة</th><th>اختبار الاتصال</th><th class="no-filter">إعادة تشغيل</th><th>حذف</th></tr></thead>
               <tbody id="devicesTable"></tbody>
             </table>
           </div>
