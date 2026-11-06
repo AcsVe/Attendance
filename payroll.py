@@ -60,6 +60,7 @@ MENAPAY_ITEMS = [
     ('deduct_days', 'أيام الخصم (حسب القواعد)', 'DED', 'أيام'),
     ('deduct_amount', 'مبلغ خصومات الحضور', 'DEDA', 'مبلغ'),
     ('ot_amount', 'مبلغ العمل الإضافي', 'OTA', 'مبلغ'),
+    ('advance', 'أقساط السلف', 'ADV', 'مبلغ'),
     ('net', 'صافي الراتب', 'NET', 'مبلغ'),
 ]
 DEFAULT_MENAPAY = {'layout': 'long', 'code_field': 'employee_no', 'period_format': '%Y%m',
@@ -115,6 +116,26 @@ def init_tables(conn):
         created_by TEXT, created_at TEXT
     )''')
     conn.execute("CREATE TABLE IF NOT EXISTS payroll_access (user_id INTEGER PRIMARY KEY)")
+    # السلف: مبلغ يُسدَّد بأقساط شهرية تُخصم من الراتب بدءاً من شهر محدد حتى اكتمال السداد
+    conn.execute('''CREATE TABLE IF NOT EXISTS payroll_advances (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        installment REAL NOT NULL,
+        start_month TEXT NOT NULL,
+        note TEXT,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_by TEXT, created_at TEXT, updated_at TEXT
+    )''')
+    # قسط كل سلفة في كل مسيرة (يُعاد بناؤه مع المسودة، ويثبت مع اعتماد المسيرة)
+    conn.execute('''CREATE TABLE IF NOT EXISTS payroll_advance_payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        advance_id INTEGER NOT NULL,
+        run_id INTEGER NOT NULL,
+        month TEXT NOT NULL,
+        amount REAL NOT NULL,
+        UNIQUE (advance_id, run_id)
+    )''')
 
 
 # ---------------------------------------------------------------
@@ -349,11 +370,26 @@ def build_run(conn, month, user):
     for a in conn.execute("SELECT * FROM payroll_adjustments WHERE run_id = ?", (run_id,)):
         adj.setdefault(a['employee_id'], []).append(dict(a))
     conn.execute("DELETE FROM payroll_lines WHERE run_id = ?", (run_id,))
+    conn.execute("DELETE FROM payroll_advance_payments WHERE run_id = ?", (run_id,))
+    advances = {}
+    for a in conn.execute("SELECT * FROM payroll_advances WHERE active = 1 AND start_month <= ? ORDER BY id", (month,)):
+        advances.setdefault(a['employee_id'], []).append(a)
     n = 0
     for p in _profiles(conn).values():
         if not p['active'] or _num(p.get('basic')) <= 0:
             continue
         data = compute_line(p, att.get(p['name']), rl, wd)
+        for a in advances.get(p['id'], []):
+            paid = conn.execute("SELECT COALESCE(SUM(amount), 0) FROM payroll_advance_payments WHERE advance_id = ?",
+                                (a['id'],)).fetchone()[0]
+            inst = _round(min(_num(a['installment']), _num(a['amount']) - paid), rl)
+            if inst <= 0:
+                continue
+            note = (a['note'] or '').strip()
+            data['deductions'].append({'key': 'advance', 'label': 'قسط سلفة' + (f' ({note})' if note else ''), 'qty': 0,
+                                       'unit': '', 'amount': inst, 'attendance': False, 'advance_id': a['id']})
+            conn.execute("INSERT INTO payroll_advance_payments (advance_id, run_id, month, amount) VALUES (?, ?, ?, ?)",
+                         (a['id'], run_id, month, inst))
         data['adjustments'] = [{'id': a['id'], 'kind': a['kind'], 'amount': a['amount'], 'reason': a['reason'] or ''}
                                for a in adj.get(p['id'], [])]
         data['workdays'] = wd
@@ -635,7 +671,7 @@ def api_run_action(run_id):
         elif action == 'delete':
             if run['status'] == 'approved':
                 return jsonify({'ok': False, 'error': 'لا تُحذف مسيرة معتمدة — افتحها أولاً'}), 400
-            for t in ('payroll_lines', 'payroll_adjustments'):
+            for t in ('payroll_lines', 'payroll_adjustments', 'payroll_advance_payments'):
                 conn.execute(f"DELETE FROM {t} WHERE run_id = ?", (run_id,))
             conn.execute("DELETE FROM payroll_runs WHERE id = ?", (run_id,))
             _audit(conn, 'payroll_delete_draft', run['month'])
@@ -643,6 +679,127 @@ def api_run_action(run_id):
             return jsonify({'ok': False, 'error': 'طلب غير صالح'}), 400
         conn.commit()
         return jsonify({'ok': True})
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------
+#   السلف
+# ---------------------------------------------------------------
+def _advances_list(conn):
+    out = []
+    for a in conn.execute("""SELECT a.*, e.name, e.dept FROM payroll_advances a
+                             LEFT JOIN employees e ON e.id = a.employee_id ORDER BY a.id DESC"""):
+        sums = conn.execute("""SELECT COALESCE(SUM(CASE WHEN r.status = 'approved' THEN p.amount END), 0) AS paid,
+                                      COALESCE(SUM(CASE WHEN r.status != 'approved' THEN p.amount END), 0) AS draft
+                               FROM payroll_advance_payments p JOIN payroll_runs r ON r.id = p.run_id
+                               WHERE p.advance_id = ?""", (a['id'],)).fetchone()
+        remaining = max(0.0, a['amount'] - sums['paid'] - sums['draft'])
+        # «مسدّدة» فقط حين يكتمل السداد في مسيرات معتمدة؛ قسط في مسودة لم يُعتمد بعد
+        status = 'done' if a['amount'] - sums['paid'] <= 0.0005 else ('active' if a['active'] else 'stopped')
+        out.append({'id': a['id'], 'employee_id': a['employee_id'], 'name': a['name'] or '—', 'dept': a['dept'] or '',
+                    'amount': a['amount'], 'installment': a['installment'], 'start_month': a['start_month'],
+                    'note': a['note'] or '', 'active': bool(a['active']), 'paid': sums['paid'], 'draft': sums['draft'],
+                    'remaining': remaining, 'status': status,
+                    'status_label': {'done': 'مسدّدة', 'active': 'نشطة', 'stopped': 'موقوفة'}[status],
+                    'locked': bool(sums['paid'])})
+    return out
+
+
+@bp.route('/api/payroll/advances')
+def api_advances():
+    if not can_payroll():
+        return _deny()
+    conn = db.get_db()
+    try:
+        emps = [{'id': r['id'], 'name': r['name'], 'dept': r['dept'] or ''}
+                for r in conn.execute("SELECT id, name, dept FROM employees WHERE active = 1 ORDER BY name")]
+        return jsonify({'ok': True, 'advances': _advances_list(conn), 'employees': emps})
+    finally:
+        conn.close()
+
+
+@bp.route('/api/payroll/advances', methods=['POST'])
+def api_advance_save():
+    """إضافة سلفة أو تعديلها. لا يُخفَّض المبلغ عن المسدَّد في مسيرات معتمدة."""
+    if not can_payroll():
+        return _deny()
+    d = request.get_json(silent=True) or {}
+    amount, inst = _round(_num(d.get('amount')), rules()), _round(_num(d.get('installment')), rules())
+    month = _month_arg(d.get('start_month'))
+    note = (d.get('note') or '').strip()[:120]
+    if amount <= 0 or inst <= 0:
+        return jsonify({'ok': False, 'error': 'المبلغ والقسط الشهري يجب أن يكونا أكبر من صفر'}), 400
+    if inst > amount:
+        return jsonify({'ok': False, 'error': 'القسط الشهري أكبر من مبلغ السلفة'}), 400
+    if not month:
+        return jsonify({'ok': False, 'error': 'اختر شهر بدء الخصم'}), 400
+    conn = db.get_db()
+    try:
+        adv_id = int(d.get('id') or 0)
+        if adv_id:
+            a = conn.execute("SELECT * FROM payroll_advances WHERE id = ?", (adv_id,)).fetchone()
+            if not a:
+                return jsonify({'ok': False, 'error': 'السلفة غير موجودة'}), 404
+            paid = conn.execute("""SELECT COALESCE(SUM(p.amount), 0) FROM payroll_advance_payments p
+                                   JOIN payroll_runs r ON r.id = p.run_id WHERE p.advance_id = ? AND r.status = 'approved'""",
+                                (adv_id,)).fetchone()[0]
+            if amount < paid - 0.0005:
+                return jsonify({'ok': False, 'error': f'المبلغ أقل مما سُدِّد في مسيرات معتمدة ({paid:g})'}), 400
+            conn.execute("""UPDATE payroll_advances SET amount = ?, installment = ?, start_month = ?, note = ?, updated_at = ?
+                            WHERE id = ?""", (amount, inst, month, note, _now(), adv_id))
+            emp = conn.execute("SELECT name FROM employees WHERE id = ?", (a['employee_id'],)).fetchone()
+            _audit(conn, 'payroll_advance_edit', f'{amount:g} / {inst:g} من {month}', emp['name'] if emp else None)
+        else:
+            emp = conn.execute("SELECT id, name FROM employees WHERE id = ?", (int(d.get('employee_id') or 0),)).fetchone()
+            if not emp:
+                return jsonify({'ok': False, 'error': 'اختر الموظف'}), 400
+            conn.execute("""INSERT INTO payroll_advances (employee_id, amount, installment, start_month, note, active, created_by,
+                            created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)""",
+                         (emp['id'], amount, inst, month, note, session.get('username') or '', _now(), _now()))
+            _audit(conn, 'payroll_advance_add', f'{amount:g} / {inst:g} من {month}', emp['name'])
+        conn.commit()
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
+
+
+@bp.route('/api/payroll/advances/bulk', methods=['POST'])
+def api_advances_bulk():
+    """إيقاف أو تفعيل أو حذف سلف محددة. الحذف محمي: سلفة لها أقساط في مسيرة معتمدة تُوقَف ولا تُحذف."""
+    if not can_payroll():
+        return _deny()
+    d = request.get_json(silent=True) or {}
+    action = d.get('action')
+    ids = [int(i) for i in (d.get('ids') or []) if str(i).isdigit()]
+    if action not in ('stop', 'activate', 'delete') or not ids:
+        return jsonify({'ok': False, 'error': 'طلب غير صالح'}), 400
+    conn = db.get_db()
+    try:
+        done = kept = 0
+        for adv_id in ids:
+            a = conn.execute("SELECT a.*, e.name FROM payroll_advances a LEFT JOIN employees e ON e.id = a.employee_id "
+                             "WHERE a.id = ?", (adv_id,)).fetchone()
+            if not a:
+                continue
+            if action == 'delete':
+                locked = conn.execute("""SELECT 1 FROM payroll_advance_payments p JOIN payroll_runs r ON r.id = p.run_id
+                                         WHERE p.advance_id = ? AND r.status = 'approved' LIMIT 1""", (adv_id,)).fetchone()
+                if locked:
+                    kept += 1
+                    continue
+                conn.execute("DELETE FROM payroll_advance_payments WHERE advance_id = ?", (adv_id,))
+                conn.execute("DELETE FROM payroll_advances WHERE id = ?", (adv_id,))
+            else:
+                conn.execute("UPDATE payroll_advances SET active = ?, updated_at = ? WHERE id = ?",
+                             (1 if action == 'activate' else 0, _now(), adv_id))
+            _audit(conn, f'payroll_advance_{action}', f"{a['amount']:g}", a['name'])
+            done += 1
+        conn.commit()
+        msg = None
+        if kept:
+            msg = f'لم تُحذف {kept} سلفة لها أقساط في مسيرات معتمدة — أوقفها بدل حذفها.'
+        return jsonify({'ok': True, 'done': done, 'kept': kept, 'warning': msg})
     finally:
         conn.close()
 
@@ -891,6 +1048,7 @@ def _item_values(x, line, rl):
         'no_out': att.get('no_out', 0), 'ot_hours': round(att.get('ot_minutes', 0) / 60, 2),
         'weekend_work': att.get('weekend_work', 0), 'deduct_days': data.get('deduct_days', 0),
         'deduct_amount': _round(ded_att, rl), 'ot_amount': data.get('ot_amount', 0), 'net': (line or {}).get('net', 0),
+        'advance': _round(sum(d['amount'] for d in data.get('deductions', []) if d.get('key') == 'advance'), rl),
     }
 
 
