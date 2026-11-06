@@ -812,12 +812,18 @@ def payslip_html(run, lines, org, currency, logo=None):
     def money(v):
         return f'{v:,.3f}'
     parts = []
+    def qty_note(x):
+        # خارج الـ f-string: علامات التنصيص المتداخلة لا يقبلها Python قبل 3.12 (نسخة الكمبيوتر)
+        if not (x.get('qty') and x.get('unit')):
+            return ''
+        return ' <small>({:g} {})</small>'.format(x['qty'], esc(x['unit']))
+
     for ln in lines:
         d = ln['data']
         earn = ''.join(f"<tr><td>{esc(e['label'])}</td><td class=n>{money(e['amount'])}</td></tr>" for e in d['earnings'])
         earn += ''.join(f"<tr><td>{esc(a['reason'] or 'مكافأة')}</td><td class=n>{money(a['amount'])}</td></tr>"
                         for a in d.get('adjustments') or [] if a['kind'] == 'add')
-        ded = ''.join(f"<tr><td>{esc(x['label'])}{f' <small>({x['qty']:g} {esc(x['unit'])})</small>' if x.get('qty') and x.get('unit') else ''}</td>"
+        ded = ''.join(f"<tr><td>{esc(x['label'])}{qty_note(x)}</td>"
                       f"<td class=n>{money(x['amount'])}</td></tr>" for x in d['deductions'] if x['amount'])
         ded += ''.join(f"<tr><td>{esc(a['reason'] or 'خصم')}</td><td class=n>{money(a['amount'])}</td></tr>"
                        for a in d.get('adjustments') or [] if a['kind'] == 'deduct')
