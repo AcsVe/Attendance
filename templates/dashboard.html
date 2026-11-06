@@ -858,6 +858,7 @@
       <div class="subtab-nav">
         <button class="subtab-btn active" data-subtab="runs" onclick="prSub('runs')"><i class="fas fa-file-invoice-dollar" aria-hidden="true"></i> مسيرات الرواتب</button>
         <button class="subtab-btn" data-subtab="profiles" onclick="prSub('profiles')"><i class="fas fa-id-card" aria-hidden="true"></i> رواتب الموظفين</button>
+        <button class="subtab-btn" data-subtab="advances" onclick="prSub('advances')"><i class="fas fa-hand-holding-dollar" aria-hidden="true"></i> السلف</button>
         <button class="subtab-btn" data-subtab="rules" onclick="prSub('rules')"><i class="fas fa-sliders" aria-hidden="true"></i> قواعد الاحتساب</button>
         <button class="subtab-btn" data-subtab="menapay" onclick="prSub('menapay')"><i class="fas fa-right-left" aria-hidden="true"></i> الربط مع MenaPAY</button>
         <button class="subtab-btn" data-subtab="access" id="prAccessBtn" onclick="prSub('access')"><i class="fas fa-user-lock" aria-hidden="true"></i> الصلاحيات</button>
@@ -898,7 +899,7 @@
           <div class="table-wrap" style="max-height:520px"><table class="dt-filterable" id="prLinesTable">
             <thead><tr><th class="no-filter"><input type="checkbox" aria-label="تحديد الكل" onchange="prCheckAll(this.checked)"></th>
               <th>الرقم الوظيفي</th><th>الموظف</th><th>القسم</th><th>الأساسي</th><th>العلاوات</th><th>الإضافي والمكافآت</th>
-              <th>خصومات الحضور</th><th>الضمان والضريبة</th><th>تعديلات يدوية</th><th>الإجمالي</th><th>الاستقطاعات</th><th>الصافي</th></tr></thead>
+              <th>خصومات الحضور</th><th>الضمان والضريبة والسلف</th><th>تعديلات يدوية</th><th>الإجمالي</th><th>الاستقطاعات</th><th>الصافي</th></tr></thead>
             <tbody id="prLines"></tbody></table></div>
           <div id="prLineDetail" class="hide" style="margin-top:12px"></div>
         </div>
@@ -942,6 +943,38 @@
           <div class="form-group"><label for="prEdNotes">ملاحظات</label><input type="text" id="prEdNotes" maxlength="300"></div>
           <button class="btn btn-primary" onclick="prSaveProfile()"><i class="fas fa-save" aria-hidden="true"></i> حفظ</button>
           <button class="btn btn-outline" onclick="document.getElementById('prEditCard').classList.add('hide')">إغلاق</button>
+        </div>
+      </div>
+
+      <div class="pr-sub" id="prsub-advances">
+        <div class="card">
+          <div class="card-title"><i class="fas fa-hand-holding-dollar" aria-hidden="true"></i> السلف — العدد: <span id="prAdvCount">0</span></div>
+          <p style="font-size:.8rem;color:var(--muted);margin-bottom:10px">يُخصم قسط كل سلفة نشطة تلقائياً عند احتساب مسيرة كل شهر، بدءاً من شهر البدء حتى اكتمال السداد، ويظهر في قسيمة الراتب. السلفة التي لها أقساط في مسيرة معتمدة لا تُحذف، وتُوقَف بدلاً من ذلك.</p>
+          <div class="stats-grid" id="prAdvStats"></div>
+          <div class="form-grid quad">
+            <div class="form-group"><label for="prAdvEmp">الموظف</label><select id="prAdvEmp"></select></div>
+            <div class="form-group"><label for="prAdvAmount">مبلغ السلفة</label><input type="number" id="prAdvAmount" min="0" step="0.001"></div>
+            <div class="form-group"><label for="prAdvInst">القسط الشهري</label><input type="number" id="prAdvInst" min="0" step="0.001"></div>
+            <div class="form-group"><label for="prAdvMonth">يبدأ الخصم من شهر</label><input type="month" id="prAdvMonth"></div>
+          </div>
+          <div class="form-group"><label for="prAdvNote">ملاحظة (تظهر في القسيمة بجانب القسط)</label><input type="text" id="prAdvNote" maxlength="120"></div>
+          <p id="prAdvPlan" style="font-size:.82rem;color:var(--muted);margin:-4px 0 8px"></p>
+          <div class="filter-bar" style="margin-bottom:12px">
+            <button class="btn btn-primary btn-sm" id="prAdvSaveBtn" onclick="prAdvSave()"><i class="fas fa-plus" aria-hidden="true"></i> <span id="prAdvSaveLbl">إضافة سلفة</span></button>
+            <button class="btn btn-outline btn-sm hide" id="prAdvNewBtn" onclick="prAdvNew()"><i class="fas fa-xmark" aria-hidden="true"></i> إلغاء التعديل</button>
+          </div>
+          <div class="filter-bar" style="margin-bottom:8px">
+            <select id="prAdvAction" class="search-input" style="width:auto;min-width:0" aria-label="إجراء جماعي">
+              <option value="">إجراء جماعي للمحددين…</option><option value="stop">إيقاف الخصم</option>
+              <option value="activate">استئناف الخصم</option><option value="delete">حذف</option></select>
+            <button class="btn btn-primary btn-sm" onclick="prAdvBulk()"><i class="fas fa-check-double" aria-hidden="true"></i> تطبيق</button>
+            <span style="font-size:.8rem;color:var(--muted)">المحددون: <b id="prAdvSel">0</b></span>
+          </div>
+          <div class="table-wrap" style="max-height:520px"><table class="dt-filterable" id="prAdvTable">
+            <thead><tr><th class="no-filter"><input type="checkbox" aria-label="تحديد الكل" onchange="prAdvCheckAll(this.checked)"></th>
+              <th>الموظف</th><th>القسم</th><th>المبلغ</th><th>القسط الشهري</th><th>بدء الخصم</th><th>المسدَّد</th>
+              <th>في مسودة</th><th>المتبقي</th><th>الحالة</th><th>ملاحظة</th><th class="no-filter">تعديل</th></tr></thead>
+            <tbody id="prAdvances"></tbody></table></div>
         </div>
       </div>
 

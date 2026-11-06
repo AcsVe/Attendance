@@ -11,6 +11,7 @@ function prSub(name) {
   document.querySelectorAll('#tab-payroll .pr-sub').forEach(p => p.classList.toggle('active', p.id === 'prsub-' + name));
   document.querySelectorAll('#tab-payroll .subtab-btn').forEach(b => b.classList.toggle('active', b.dataset.subtab === name));
   if (name === 'profiles') prProfilesLoad();
+  if (name === 'advances') prAdvLoad();
 }
 
 async function prLoad() {
@@ -382,3 +383,115 @@ async function prAccess(grant) {
 }
 
 window.EXTRA_LOADERS = Object.assign(window.EXTRA_LOADERS || {}, { payroll: prLoad });
+
+/* ---------------- السلف ---------------- */
+let prAdv = { rows: [], employees: [], editId: null, statusFilter: '' };
+
+async function prAdvLoad() {
+  let d;
+  try { d = await api('/api/payroll/advances'); } catch (e) { return; }
+  if (!d) return;
+  prAdv.rows = d.advances; prAdv.employees = d.employees;
+  const sel = document.getElementById('prAdvEmp'), keep = sel.value;
+  sel.innerHTML = '<option value="">— اختر الموظف —</option>' + d.employees.map(e =>
+    `<option value="${e.id}">${prEsc(e.name)}${e.dept ? ' — ' + prEsc(e.dept) : ''}</option>`).join('');
+  sel.value = keep;
+  const m = document.getElementById('prAdvMonth');
+  if (!m.value) { const n = new Date(); m.value = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`; }
+  prAdvRender();
+}
+
+function prAdvRender() {
+  const rows = prAdv.rows, count = st => rows.filter(r => r.status === st).length;
+  const remaining = rows.filter(r => r.status !== 'done').reduce((a, r) => a + r.remaining, 0);
+  document.getElementById('prAdvCount').textContent = rows.length;
+  // كل رقم يُصفّي الجدول بحالته
+  document.getElementById('prAdvStats').innerHTML = [
+    ['', rows.length, 'كل السلف', ''], ['green', count('active'), 'نشطة', 'active'],
+    ['orange', count('stopped'), 'موقوفة', 'stopped'], ['', count('done'), 'مسدّدة', 'done'],
+    ['red', prMoney(remaining), 'المتبقي على الموظفين', 'open'],
+  ].map(([c, v, l, f]) => `<div class="stat-card ${c}${prAdv.statusFilter === f ? ' active' : ''}" style="cursor:pointer" onclick="prAdvStatFilter('${f}')">
+      <div class="stat-val" dir="ltr">${v}</div><div class="stat-label">${l}</div></div>`).join('');
+  document.getElementById('prAdvances').innerHTML = rows.map(r => {
+    const show = !prAdv.statusFilter || (prAdv.statusFilter === 'open' ? r.status !== 'done' : r.status === prAdv.statusFilter);
+    const badge = r.status === 'active' ? 'badge-ontime' : (r.status === 'stopped' ? 'badge-late' : 'badge-absent');
+    return `<tr data-status="${r.status}"${show ? '' : ' data-hidden-status="1" style="display:none"'}>
+      <td><input type="checkbox" class="pr-adv" data-id="${r.id}" aria-label="تحديد" onchange="prAdvSel()"></td>
+      <td><b>${prEsc(r.name)}</b></td><td>${prEsc(r.dept)}</td>
+      <td dir="ltr">${prMoney(r.amount)}</td><td dir="ltr">${prMoney(r.installment)}</td><td dir="ltr">${prEsc(r.start_month)}</td>
+      <td dir="ltr">${prMoney(r.paid)}</td><td dir="ltr">${r.draft ? prMoney(r.draft) : '—'}</td>
+      <td dir="ltr"><b>${prMoney(r.remaining)}</b></td>
+      <td><span class="badge ${badge}">${prEsc(r.status_label)}</span></td><td>${prEsc(r.note) || '—'}</td>
+      <td><button class="btn btn-outline btn-sm" onclick="prAdvEdit(${r.id})" aria-label="تعديل"><i class="fas fa-pen" aria-hidden="true"></i></button></td></tr>`;
+  }).join('') || '<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:14px">لا توجد سلف — أضف سلفة من النموذج أعلاه</td></tr>';
+  prAdvSel();
+  if (typeof applyAllTableFilters === 'function') applyAllTableFilters();
+  // تصفية الحالة من الأرقام تبقى فوق تصفية الأعمدة
+  document.querySelectorAll('#prAdvances tr[data-hidden-status]').forEach(tr => { tr.style.display = 'none'; });
+}
+
+function prAdvStatFilter(f) { prAdv.statusFilter = prAdv.statusFilter === f ? '' : f; prAdvRender(); }
+function prAdvCheckAll(on) { document.querySelectorAll('.pr-adv').forEach(c => { if (c.closest('tr').style.display !== 'none') c.checked = on; }); prAdvSel(); }
+function prAdvSel() { document.getElementById('prAdvSel').textContent = document.querySelectorAll('.pr-adv:checked').length; }
+
+function prAdvPlan() {
+  const a = prNum(document.getElementById('prAdvAmount').value), i = prNum(document.getElementById('prAdvInst').value);
+  document.getElementById('prAdvPlan').textContent = a > 0 && i > 0 && i <= a
+    ? `عدد الأقساط: ${Math.ceil(a / i - 1e-9)}${a % i > 1e-9 ? ` (الأخير ${prMoney(a - Math.floor(a / i) * i)})` : ''}` : '';
+}
+['prAdvAmount', 'prAdvInst'].forEach(id => document.getElementById(id).addEventListener('input', prAdvPlan));
+
+function prAdvNew() {
+  prAdv.editId = null;
+  ['prAdvAmount', 'prAdvInst', 'prAdvNote'].forEach(id => { document.getElementById(id).value = ''; });
+  const emp = document.getElementById('prAdvEmp'); emp.value = ''; emp.disabled = false;
+  document.getElementById('prAdvSaveLbl').textContent = 'إضافة سلفة';
+  document.getElementById('prAdvNewBtn').classList.add('hide');
+  prAdvPlan();
+}
+
+function prAdvEdit(id) {
+  const r = prAdv.rows.find(x => x.id === id);
+  if (!r) return;
+  prAdv.editId = id;
+  const emp = document.getElementById('prAdvEmp');
+  if (![...emp.options].some(o => +o.value === r.employee_id)) emp.insertAdjacentHTML('beforeend', `<option value="${r.employee_id}">${prEsc(r.name)}</option>`);
+  emp.value = r.employee_id; emp.disabled = true;
+  document.getElementById('prAdvAmount').value = r.amount;
+  document.getElementById('prAdvInst').value = r.installment;
+  document.getElementById('prAdvMonth').value = r.start_month;
+  document.getElementById('prAdvNote').value = r.note;
+  document.getElementById('prAdvSaveLbl').textContent = 'حفظ التعديل';
+  document.getElementById('prAdvNewBtn').classList.remove('hide');
+  prAdvPlan();
+  document.getElementById('prAdvEmp').scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+async function prAdvSave() {
+  const body = {
+    id: prAdv.editId, employee_id: +document.getElementById('prAdvEmp').value,
+    amount: document.getElementById('prAdvAmount').value, installment: document.getElementById('prAdvInst').value,
+    start_month: document.getElementById('prAdvMonth').value, note: document.getElementById('prAdvNote').value,
+  };
+  let d;
+  try { d = await api('/api/payroll/advances', { method: 'POST', body: JSON.stringify(body) }); } catch (e) { return; }
+  if (!d) return;
+  toast(prAdv.editId ? 'حُفظ التعديل' : 'أُضيفت السلفة — يُخصم قسطها عند احتساب المسيرة');
+  prAdvNew();
+  prAdvLoad();
+}
+
+async function prAdvBulk() {
+  const action = document.getElementById('prAdvAction').value;
+  const ids = [...document.querySelectorAll('.pr-adv:checked')].filter(c => c.closest('tr').style.display !== 'none').map(c => +c.dataset.id);
+  if (!action) { toast('اختر الإجراء', true); return; }
+  if (!ids.length) { toast('حدّد سلفة واحدة على الأقل', true); return; }
+  const verb = { stop: 'إيقاف الخصم من', activate: 'استئناف الخصم من', delete: 'حذف' }[action];
+  if (!confirm(`${verb} ${ids.length} سلفة؟`)) return;
+  let d;
+  try { d = await api('/api/payroll/advances/bulk', { method: 'POST', body: JSON.stringify({ action, ids }) }); } catch (e) { return; }
+  if (!d) return;
+  if (d.warning) toast(d.warning, true); else toast(`تم: ${d.done}`);
+  document.getElementById('prAdvAction').value = '';
+  prAdvLoad();
+}
