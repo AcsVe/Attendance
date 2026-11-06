@@ -33,7 +33,7 @@
 <nav class="sidebar" id="sidebar">
   <a class="side-brand" href="#dashboard" onclick="showTab('dashboard');return false">
     {% include '_brand_logo.html' %}
-    <span class="org" data-notr title="{{ org_display or 'الجمعية الثقافية العربية - مدرسة الرائد العربي' }}">{{ org_display or 'الجمعية الثقافية العربية - مدرسة الرائد العربي' }}</span>
+    {% if org_display and org_display != 'نظام الحضور والانصراف' %}<span class="org" data-notr title="{{ org_display }}">{{ org_display }}</span>{% endif %}
     <span class="sys">نظام الحضور والانصراف</span>
   </a>
   <div class="sidebar-nav" role="navigation" aria-label="القائمة الرئيسية">

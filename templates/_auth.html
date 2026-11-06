@@ -29,12 +29,12 @@
   <button type="button" class="auth-theme" data-notr onclick="attToggleTheme()" title="الوضع الفاتح/الداكن" aria-label="تبديل الوضع الداكن"><i id="themeIcon" class="fas fa-moon" aria-hidden="true"></i></button>
   <div class="auth-lang">{% include '_lang.html' %}</div>
   <div class="logo-circle">{% include '_brand_logo.html' %}</div>
-  <div class="brand-title" data-notr>{{ org_display or 'الجمعية الثقافية العربية - مدرسة الرائد العربي' }}</div>
+  {% if org_display and org_display != 'نظام الحضور والانصراف' %}<div class="brand-title" data-notr>{{ org_display }}</div>{% endif %}
   <div class="brand-sub">{% block sub %}نظام الحضور والانصراف{% endblock %}</div>
   <h1>{% block heading %}{% endblock %}</h1>
   {% block body %}{% endblock %}
 </div></div>
-<footer class="auth-foot">© {{ now_year }} <b data-notr>{{ org_display or 'الجمعية الثقافية العربية - مدرسة الرائد العربي' }}</b></footer>
+<footer class="auth-foot">© {{ now_year }} <b data-notr>{{ org_display or 'نظام الحضور والانصراف' }}</b></footer>
 <script>
 function attToggleTheme(){var r=document.documentElement,d=r.getAttribute('data-theme')==='dark';r.setAttribute('data-theme',d?'light':'dark');try{localStorage.setItem('att_theme',d?'light':'dark');}catch(e){}attThemeIcon();}
 function attThemeIcon(){var b=document.getElementById('themeIcon');if(b)b.className=document.documentElement.getAttribute('data-theme')==='dark'?'fas fa-sun':'fas fa-moon';}
