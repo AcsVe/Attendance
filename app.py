@@ -101,6 +101,8 @@ import displays as _displays  # noqa: E402 — شاشات العرض (مشاهد
 app.register_blueprint(_displays.bp)
 import payroll as _payroll  # noqa: E402 — الرواتب (بديل MenaPAY) والربط مع MenaPAY/MenaITech
 app.register_blueprint(_payroll.bp)
+import shifts as _shifts  # noqa: E402 — المناوبات المسمّاة وإسنادها للموظفين
+app.register_blueprint(_shifts.bp)
 try:
     _c = db.get_db()
     _adms.init_tables(_c)
@@ -111,6 +113,7 @@ try:
     _vacations.init_tables(_c)
     _displays.init_tables(_c)
     _payroll.init_tables(_c)
+    _shifts.init_tables(_c)
     _c.commit()
     _c.close()
 except Exception:
@@ -209,6 +212,10 @@ PERMISSION_REQUIRED_ENDPOINTS = {
     'api_settings': 'can_edit_org_settings',
     'api_settings_logo': 'can_edit_org_settings',
     'api_shift_names': 'can_edit_org_settings',
+    'shifts.api_shift_save': 'can_edit_org_settings',
+    'shifts.api_shifts_bulk': 'can_edit_org_settings',
+    'shifts.api_shifts_assign': 'can_edit_org_settings',
+    'shifts.api_assignments_bulk': 'can_edit_org_settings',
     'api_dept_times': 'can_edit_org_settings',
     'api_dept_time_delete': 'can_edit_org_settings',
 
@@ -1196,6 +1203,7 @@ def api_overtime():
     ) for r in dept_rows}
     shift1_names = json.loads(db.get_setting('shift1_names_json', '[]'))
     shift2_names = json.loads(db.get_setting('shift2_names_json', '[]'))
+    settings = dict(settings, _named_shifts=_shifts.load(conn))
     conn.close()
 
     records = overtime_engine.calculate(rows, settings, dept_times, shift1_names, shift2_names,
@@ -1262,6 +1270,7 @@ def api_overtime_export_csv():
     ) for r in dept_rows}
     shift1_names = json.loads(db.get_setting('shift1_names_json', '[]'))
     shift2_names = json.loads(db.get_setting('shift2_names_json', '[]'))
+    settings = dict(settings, _named_shifts=_shifts.load(conn))
     conn.close()
 
     records = overtime_engine.calculate(rows, settings, dept_times, shift1_names, shift2_names,
@@ -1742,6 +1751,7 @@ def api_employee_delete(emp_id):
         conn.execute(f"DELETE FROM {t} WHERE employee_id = ?", (emp_id,))
     conn.execute("DELETE FROM employees WHERE id = ?", (emp_id,))
     if emp:
+        conn.execute("DELETE FROM employee_shifts WHERE name = ?", (emp['name'],))   # إسناد المناوبات يتبع الموظف
         log_audit(conn, 'employee_delete', 'employee', emp['name'], new_value='حذف الموظف وحساب التطبيق')
     conn.commit()
     conn.close()
@@ -2347,6 +2357,7 @@ def run_full_analysis(conn):
         settings = dict(settings)
         settings['_open_depts'] = [r['dept'] for r in conn.execute("SELECT dept FROM dept_attendance_settings WHERE open_hours = 1")]
         settings['_lunch'] = _lunch_map(conn, settings)
+        settings['_named_shifts'] = _shifts.load(conn)
         try:   # «الآن» بتوقيت النظام (Asia/Amman) لمعرفة هل انتهى دوام اليوم (نسيان الانصراف)
             from mobile import now_local as _now_local
             settings['_now'] = _now_local().strftime('%Y-%m-%d %H:%M')

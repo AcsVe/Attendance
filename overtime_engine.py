@@ -9,6 +9,7 @@
 """
 import pandas as pd
 
+import shifts
 from attendance_engine import parse_time_str, parse_time_val, to_minutes, is_weekend_date
 
 
@@ -36,6 +37,7 @@ def calculate(rows, settings, dept_times, shift1_names, shift2_names,
     shift1_end = parse_time_str(settings.get('shift1_end')) if settings.get('shift1_end') else None
     shift2_end = parse_time_str(settings.get('shift2_end')) if settings.get('shift2_end') else None
     custom_end_t = parse_time_str(custom_end) if (use_custom_hours and custom_end) else None
+    named = settings.get('_named_shifts') or {}
 
     records = []
     for row in rows:
@@ -47,8 +49,13 @@ def calculate(rows, settings, dept_times, shift1_names, shift2_names,
         name = row.get('name')
         dept = row.get('dept')
 
+        date_val = pd.to_datetime(row.get('date'), errors='coerce')
+        ns = (shifts.find(named, name, row.get('date') or '', date_val.weekday())
+              if named and pd.notna(date_val) else None)
         if use_custom_hours and custom_end_t is not None:
             scheduled_end = custom_end_t
+        elif ns:   # المناوبة المسمّاة لهذا اليوم (shifts.py)
+            scheduled_end = parse_time_str(ns[1])
         elif name in shift2_names and shift2_end is not None:
             scheduled_end = shift2_end
         elif name in shift1_names and shift1_end is not None:
@@ -65,7 +72,6 @@ def calculate(rows, settings, dept_times, shift1_names, shift2_names,
         if ot_minutes <= 0:
             continue
 
-        date_val = pd.to_datetime(row.get('date'), errors='coerce')
         records.append({
             'name': name,
             'dept': dept or '',
