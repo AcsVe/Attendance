@@ -52,7 +52,7 @@ function urRender() {
     <td><span class="badge ${r.role === 'admin' ? 'badge-absent' : r.role === 'viewer' ? 'badge-none' : 'badge-late'}">${UR_ROLE[r.role] || r.role}</span></td>
     <td>${mark(r, 'can_manage_employees')}</td><td>${mark(r, 'can_push_devices')}</td><td>${mark(r, 'can_edit_org_settings')}</td><td>${mark(r, 'can_manage_departments')}</td>
     <td><small>${r.allowed_departments.length ? r.allowed_departments.map(escapeHtml).join('، ') : 'كل الأقسام'}</small></td>
-    <td><small>${r.last_login_at ? escapeHtml(r.last_login_at) + '<br><span dir="ltr" style="color:var(--muted)">' + escapeHtml(r.last_login_ip || '') + '</span>' : '<span style="color:#c0392b">لم يدخل</span>'}</small></td></tr>`).join('')
+    <td><small>${r.last_login_at ? '<span dir="ltr">' + escapeHtml(r.last_login_at) + '</span><br><span dir="ltr" style="color:var(--muted)">' + escapeHtml(r.last_login_ip || '') + '</span>' : '<span style="color:#c0392b">لم يدخل</span>'}</small></td></tr>`).join('')
     || '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:16px">لا يوجد مستخدمون مطابقون</td></tr>';
   document.getElementById('urAll').checked = false;
   urCount();

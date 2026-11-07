@@ -132,7 +132,7 @@ function maRender() {
       <td><a href="#" onclick="openEmployeeCard(${r.id});return false" style="font-weight:800;color:var(--primary-dark)">${mEsc(r.name)}</a>${r.active ? '' : ' <span class="badge badge-absent">معلّق</span>'}${r.device_uid ? `<br><small style="color:var(--muted)">بصمة ${mEsc(r.device_uid)}</small>` : ''}</td>
       <td>${mEsc(r.dept || '—')}</td><td><small>${MODE_LABEL[r.attendance_mode || 'both']}</small>${r.bio_mode === 'required' ? '<br><small style="color:#0a6640">بصمة إلزامية</small>' : r.bio_mode === 'optional' ? '<br><small style="color:var(--muted)">بصمة اختيارية</small>' : r.bio_mode === 'off' ? '<br><small style="color:var(--muted)">بلا بصمة</small>' : ''}</td>
       <td dir="ltr" style="text-align:right">${r.has_account ? mEsc(r.username) : '<span style="color:var(--muted)">—</span>'}</td>
-      <td>${r.device_label ? `${mEsc(r.device_label)}<br><small style="color:var(--muted)">${mEsc(r.bound_at || '')}</small>` : (r.has_account ? '<span class="badge badge-late">لم يُربط بعد</span>' : '—')}</td>
+      <td>${r.device_label ? `${mEsc(r.device_label)}<br><small style="color:var(--muted)" dir="ltr">${mEsc(r.bound_at || '')}</small>` : (r.has_account ? '<span class="badge badge-late">لم يُربط بعد</span>' : '—')}</td>
       <td><small>${mEsc(r.last_move || '—')}</small></td>
       <td>${!r.has_account ? '<span class="badge badge-none">بدون حساب</span>' : (r.acc_active ? '<span class="badge badge-ontime">مفعّل</span>' : '<span class="badge badge-absent">موقوف</span>')}${r.anywhere ? ' <span class="badge badge-holiday" title="يسجّل من أي مكان">أي مكان</span>' : ''}</td>
       <td><button class="btn btn-outline btn-sm" onclick="maEdit(${r.id})" title="تعديل اسم المستخدم/كلمة المرور" aria-label="تعديل اسم المستخدم/كلمة المرور"><i class="fas fa-pen" aria-hidden="true"></i></button></td></tr>`).join('')
@@ -714,7 +714,7 @@ async function openEmployeeCard(id) {
     <div class="card" style="margin-top:14px;background:#f8fbfc">
       <div class="card-title"><i class="fas fa-mobile-screen" aria-hidden="true"></i> حساب التطبيق</div>
       ${a ? `<div style="line-height:2">اسم المستخدم: <b dir="ltr">${mEsc(a.username)}</b> · ${a.active ? 'مفعّل' : '<b style="color:#c0392b">موقوف</b>'}${a.anywhere ? ' · يسجّل من أي مكان' : ''}<br>
-        الهاتف: ${a.device_label ? mEsc(a.device_label) + ' <small>(' + mEsc(a.bound_at || '') + ')</small>' : 'لم يُربط بعد'} · آخر دخول: ${mEsc(a.last_login_at || '—')} · البصمة الحيوية: ${d.bio ? 'مفعّلة' : '—'}</div>
+        الهاتف: ${a.device_label ? mEsc(a.device_label) + ' <small>(<span dir="ltr">' + mEsc(a.bound_at || '') + '</span>)</small>' : 'لم يُربط بعد'} · آخر دخول: <span dir="ltr">${mEsc(a.last_login_at || '—')}</span> · البصمة الحيوية: ${d.bio ? 'مفعّلة' : '—'}</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
           <button class="btn btn-outline btn-sm" onclick="ecAcc('reset_password')"><i class="fas fa-key" aria-hidden="true"></i> كلمة مرور جديدة</button>
           <button class="btn btn-outline btn-sm" onclick="ecAcc('unbind')"><i class="fas fa-link-slash" aria-hidden="true"></i> فكّ ربط الهاتف</button>

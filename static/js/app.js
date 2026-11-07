@@ -1204,7 +1204,7 @@ async function loadManualEntries() {
       <td><input type="checkbox" class="row-check" data-id="${r.id}"></td>
       <td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.date)}</td>
       <td>${escapeHtml(r.time_in || '—')}</td><td>${escapeHtml(r.time_out || '—')}</td>
-      <td>${escapeHtml(r.reason)}</td><td>${escapeHtml(r.entered_at)}</td>
+      <td>${escapeHtml(r.reason)}</td><td><span dir="ltr">${escapeHtml(r.entered_at)}</span></td>
       <td><button class="btn btn-red btn-sm" onclick="deleteManualEntry(${r.id})" aria-label="حذف" title="حذف"><i class="fas fa-trash" aria-hidden="true"></i></button></td>
     </tr>`).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:16px">لا توجد إدخالات يدوية</td></tr>';
 }
@@ -1599,7 +1599,7 @@ async function loadAuditLog() {
   const tbody = document.getElementById('auditTable');
   tbody.innerHTML = data.rows.map(r => `
     <tr${r.action_type === 'login_failed' ? ' style="background:#fff5f5"' : ''}>
-      <td style="white-space:nowrap">${escapeHtml(r.timestamp)}</td><td dir="ltr" style="text-align:right">${escapeHtml(r.username || '')}</td>
+      <td style="white-space:nowrap"><span dir="ltr">${escapeHtml(r.timestamp)}</span></td><td dir="ltr" style="text-align:right">${escapeHtml(r.username || '')}</td>
       <td>${escapeHtml(AUDIT_ACTION_LABELS[r.action_type] || r.action_type)}</td>
       <td>${escapeHtml(AUDIT_TARGET_LABELS[r.target_type] || r.target_type)}</td>
       <td>${escapeHtml(r.employee_name || '')}</td><td>${escapeHtml(r.date_affected || '')}</td>
@@ -2785,7 +2785,7 @@ async function loadUsers() {
       <select id="${p}Depts" class="search-input" multiple size="3" style="margin-top:6px;height:auto;min-width:150px"></select>
       <button class="btn btn-primary btn-sm" onclick="saveUserPerms(${r.id})" style="margin-top:6px"><i class="fas fa-save" aria-hidden="true"></i> حفظ</button>
     </td>
-    <td>${escapeHtml(r.created_at)}</td>
+    <td><span dir="ltr">${escapeHtml(r.created_at)}</span></td>
     <td style="white-space:nowrap"><button class="btn btn-outline btn-sm" title="كلمة مرور جديدة" aria-label="كلمة مرور جديدة" onclick="setUserPassword(${r.id}, '${escapeHtml(r.username)}')"><i class="fas fa-key" aria-hidden="true"></i></button>
       <button class="btn btn-red btn-sm" title="حذف" aria-label="حذف" onclick="deleteUser(${r.id})"><i class="fas fa-trash" aria-hidden="true"></i></button></td></tr>
   `;

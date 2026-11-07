@@ -63,12 +63,16 @@ AUDIT_JS = r"""(args) => {
       const large = fs >= 24 || (fs >= 18.6 && fw >= 700);
       if (ratio < (large ? 3 : 4.5)) add('c' + txt, 'contrast', `${ratio.toFixed(2)} «${txt}» ${el.tagName}.${el.className}`);
     }
+    // تاريخ ووقت بلا حروف (2026-11-06 18:05) داخل عنصر من اليمين لليسار: يظهر الوقت قبل التاريخ
+    const own2 = [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(' ').trim();
+    if (s.direction === 'rtl' && /^\d{4}-\d{2}-\d{2}[ T]\d{1,2}:\d{2}/.test(own2) && s.unicodeBidi !== 'plaintext')
+      add('t' + own2, 'bidi', `rtl «${own2.slice(0, 40)}» ${el.tagName}.${el.className}`);
     if (fs < 13) add('s' + txt, 'small', `${fs}px «${txt}» ${el.tagName}.${el.className}`);
     const full = s.unicodeBidi === 'plaintext' ? '' : [...el.childNodes].map(textOf).join('').replace(/\s+/g, ' ').trim();
     const want = firstStrong(full);
     if (want && want !== s.direction && NEUTRAL.test(full) && (AR.test(full) && LA.test(full) || want === 'rtl' ? true : /^[^A-Za-z]|[^A-Za-z0-9]$/.test(full))
         && !el.closest('code,pre,kbd,input,textarea')) add('d' + full, 'bidi', `${s.direction} «${full.slice(0, 60)}» ${el.tagName}.${el.className}`);
-    if (checkArabic) {
+    if (checkArabic && !el.closest('[data-content]')) {   // data-content: محتوى يكتبه المستخدم (اسم بلغتين مثلاً)
       const ownTxt = [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(' ').replace(/\s+/g, ' ').trim();
       if (AR.test(ownTxt) && !okList.some((w) => ownTxt === w)) add('u' + ownTxt, 'untranslated', `«${ownTxt.slice(0, 70)}» ${el.tagName}.${el.className}`);
     }
