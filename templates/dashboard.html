@@ -1632,7 +1632,7 @@
             <small style="display:block;font-weight:400;color:var(--muted)">أول بصمة في اليوم حضور وآخرها انصراف، وما بينهما أزواج «خروج ← عودة» تُخصم مدتها من ساعات العمل وتظهر في التقارير. البصمتان خلال دقيقتين تُعدّان ضغطة مكررة، والبصمة الوسطى المنفردة تُهمَل. لا يُخصم ما يغطيه إذن مغادرة مرتين.</small></span>
         </label>
         <label style="display:flex;align-items:flex-start;gap:8px;font-weight:600;margin-top:10px;line-height:1.7">
-          <input type="checkbox" id="setLunchEnabled" style="margin-top:6px" onchange="document.getElementById('lunchTimes').style.opacity = this.checked ? 1 : .5">
+          <input type="checkbox" id="setLunchEnabled" style="margin-top:6px" onchange="lunchUi()">
           <span>استثناء استراحة الغداء
             <small style="display:block;font-weight:400;color:var(--muted)">الخروج والعودة أثناء استراحة الغداء (بالبصمة أو بالتطبيق) لا يُخصم من ساعات العمل. الوقت أدناه عام، ولكل قسم وقت خاص أو «بلا استراحة» من صفحة «أوقات الأقسام».</small></span>
         </label>

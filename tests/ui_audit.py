@@ -39,7 +39,8 @@ AUDIT_JS = r"""(args) => {
   const AR = /[؀-ۿ]/, LA = /[A-Za-z]/, NEUTRAL = /[0-9٠-٩.:*?؟()\-–—%/]/;
   const firstStrong = (t) => { for (const ch of t) { if (AR.test(ch)) return 'rtl'; if (LA.test(ch)) return 'ltr'; } return null; };
   const isolated = (n) => n.nodeType === 1 && (n.tagName === 'BDI' || n.hasAttribute('dir') || getComputedStyle(n).unicodeBidi === 'plaintext');
-  const textOf = (n) => n.nodeType === 3 ? n.textContent : (isolated(n) ? ' ' : [...n.childNodes].map(textOf).join(''));
+  // النص بين علامتي العزل (U+2068…U+2069) يأخذ اتجاهه بنفسه
+  const textOf = (n) => n.nodeType === 3 ? n.textContent.replace(/\u2068[^\u2069]*\u2069/g, ' ') : (isolated(n) ? ' ' : [...n.childNodes].map(textOf).join(''));
   const out = { contrast: [], small: [], bidi: [], untranslated: [] };
   const seen = new Set();
   const add = (k, list, msg) => { if (!seen.has(k)) { seen.add(k); out[list].push(msg.slice(0, 150)); } };
@@ -47,12 +48,17 @@ AUDIT_JS = r"""(args) => {
     if (!el.offsetParent && getComputedStyle(el).position !== 'fixed') return;
     const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim().length > 1);
     if (!own) return;
-    const s = getComputedStyle(el); if (s.visibility === 'hidden' || Number(s.opacity) < 0.3) return;
+    const s = getComputedStyle(el); if (s.visibility === 'hidden') return;
+    // الشفافية الفعلية = حاصل ضرب شفافية العنصر وكل آبائه (المكتبات تُبهت الأب لا النص نفسه)
+    let op = 1; for (let n = el; n; n = n.parentElement) op *= Number(getComputedStyle(n).opacity);
+    if (op < 0.15) return;
     if (el.closest('canvas,svg,option,select,script,style,.leaflet-container')) return;
     const fs = parseFloat(s.fontSize), fw = Number(s.fontWeight) || 400;
     const txt = el.textContent.replace(/\s+/g, ' ').trim().slice(0, 50);
-    const fg = lum(s.color), bg = bgOf(el);
-    if (fg && bg !== null && !el.closest(':disabled,[disabled]')) {
+    let fg = lum(s.color); const bg = bgOf(el);
+    if (fg && bg !== null && op < 1) fg = { l: fg.l * op + bg * (1 - op), a: fg.a };   // تقريب: مزج الإضاءة مع الخلفية
+    const fieldOff = el.tagName === 'LABEL' && el.closest('.form-group') && el.closest('.form-group').querySelector('input:disabled,select:disabled,textarea:disabled');   // تسمية حقل معطّل مستثناة كالحقل نفسه
+    if (fg && bg !== null && !fieldOff && !el.closest(':disabled,[disabled]')) {
       const ratio = (Math.max(fg.l, bg) + 0.05) / (Math.min(fg.l, bg) + 0.05);
       const large = fs >= 24 || (fs >= 18.6 && fw >= 700);
       if (ratio < (large ? 3 : 4.5)) add('c' + txt, 'contrast', `${ratio.toFixed(2)} «${txt}» ${el.tagName}.${el.className}`);

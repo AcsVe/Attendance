@@ -2306,7 +2306,7 @@ async function loadSettings() {
   document.getElementById('setSumEvening').value = s.summary_evening_time || '';
   document.getElementById('setLunchStart').value = s.lunch_start || '';
   document.getElementById('setLunchEnd').value = s.lunch_end || '';
-  document.getElementById('lunchTimes').style.opacity = s.lunch_enabled === '1' ? 1 : .5;
+  lunchUi();
   renderLogoPreview(s.org_logo_filename);
   renderGraphStatus(s);
   document.getElementById('setSyncUrl').value = s.sync_central_url || '';
@@ -3037,3 +3037,11 @@ function syncKeyGen() {
     }
   };
 })();
+
+/* استراحة الغداء العامة: حقلا الوقت معطّلان (لا باهتان فقط) ما دام الخيار مطفأً */
+function lunchUi() {
+  const on = document.getElementById('setLunchEnabled').checked;
+  const box = document.getElementById('lunchTimes');
+  box.querySelectorAll('input').forEach(i => { i.disabled = !on; });
+  box.classList.toggle('is-off', !on);
+}
