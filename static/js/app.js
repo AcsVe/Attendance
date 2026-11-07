@@ -153,7 +153,7 @@ const PAGE_TITLES = {
   permissions: 'أذونات التأخير والمغادرة', employees: 'الموظفون', devices: 'أجهزة البصمة',
   'dept-times': 'أوقات الأقسام', settings: 'الإعدادات العامة', schedule: 'الجدولة التلقائية',
   audit: 'سجل التدقيق', users: 'المستخدمون والصلاحيات', maintenance: 'أدوات الصيانة',
-  ticker: 'الشريط الإعلاني', payroll: 'الرواتب',
+  ticker: 'الشريط الإعلاني', payroll: 'الرواتب', shifts: 'المناوبات',
 };
 
 let currentTab = 'dashboard';
@@ -191,6 +191,7 @@ function applyRolePermissions() {
   if (!PERMS.can_edit_org_settings) {
     _disableContainer('#tab-settings');
     _disableContainer('#tab-dept-times');
+    _disableContainer('#tab-shifts');
   }
 }
 
@@ -1547,7 +1548,8 @@ async function deleteDeparturePermission(id) {
 
 /* ============ AUDIT LOG ============ */
 const AUDIT_ACTION_LABELS = {
-  device_restart: 'إعادة تشغيل جهاز البصمة', payroll_advance_add: 'إضافة سلفة', payroll_advance_edit: 'تعديل سلفة',
+  device_restart: 'إعادة تشغيل جهاز البصمة', shift_add: 'إضافة مناوبة', shift_edit: 'تعديل مناوبة', shift_activate: 'تفعيل مناوبات',
+  shift_deactivate: 'تعطيل مناوبات', shift_delete: 'حذف مناوبات', shift_assign: 'إسناد مناوبة', shift_assign_end: 'إنهاء إسناد مناوبات', shift_assign_delete: 'حذف إسناد مناوبات', payroll_advance_add: 'إضافة سلفة', payroll_advance_edit: 'تعديل سلفة',
   payroll_advance_stop: 'إيقاف خصم سلفة', payroll_advance_activate: 'استئناف خصم سلفة', payroll_advance_delete: 'حذف سلفة',
   create: 'إضافة', update: 'تعديل', delete: 'حذف', login: 'تسجيل دخول', login_failed: 'محاولة دخول فاشلة',
   backup: 'نسخ احتياطي', import: 'استيراد', sync: 'مزامنة', pull: 'سحب من الجهاز', users_bulk: 'إجراء جماعي على المستخدمين',
@@ -1564,7 +1566,7 @@ const AUDIT_ACTION_LABELS = {
 const AUDIT_TARGET_LABELS = {
   manual_entry: 'إدخال يدوي', date_exception: 'استثناء تاريخ', date_exception_bulk: 'استثناء تاريخ (جماعي)', official_holiday: 'عطلة رسمية',
   late_permission: 'إذن تأخير', departure_permission: 'إذن مغادرة', absence_reason: 'سبب غياب', forced_absence: 'غياب مفروض',
-  forced_absence_bulk: 'غياب مفروض (جماعي)', user: 'المستخدمون', settings: 'الإعدادات', employee: 'الموظفون', employees: 'الموظفون (جماعي)',
+  forced_absence_bulk: 'غياب مفروض (جماعي)', shift: 'المناوبات', user: 'المستخدمون', settings: 'الإعدادات', employee: 'الموظفون', employees: 'الموظفون (جماعي)',
   employee_accounts: 'حسابات التطبيق', work_site: 'مواقع العمل', device: 'أجهزة البصمة', device_attendance: 'سجلات الجهاز',
   device_users: 'مستخدمو الجهاز', device_sqlite: 'استيراد SQLite', device_mdb: 'استيراد MDB', onedrive: 'OneDrive', gdrive: 'Google Drive',
   push: 'إرسال مزامنة', receive: 'استقبال مزامنة', employees_from_sqlite: 'استيراد موظفين', mobile: 'تطبيق الهاتف',

@@ -199,6 +199,25 @@ def analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
     df['is_shift'] = df['name'].isin(shift1_names | shift2_names) if shift_enabled else False
     df['shift_number'] = df['name'].apply(lambda n: 2 if n in shift2_names else 1)
 
+    # ===== المناوبة المسمّاة لكل (موظف، يوم) — shifts.py — أعلى من نظام المناوبتين ووقت القسم =====
+    named = settings.get('_named_shifts') or {}
+
+    def _named(row):
+        d = row.get('date_parsed')
+        if not named or pd.isna(d) or row['name'] not in named:
+            return None
+        hit = None
+        for d1, d2, s1, s2, label, days in named[row['name']]:
+            ds = d.strftime('%Y-%m-%d')
+            if d1 <= ds <= d2 and (not days or d.weekday() in days):
+                try:
+                    hit = (parse_time_str(s1), parse_time_str(s2), label, s1, s2, bool(days))
+                except ValueError:
+                    hit = None
+                break
+        return hit
+    df['named'] = df.apply(_named, axis=1) if named else None
+
     # ===== الإدخال اليدوي - أعلى أولوية، يكتب فوق أي بصمة فعلية لنفس
     # (الاسم، التاريخ) =====
     for idx, row in df.iterrows():
@@ -244,6 +263,8 @@ def analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
         custom_att = perm.get('custom_attendance_time') if perm else None
         if custom_att:
             base = parse_time_str(custom_att)
+        elif row.get('named'):
+            base = row['named'][0]
         elif row.get('is_shift'):
             base = shift2_start if row.get('shift_number') == 2 and shift2_start else shift1_start
         else:
@@ -362,6 +383,8 @@ def analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
                 return parse_time_str(perm['custom_departure_time'])
             except ValueError:
                 pass
+        if row.get('named'):
+            return row['named'][1]
         if row.get('is_shift'):
             return (shift2_end if row.get('shift_number') == 2 else shift1_end) or get_window(row)[1]
         return get_window(row)[1]
@@ -370,6 +393,8 @@ def analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
         d = row_date_str(row)
         if d is None or d in official_holidays or (row['name'], d) in date_exceptions:
             return False
+        if row.get('named') and row['named'][5]:
+            return True   # مناوبة بأيام محددة: كل يوم منها يوم عمل للموظف (ولو كان الجمعة أو السبت)
         wd = row['date_parsed'].weekday()
         return wd != 4 and not (wd == 5 and not sat_enabled)
 
@@ -434,7 +459,7 @@ def analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
         date_str = row['date_parsed'].strftime('%Y-%m-%d') if pd.notna(row['date_parsed']) else None
         is_exc = (row['name'], date_str) in date_exceptions
         is_holiday = date_str in official_holidays
-        is_weekend = is_weekend_date(row['date_parsed'])
+        is_weekend = is_weekend_date(row['date_parsed']) and not (row.get('named') and row['named'][5])
         return compute_status(is_absent, is_tin_na, is_tout_na, row['late_minutes'], late_th,
                                is_weekend, is_holiday, is_exc)
 
@@ -450,6 +475,8 @@ def analyze(punches_df, settings, dept_times, manual_entries, date_exceptions,
     shift2_end_s = settings.get('shift2_end', '') or ''
 
     def get_shift_label(row):
+        if row.get('named'):
+            return f"{row['named'][2]} ({row['named'][3]}–{row['named'][4]})"
         if not shift_enabled or not row.get('is_shift'):
             return ''
         if row.get('shift_number') == 2:

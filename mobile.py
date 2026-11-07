@@ -1832,7 +1832,7 @@ def api_notify():
 #   ملف الموظف (بطاقة الموظف للإدارة)
 # =====================================================
 RENAME_TABLES = ('punches', 'manual_time_entries', 'date_exceptions', 'late_permissions', 'departure_permissions',
-                 'report_cache', 'forced_absences', 'absence_reasons', 'mobile_punches')
+                 'report_cache', 'forced_absences', 'absence_reasons', 'mobile_punches', 'employee_shifts')
 
 
 @bp.route('/api/mobile/employee/<int:emp_id>')
