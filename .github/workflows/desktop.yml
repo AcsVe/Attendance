@@ -30,7 +30,7 @@ jobs:
           python-version: '3.12'
           cache: pip
       - name: Install
-        run: pip install -r requirements.txt pyinstaller==6.11.1
+        run: pip install -r requirements.txt "pyinstaller==6.22.3" "pyinstaller-hooks-contrib>=2026.9"
       - name: Version
         id: v
         shell: bash
