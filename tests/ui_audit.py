@@ -2,7 +2,8 @@
 
 يفحص: أخطاء JavaScript، والتباين، والخط الأصغر من 13px، والخروج الأفقي عن الشاشة، واتجاه النص
 (نص يبدأ بلغة ومعه أرقام أو علامات داخل عنصر باتجاه اللغة الأخرى فيظهر مقلوباً)، والنصوص غير المترجمة
-(أي حرف عربي في الواجهة الإنجليزية حين تكون البيانات كلها إنجليزية).
+(أي حرف عربي في الواجهة الإنجليزية حين تكون البيانات كلها إنجليزية)، ولغة النصوص ونصوص الإرشاد (placeholder وtitle
+وalt وaria-label): نص يشبه الكود، أو كلمة عامية أو دخيلة، أو نص إرشاد بغير لغة الواجهة، أو صورة بلا نص بديل.
 
 ثلاث جولات: واجهة عربية ببيانات عربية، وواجهة إنجليزية ببيانات عربية (للاتجاه)، وواجهة إنجليزية ببيانات
 إنجليزية (للترجمة). البيانات مصطنعة في قاعدة مؤقتة (tests/audit_server.py) ولا يُمسّ شيء حقيقي.
@@ -96,6 +97,68 @@ def start_server(db, lang, port):
     raise SystemExit('the test server did not start')
 
 
+# فحص لغة الواجهة: النصوص الظاهرة ونصوص الإرشاد (placeholder وtitle وalt وaria-label) — يُنسخ إلى tests/ui_audit.py في كل نظام.
+# يرصد: نصاً يشبه الكود (أسماء متغيرات وملفات وقيم برمجية)، وكلمات عامية أو دخيلة في الواجهة العربية، ونص إرشاد بالإنجليزية
+# في الواجهة العربية أو بالعربية في الإنجليزية، وصورة بلا نص بديل.
+LANG_JS = r"""(args) => {
+  const [ui, okWords, checkArabic, scopeSel] = args;   // checkArabic: الواجهة الإنجليزية ببيانات إنجليزية
+  const out = []; const seen = new Set();
+  const add = (k, m) => { if (!seen.has(k)) { seen.add(k); out.push(m.slice(0, 150)); } };
+  const AR = /[؀-ۿ]/;
+  const ok = new Set(['iOS', 'iPhone', 'iPad', 'macOS', 'iCloud', 'eSchool', 'YouTube', 'WhatsApp', 'PayPal', 'OneDrive',
+                      'SharePoint', 'PowerPoint', 'GitHub', 'MenaPAY', 'MenaITech', 'ZKTeco', 'BellPlayer', 'JavaScript'].concat(okWords || []));
+  // يُحذف البريد والروابط والنطاقات قبل الفحص: ليست كوداً
+  const clean = (t) => t.replace(/\S+@\S+|https?:\/\/\S*|\b[\w.-]+\.(org|com|net|edu|jo|test|gov)\b\S*/gi, ' ');
+  const CODE = [
+    [/\b[a-z][a-z0-9]*_[a-z0-9_]+\b/, 'snake_case'],
+    [/\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b/, 'variable name'],
+    [/\b[a-z]+[A-Z][A-Za-z]+\b/, 'camelCase'],
+    [/\{\{|\}\}|\{%|%\}|\$\{|<\/?[a-z]+>/, 'template code'],
+    [/^(undefined|null|NaN)$|\b(undefined|NaN|Traceback|TypeError|KeyError|ValueError)\b|\[object /, 'program value'],
+    [/\b[\w-]+\.(py|bat|env|db|sqlite|json|js|css|html|ps1|sql|log|ini|cfg)\b/i, 'file name'],
+    [/\b(HTTP|Error|errno|status)\s*\d{3}\b|\bSQLITE_|\bOperationalError\b/i, 'error code'],
+  ];
+  // None/True/False كلمات إنجليزية سليمة في الواجهة الإنجليزية؛ وفي العربية تعني قيمة برمجية تسرّبت
+  if (ui === 'ar') CODE.push([/^(None|True|False)$/, 'program value']);
+  const codeLike = (t) => { t = clean(t); for (const [re, name] of CODE) { const m = t.match(re); if (m && !ok.has(m[0])) return `${name} «${m[0]}»`; } return null; };
+  // عامي أو دخيل (القاعدة: «إذا/إن» لا «لو»، «فقط» لا «بس»، «الخادم» لا «السيرفر»، «الهاتف» لا «الموبايل»...)
+  const COLLOQ = /(?:^|[\s،؛.؟!«(\/])(لو|بس|اللي|إللي|فاضي|فاضية|هيك|شو|مش|كمان|هلق|هلأ|منيح|ليش|وين|هاي|هاد|هادا|السيرفر|سيرفر|الموبايل|موبايل|تيمز|الباسورد|باسورد|يوزر|اليوزر|اللوجو|لوجو|الداتا|داتا|لينك|اللينك|فايل|الفايل|ايميل|إيميل|الإيميل|الايميل|اوكي|أوكي|نزّل|نزّلها|حمّلها|سيستم|السيستم|أبديت|ابديت)(?=$|[\s،؛.؟!»):\/])/;
+  const LATIN_WORD = /\b[A-Za-z]{3,}\b/g;
+  const check = (el, where, t) => {
+    if (!t || !t.trim()) return;
+    t = t.replace(/\s+/g, ' ').trim();
+    const tag = `${el.tagName}.${(el.className && el.className.baseVal === undefined ? el.className : '')}`.slice(0, 40);
+    const c = codeLike(t); if (c) add('c' + where + t, `code-like ${c} in ${where} «${t.slice(0, 60)}» ${tag}`);
+    if (ui === 'ar') {
+      const m = t.match(COLLOQ); if (m) add('q' + t, `colloquial «${m[1]}» in ${where} «${t.slice(0, 60)}» ${tag}`);
+      if (where !== 'text' && !AR.test(t)) {   // نص إرشاد كله بالإنجليزية (الرموز والأسماء بجانب العربية مقبولة)
+        const latin = (clean(t).match(LATIN_WORD) || []).filter((w) => !ok.has(w) && !/^x+$/i.test(w) && !/^(PDF|Excel|Word|CSV|QR|Microsoft|Google|Outlook|Teams|Android|Windows|Chrome|Edge|Wi|Fi|USB|SMS|API|URL|IP|PIN|OTP|ID|Cloudflare|Dahua|Render|Drive|Gmail|Zoom|Forms|Office|Apple|Huawei|Samsung)$/i.test(w));
+        if (latin.length) add('l' + where + t, `English «${latin.slice(0, 3).join(' ')}» in ${where} of the Arabic interface «${t.slice(0, 60)}» ${tag}`);
+      }
+    } else if (checkArabic && where !== 'text' && AR.test(t) && !el.closest('[data-content]') && !(okWords || []).includes(t)) {
+      add('a' + where + t, `Arabic in ${where} of the English interface «${t.slice(0, 60)}» ${tag}`);
+    }
+  };
+  const scope = (scopeSel && document.querySelector(scopeSel)) || document.body;
+  scope.querySelectorAll('*').forEach((el) => {
+    if (el.closest('script,style,code,pre,kbd,noscript,template,textarea,[data-content],[data-raw]')) return;   // textarea: نص يكتبه المستخدم أو رمز تضمين للنسخ
+    const s = getComputedStyle(el); if (s.display === 'none' && !el.closest('select')) return;
+    [...el.childNodes].forEach((n) => { if (n.nodeType === 3) check(el, 'text', n.textContent); });
+    for (const a of ['placeholder', 'title', 'alt', 'aria-label']) if (el.hasAttribute(a)) check(el, a, el.getAttribute(a));
+    if (el.matches('input[type=submit],input[type=button]')) check(el, 'button', el.value);
+    if (el.tagName === 'IMG' && !el.hasAttribute('alt')) add('i' + el.src, `image without alt text ${el.src.split('/').pop().slice(0, 50)}`);
+  });
+  check(document.documentElement, 'title', document.title);
+  return out;
+}"""
+
+
+def run(page, scope, ui, data):
+    res = page.evaluate(AUDIT_JS, [scope, ui == 'en' and data == 'en', UNTRANSLATED_OK])
+    res['lang'] = page.evaluate(LANG_JS, [ui, UNTRANSLATED_OK, ui == 'en' and data == 'en', scope])
+    return res
+
+
 report = []
 servers = {'ar': start_server(os.path.join(OUT, 'ar.db'), 'ar', 5191), 'en': start_server(os.path.join(OUT, 'en.db'), 'en', 5192)}
 PORTS = {'ar': 5191, 'en': 5192}
@@ -113,7 +176,7 @@ try:
                 page.on('pageerror', lambda e: errs.append(str(e)))
                 page.on('console', lambda m: errs.append(m.text) if m.type == 'error' and 'favicon' not in m.text else None)
                 page.goto(base + '/login', wait_until='networkidle')
-                report.append((vp_name, ui, data, 'login', page.evaluate(AUDIT_JS, ['body', ui == 'en' and data == 'en', UNTRANSLATED_OK]), list(errs)))
+                report.append((vp_name, ui, data, 'login', run(page, 'body', ui, data), list(errs)))
                 errs.clear()
                 page.fill('input[name=username]', 'admin')
                 page.fill('input[name=password]', os.environ.get('ATTENDANCE_ADMIN_PASSWORD') or 'admin123')
@@ -126,7 +189,7 @@ try:
                     except Exception:
                         pass
                     page.wait_for_timeout(500)
-                    res = page.evaluate(AUDIT_JS, [f'#tab-{t}', ui == 'en' and data == 'en', UNTRANSLATED_OK])
+                    res = run(page, f'#tab-{t}', ui, data)
                     report.append((vp_name, ui, data, t, res, list(errs)))
                     errs.clear()
                     if os.environ.get('SHOTS'):
@@ -137,7 +200,7 @@ try:
                     page.wait_for_timeout(600)
                     if 'not-a-real' in u:   # الرابط غير الصحيح يُرجع 404 عمداً
                         errs[:] = [e for e in errs if '404' not in e]
-                    report.append((vp_name, ui, data, u, page.evaluate(AUDIT_JS, ['body', ui == 'en' and data == 'en', UNTRANSLATED_OK]), list(errs)))
+                    report.append((vp_name, ui, data, u, run(page, 'body', ui, data), list(errs)))
                     errs.clear()
                 page.goto(base + '/me/login', wait_until='networkidle')
                 page.fill('#mu', 'emp1')
@@ -145,7 +208,7 @@ try:
                 page.click('#f button[type=submit]')
                 page.wait_for_load_state('networkidle')
                 page.wait_for_timeout(1200)
-                report.append((vp_name, ui, data, '/me', page.evaluate(AUDIT_JS, ['body', ui == 'en' and data == 'en', UNTRANSLATED_OK]), list(errs)))
+                report.append((vp_name, ui, data, '/me', run(page, 'body', ui, data), list(errs)))
                 errs.clear()
                 if os.environ.get('SHOTS'):
                     page.screenshot(path=os.path.join(OUT, f'{vp_name}-{ui}{data}-me.jpg'), type='jpeg', quality=45, full_page=True)
@@ -165,7 +228,7 @@ for vp_name, ui, data, t, res, errs in report:
     if res['overflow'] > 2:
         issues.append(f"horizontal overflow {res['overflow']}px")
     issues += ['contrast ' + x for x in res['contrast']] + ['small ' + x for x in res['small']]
-    issues += ['direction ' + x for x in res['bidi']] + ['untranslated ' + x for x in res['untranslated']]
+    issues += ['direction ' + x for x in res['bidi']] + ['untranslated ' + x for x in res['untranslated']] + ['language ' + x for x in res.get('lang', [])]
     issues += ['JS ' + e for e in errs]
     if issues:
         bad += len(issues)

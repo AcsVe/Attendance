@@ -78,7 +78,7 @@
   window.T = T;
 
   var ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
-  var SKIP = { SCRIPT: 1, STYLE: 1, TEXTAREA: 1, CODE: 1, NOSCRIPT: 1 };
+  var SKIP = { SCRIPT: 1, STYLE: 1, TEXTAREA: 1, CODE: 1, NOSCRIPT: 1, TITLE: 1 };   // عنوان الصفحة يُترجم بأجزائه في fixTitle
   function skipNode(el) {
     for (var e = el; e && e.nodeType === 1; e = e.parentElement) { if (SKIP[e.tagName] || e.hasAttribute('data-notr') || e.isContentEditable) return true; }
     return false;

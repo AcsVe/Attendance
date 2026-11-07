@@ -689,7 +689,7 @@
         <div class="form-grid trio">
           <div class="form-group"><label>الاسم <span style="color:#c0392b">*</span></label><input type="text" id="empName"></div>
           <div class="form-group"><label>القسم</label><input type="text" id="empDept"></div>
-          <div class="form-group"><label>رقم البصمة (device_uid)</label><input type="text" id="empDeviceUid" placeholder="الرقم المسجَّل على جهاز البصمة" dir="ltr"></div>
+          <div class="form-group"><label>رقم البصمة</label><input type="text" id="empDeviceUid" placeholder="الرقم المسجَّل على جهاز البصمة" dir="ltr"></div>
         </div>
         <button class="btn btn-primary" onclick="addEmployee()"><i class="fas fa-plus" aria-hidden="true"></i> إضافة</button>
       </div>
@@ -720,7 +720,7 @@
         <div class="form-group" style="max-width:520px;margin-top:10px">
           <label>أو مسار الملف مباشرة على نفس جهاز الخادم (يُستحسن للملفات الكبيرة أو عند تشغيل النظام مباشرة على جهازك - أسرع وأوثق من الرفع عبر المتصفح)</label>
           <div style="display:flex;gap:8px">
-            <input type="text" id="empLocalPath" dir="ltr" placeholder="C:\path\to\employees.csv أو /sdcard/employees.csv">
+            <input type="text" id="empLocalPath" dir="ltr" placeholder="المسار الكامل لملف الموظفين (CSV) على جهاز الخادم">
             <button class="btn btn-primary btn-sm" onclick="importEmployeesFromLocalPath()"><i class="fas fa-hdd" aria-hidden="true"></i> استيراد</button>
           </div>
         </div>
@@ -738,7 +738,7 @@
       </div>
       <div class="card">
         <div class="card-title"><i class="fas fa-list" aria-hidden="true"></i> قائمة الموظفين</div>
-        <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">رقم البصمة (device_uid) هو الرابط بين الموظف وجهاز البصمة - إجباري لأي عملية في تبويب "إدارة الأجهزة" (سحب/رفع/نسخ).</p>
+        <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">رقم البصمة هو الرابط بين الموظف وجهاز البصمة، وهو لازم لأي عملية في تبويب «إدارة الأجهزة» (سحب أو رفع أو نسخ).</p>
         <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px">
           <button class="btn btn-red btn-sm" onclick="bulkDeleteSelected('employeesTable', id => '/api/employees/' + id, () => { loadEmployees(); loadMetaInto(); })"><i class="fas fa-trash" aria-hidden="true"></i> حذف المحدد</button>
           <input list="empDeptList" id="empMoveDept" class="search-input" placeholder="القسم الجديد" style="max-width:200px">
@@ -1292,7 +1292,7 @@
           </div>
           <div class="form-group" style="max-width:520px">
             <label>أو مسار الملف مباشرة على نفس جهاز الخادم (للملفات الكبيرة جداً - أسرع وأوثق من الرفع)</label>
-            <input type="text" id="mdbLocalPath" dir="ltr" placeholder="C:\path\to\att.mdb أو /sdcard/att.mdb">
+            <input type="text" id="mdbLocalPath" dir="ltr" placeholder="المسار الكامل لملف قاعدة البصمة (MDB) على جهاز الخادم">
           </div>
           <div class="form-grid">
             <div class="form-group"><label>من (اختياري)</label><input type="date" id="mdbFrom"></div>
@@ -1314,7 +1314,7 @@
           </div>
           <div class="form-group" style="max-width:520px">
             <label>أو مسار الملف مباشرة على نفس جهاز الخادم (يُستحسن للملفات الضخمة - عدة غيغابايت - بدل رفعها عبر المتصفح)</label>
-            <input type="text" id="sqliteLocalPath" dir="ltr" placeholder="C:\path\to\att2000.sqlite أو /sdcard/att2000.sqlite">
+            <input type="text" id="sqliteLocalPath" dir="ltr" placeholder="المسار الكامل لملف قاعدة جهاز البصمة على جهاز الخادم">
           </div>
           <div class="form-grid">
             <div class="form-group"><label>من (اختياري)</label><input type="date" id="sqliteFrom"></div>
@@ -1811,7 +1811,7 @@
         </p>
         <div class="form-grid quad">
           <div class="form-group"><label>بريد صاحب OneDrive المستهدَف (UPN)</label><input type="email" id="odBackupUpn" class="search-input" dir="ltr" placeholder="reports@org.com"></div>
-          <div class="form-group" style="grid-column:span 2"><label>اسم المجلد على OneDrive</label><input type="text" id="odBackupFolder" class="search-input" dir="ltr" placeholder="AttendanceBackups"></div>
+          <div class="form-group" style="grid-column:span 2"><label>اسم المجلد على OneDrive</label><input type="text" id="odBackupFolder" class="search-input" dir="ltr" placeholder="مثل: AttendanceBackups"></div>
         </div>
         <button class="btn btn-outline btn-sm" onclick="saveOneDriveBackupSettings()"><i class="fas fa-save" aria-hidden="true"></i> حفظ إعدادات النسخ الاحتياطي</button>
         <button class="btn btn-primary" onclick="runOneDriveBackup()"><i class="fas fa-cloud-upload-alt" aria-hidden="true"></i> نسخة احتياطية الآن</button>
@@ -1826,8 +1826,8 @@
           ملف الـJSON على جهاز الخادم مباشرة (لا يُرفَع عبر المتصفح لأنه سرّي).
         </p>
         <div class="form-grid quad">
-          <div class="form-group" style="grid-column:span 2"><label>مسار ملف JSON على جهاز الخادم</label><input type="text" id="gdBackupJsonPath" class="search-input" dir="ltr" placeholder="/sdcard/Download/attendance-backup-xxxx.json"></div>
-          <div class="form-group" style="grid-column:span 2"><label>معرّف المجلد على Google Drive (Folder ID)</label><input type="text" id="gdBackupFolderId" class="search-input" dir="ltr" placeholder="1AbCdEfGhIjKlMnOpQrStUvWxYz"></div>
+          <div class="form-group" style="grid-column:span 2"><label>مسار ملف JSON على جهاز الخادم</label><input type="text" id="gdBackupJsonPath" class="search-input" dir="ltr" placeholder="المسار الكامل لملف النسخة (JSON) على جهاز الخادم"></div>
+          <div class="form-group" style="grid-column:span 2"><label>معرّف المجلد على Google Drive (Folder ID)</label><input type="text" id="gdBackupFolderId" class="search-input" dir="ltr" placeholder="معرّف المجلد: آخر جزء من رابطه في Drive"></div>
         </div>
         <button class="btn btn-outline btn-sm" onclick="saveGDriveBackupSettings()"><i class="fas fa-save" aria-hidden="true"></i> حفظ إعدادات النسخ الاحتياطي</button>
         <button class="btn btn-primary" onclick="runGDriveBackup()"><i class="fas fa-cloud-upload-alt" aria-hidden="true"></i> نسخة احتياطية الآن</button>
@@ -1932,7 +1932,7 @@
             <label>الدور</label>
             <select id="usrRole" class="search-input" onchange="applyRoleDefaults('usr')">
               <option value="viewer">مشاهد (viewer)</option>
-              <option value="dept_manager">مدير قسم (dept_manager)</option>
+              <option value="dept_manager">مدير قسم</option>
               <option value="admin">مدير النظام (admin)</option>
             </select>
           </div>
@@ -2077,6 +2077,7 @@
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="/static/js/leaflet_labels.js"></script>
 <script src="{{ url_for('static', filename='js/mobile_admin.js') }}"></script>
 <script src="{{ url_for('static', filename='js/admin_extra.js') }}"></script>
 <script src="{{ url_for('static', filename='js/vacations_admin.js') }}"></script>

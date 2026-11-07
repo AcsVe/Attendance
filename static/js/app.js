@@ -2773,7 +2773,7 @@ async function loadUsers() {
     <td>
       <select id="${p}Role" class="search-input" style="min-width:150px" onchange="applyRoleDefaults('${p}')">
         <option value="viewer" ${r.role === 'viewer' ? 'selected' : ''}>مشاهد (viewer)</option>
-        <option value="dept_manager" ${r.role === 'dept_manager' ? 'selected' : ''}>مدير قسم (dept_manager)</option>
+        <option value="dept_manager" ${r.role === 'dept_manager' ? 'selected' : ''}>مدير قسم</option>
         <option value="admin" ${r.role === 'admin' ? 'selected' : ''}>مدير النظام (admin)</option>
       </select>
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;font-size:.8125rem;white-space:nowrap">
