@@ -108,7 +108,7 @@ LANG_JS = r"""(args) => {
   const ok = new Set(['iOS', 'iPhone', 'iPad', 'macOS', 'iCloud', 'eSchool', 'YouTube', 'WhatsApp', 'PayPal', 'OneDrive',
                       'SharePoint', 'PowerPoint', 'GitHub', 'MenaPAY', 'MenaITech', 'ZKTeco', 'BellPlayer', 'JavaScript'].concat(okWords || []));
   // يُحذف البريد والروابط والنطاقات قبل الفحص: ليست كوداً
-  const clean = (t) => t.replace(/\S+@\S+|https?:\/\/\S+|\b[\w.-]+\.(org|com|net|edu|jo|test|gov)\b\S*/gi, ' ');
+  const clean = (t) => t.replace(/\S+@\S+|https?:\/\/\S*|\b[\w.-]+\.(org|com|net|edu|jo|test|gov)\b\S*/gi, ' ');
   const CODE = [
     [/\b[a-z][a-z0-9]*_[a-z0-9_]+\b/, 'snake_case'],
     [/\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b/, 'variable name'],
@@ -132,7 +132,7 @@ LANG_JS = r"""(args) => {
     if (ui === 'ar') {
       const m = t.match(COLLOQ); if (m) add('q' + t, `colloquial «${m[1]}» in ${where} «${t.slice(0, 60)}» ${tag}`);
       if (where !== 'text' && !AR.test(t)) {   // نص إرشاد كله بالإنجليزية (الرموز والأسماء بجانب العربية مقبولة)
-        const latin = (clean(t).match(LATIN_WORD) || []).filter((w) => !ok.has(w) && !/^(PDF|Excel|Word|CSV|QR|Microsoft|Google|Outlook|Teams|Android|Windows|Chrome|Edge|Wi|Fi|USB|SMS|API|URL|IP|PIN|OTP|ID|Cloudflare|Dahua|Render|Drive|Gmail|Zoom|Forms|Office|Apple|Huawei|Samsung)$/i.test(w));
+        const latin = (clean(t).match(LATIN_WORD) || []).filter((w) => !ok.has(w) && !/^x+$/i.test(w) && !/^(PDF|Excel|Word|CSV|QR|Microsoft|Google|Outlook|Teams|Android|Windows|Chrome|Edge|Wi|Fi|USB|SMS|API|URL|IP|PIN|OTP|ID|Cloudflare|Dahua|Render|Drive|Gmail|Zoom|Forms|Office|Apple|Huawei|Samsung)$/i.test(w));
         if (latin.length) add('l' + where + t, `English «${latin.slice(0, 3).join(' ')}» in ${where} of the Arabic interface «${t.slice(0, 60)}» ${tag}`);
       }
     } else if (checkArabic && where !== 'text' && AR.test(t) && !el.closest('[data-content]') && !(okWords || []).includes(t)) {
@@ -141,7 +141,7 @@ LANG_JS = r"""(args) => {
   };
   const scope = (scopeSel && document.querySelector(scopeSel)) || document.body;
   scope.querySelectorAll('*').forEach((el) => {
-    if (el.closest('script,style,code,pre,kbd,noscript,template,[data-content],[data-raw]')) return;
+    if (el.closest('script,style,code,pre,kbd,noscript,template,textarea,[data-content],[data-raw]')) return;   // textarea: نص يكتبه المستخدم أو رمز تضمين للنسخ
     const s = getComputedStyle(el); if (s.display === 'none' && !el.closest('select')) return;
     [...el.childNodes].forEach((n) => { if (n.nodeType === 3) check(el, 'text', n.textContent); });
     for (const a of ['placeholder', 'title', 'alt', 'aria-label']) if (el.hasAttribute(a)) check(el, a, el.getAttribute(a));
