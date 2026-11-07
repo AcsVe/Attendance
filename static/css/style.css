@@ -500,3 +500,7 @@ body.auth.has-ticker .auth-wrap { padding-top: 12px; }
 
 /* أصغر خط مقروء 13px: وسم small يصغّر الخط إلى 80% من محيطه فيقل عن ذلك داخل النصوص الصغيرة */
 small { font-size: max(.8125rem, 80%); }
+
+/* مجموعة حقول معطّلة لأن خيارها مطفأ (مثل وقت استراحة الغداء) */
+.is-off label { color: var(--muted); }
+.is-off input:disabled { background: var(--bg, #f1f5f9); cursor: not-allowed; }
