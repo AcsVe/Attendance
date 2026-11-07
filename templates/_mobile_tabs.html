@@ -5,12 +5,12 @@
 <style>
 .m-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
 .live-rt{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:4px 0 6px}
-.live-rt-state{font-size:.8rem;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
+.live-rt-state{font-size:.8125rem;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
 .live-dot{width:9px;height:9px;border-radius:50%;background:#9aa;display:inline-block}
 .live-dot.on{background:#16a34a;animation:livePulse 1.6s infinite}
 @keyframes livePulse{0%{box-shadow:0 0 0 0 rgba(22,163,74,.55)}70%{box-shadow:0 0 0 8px rgba(22,163,74,0)}100%{box-shadow:0 0 0 0 rgba(22,163,74,0)}}
 @media (prefers-reduced-motion:reduce){.live-dot.on{animation:none}}
-.live-badge{display:inline-block;font-size:.72rem;font-weight:700;color:#1d4ed8;background:#e8efff;border-radius:10px;padding:1px 7px;margin-inline-start:4px;white-space:nowrap}
+.live-badge{display:inline-block;font-size:.8125rem;font-weight:700;color:#1d4ed8;background:#e8efff;border-radius:10px;padding:1px 7px;margin-inline-start:4px;white-space:nowrap}
 .live-badge.stale{color:#b45309;background:#fff4e5}
 #liveTable tr.live-row{cursor:pointer}
 #liveTable tr.live-row.following{background:rgba(29,78,216,.07)}
@@ -37,7 +37,7 @@ html.map-fs-open,html.map-fs-open body{overflow:hidden!important}
 [dir=rtl] .sw input:checked+span:before{transform:translateX(-24px)}
 .pr-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-inline-end:6px;vertical-align:middle}
 .m-map{height:380px;border-radius:12px;border:1px solid var(--border);margin-bottom:10px;z-index:1}
-.m-state{display:inline-block;border-radius:20px;padding:2px 10px;font-size:.78rem;font-weight:800}
+.m-state{display:inline-block;border-radius:20px;padding:2px 10px;font-size:.8125rem;font-weight:800}
 .m-st-in{background:#d1e7dd;color:#0a6640}.m-st-out{background:#e2e3e5;color:#41464b}.m-st-leave{background:#fff3cd;color:#856404}.m-st-none{background:#f8d7da;color:#842029}
 .m-cred{font-family:ui-monospace,Consolas,monospace;direction:ltr}
 @media(max-width:768px){.m-map{height:300px}.m-bulk{position:static}}
@@ -55,7 +55,7 @@ html.map-fs-open,html.map-fs-open body{overflow:hidden!important}
     </p>
   </div>
   <div class="card">
-    <div class="card-title"><i class="fas fa-users-gear" aria-hidden="true"></i> الموظفون وحساباتهم (<span id="maShown">0</span> من <span id="maTotal">0</span>)</div>
+    <div class="card-title"><i class="fas fa-users-gear" aria-hidden="true"></i> الموظفون وحساباتهم (<span id="maShown">0</span> / <span id="maTotal">0</span>)</div>
     <div class="filter-bar">
       <input type="search" id="maSearch" class="search-input" placeholder="بحث فوري: الاسم، اسم المستخدم، الهاتف…" oninput="maRender()" style="flex:1;min-width:200px">
     </div>
@@ -263,7 +263,7 @@ html.map-fs-open,html.map-fs-open body{overflow:hidden!important}
         <option value="15">كل 15 ثانية</option><option value="30">كل 30 ثانية</option><option value="60" selected>كل دقيقة</option></select>
       <button class="btn btn-primary btn-sm" onclick="trSet(true)"><i class="fas fa-play" aria-hidden="true"></i> تشغيل / تحديث الفاصل</button>
       <button class="btn btn-outline btn-sm" onclick="trSet(false)"><i class="fas fa-stop" aria-hidden="true"></i> إيقاف التتبع</button>
-      <span style="font-size:.85rem;color:var(--muted)">المحدد: <b id="trSel">0</b> من <b id="trTotal">0</b></span>
+      <span style="font-size:.85rem;color:var(--muted)">المحدد: <b id="trSel">0</b> / <b id="trTotal">0</b></span>
     </div>
     <div class="table-wrap" style="max-height:260px">
       <table>
@@ -289,7 +289,7 @@ html.map-fs-open,html.map-fs-open body{overflow:hidden!important}
     <div class="filter-bar" style="margin-bottom:6px">
       <button class="btn btn-outline btn-sm" onclick="shStop()"><i class="fas fa-circle-stop" aria-hidden="true"></i> إيقاف المشاركة</button>
       <button class="btn btn-red btn-sm" onclick="shDelete()"><i class="fas fa-trash" aria-hidden="true"></i> حذف المحدد</button>
-      <span style="font-size:.85rem;color:var(--muted)">المحدد: <b id="shSel">0</b> من <b id="shTotal">0</b></span>
+      <span style="font-size:.85rem;color:var(--muted)">المحدد: <b id="shSel">0</b> / <b id="shTotal">0</b></span>
     </div>
     <div class="table-wrap">
       <table>
@@ -375,7 +375,7 @@ html.map-fs-open,html.map-fs-open body{overflow:hidden!important}
       <span class="live-rt-state" id="liveRtState"></span>
       <button class="btn btn-outline btn-sm hide" id="liveFollowOff" onclick="liveFollow(null)"><i class="fas fa-xmark" aria-hidden="true"></i> إلغاء التتبع</button>
     </div>
-    <div style="font-size:.78rem;color:var(--muted);margin:2px 0 6px">النقطة الزرقاء = موقع مباشر من هاتف الموظف (مشاركة الموقع أو التتبع المستمر) مع مساره، والنقاط الأخرى = مكان آخر حركة حضور. يتحرك الموظف على الخريطة بقدر ما يُرسل هاتفه (كل 15–60 ثانية).</div>
+    <div style="font-size:.8125rem;color:var(--muted);margin:2px 0 6px">النقطة الزرقاء = موقع مباشر من هاتف الموظف (مشاركة الموقع أو التتبع المستمر) مع مساره، والنقاط الأخرى = مكان آخر حركة حضور. يتحرك الموظف على الخريطة بقدر ما يُرسل هاتفه (كل 15–60 ثانية).</div>
     <div class="m-chips" id="liveChips"></div>
     <div id="liveMap" class="m-map"></div>
     <div class="table-wrap" style="max-height:320px;overflow:auto"><table>

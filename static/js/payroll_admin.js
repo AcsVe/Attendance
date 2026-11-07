@@ -184,7 +184,7 @@ async function prProfilesLoad() {
     <td dir="ltr">${r.basic ? prMoney(r.basic) : '—'}</td>
     <td>${r.allowances.map(a => `${prEsc(a.name)}: <span dir="ltr">${prMoney(a.amount)}</span>`).join('<br>') || '—'}</td>
     <td>${r.ss_subject ? 'خاضع' : 'غير خاضع'}</td><td dir="ltr">${r.tax_monthly ? prMoney(r.tax_monthly) : '—'}</td>
-    <td>${r.payment === 'cash' ? 'نقداً' : 'بنك'}</td><td>${prEsc(r.bank_name)}</td><td dir="ltr" style="font-size:.78rem">${prEsc(r.iban)}</td>
+    <td>${r.payment === 'cash' ? 'نقداً' : 'بنك'}</td><td>${prEsc(r.bank_name)}</td><td dir="ltr" style="font-size:.8125rem">${prEsc(r.iban)}</td>
     <td>${r.active ? 'نشط' : 'موقوف'}</td>
     <td><button class="btn btn-outline btn-sm" onclick="prEdit(${r.id})" aria-label="تعديل"><i class="fas fa-pen" aria-hidden="true"></i></button></td></tr>`).join('')
     || '<tr><td colspan="13" style="text-align:center;color:var(--muted);padding:14px">لا يوجد موظفون</td></tr>';

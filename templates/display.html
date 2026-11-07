@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
+{% include '_i18n.html' %}
+<link rel="icon" type="image/png" sizes="32x32" href="/app-icon/32.png?v={{ icon_ver }}">
 <title>{% if d %}{{ d.name }} — {% endif %}{{ settings.org_name }}</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
@@ -17,7 +19,8 @@ header{display:flex;align-items:center;gap:14px;padding:12px 20px;border-bottom:
 header img{height:46px;border-radius:8px;background:#fff;padding:3px}
 header .t{flex:1;min-width:0}
 header h1{margin:0;font-size:clamp(1.1rem,2.2vw,1.9rem);font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-header .sub{color:var(--muted);font-size:clamp(.8rem,1.2vw,1.05rem)}
+header .sub{color:var(--muted);font-size:clamp(.8125rem,1.2vw,1.05rem)}
+small{font-size:max(.8125rem,80%)}
 .clock{text-align:left;direction:ltr}
 .clock b{display:block;font-size:clamp(1.6rem,3.4vw,3rem);font-weight:800;line-height:1}
 .clock span{color:var(--muted);font-size:.9rem}
@@ -55,7 +58,7 @@ th{color:var(--muted);font-weight:700}td:first-child,th:first-child{text-align:r
 .emp{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:8px;cursor:pointer}
 .emp.on{outline:2px solid var(--blue)}
 .emp b{font-size:1.05rem}.emp .m{color:var(--muted);font-size:.85rem;margin-top:3px}
-.tag{display:inline-block;border-radius:10px;padding:1px 8px;font-size:.75rem;font-weight:700}
+.tag{display:inline-block;border-radius:10px;padding:1px 8px;font-size:.8125rem;font-weight:700}
 .tag.l{background:rgba(76,141,255,.18);color:var(--blue)}.tag.s{background:rgba(240,164,58,.18);color:var(--warn)}.tag.n{background:var(--line);color:var(--muted)}
 .leaflet-control-layers{font:600 .85rem 'Tajawal',sans-serif;direction:rtl;text-align:right}
 @media (max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.trk{grid-template-columns:1fr;grid-template-rows:60vh auto;height:auto}.list{max-height:none}}
@@ -68,7 +71,7 @@ th{color:var(--muted);font-weight:700}td:first-child,th:first-child{text-align:r
 <header>
   {% if logo_url %}<img src="{{ logo_url }}" alt="">{% endif %}
   <div class="t"><h1>{{ d.name }}</h1><div class="sub">{{ settings.org_name }} — {{ kind_label }} <span class="live"><span class="dot" id="dot"></span><span id="upd">…</span></span></div></div>
-  <div class="clock"><b id="clock">--:--</b><span id="date"></span></div>
+  <div class="clock"><b id="clock">--:--</b><span id="date" dir="auto"></span></div>
   <div class="tools">
     <button onclick="toggleTheme()" title="فاتح/داكن" aria-label="فاتح/داكن"><i class="fas fa-circle-half-stroke" aria-hidden="true"></i></button>
     <button onclick="fullscreen()" title="ملء الشاشة" aria-label="ملء الشاشة"><i class="fas fa-expand" aria-hidden="true"></i></button>
@@ -128,7 +131,7 @@ th{color:var(--muted);font-weight:700}td:first-child,th:first-child{text-align:r
       if (!d || !d.ok) { if (d && d.off) location.reload(); return; }
       lastOk = Date.now();
       var srv = new Date(d.now.replace(' ', 'T')); offset = srv.getTime() - Date.now();
-      $('date').textContent = srv.toLocaleDateString('ar', { weekday: 'long', day: 'numeric', month: 'long' });
+      $('date').textContent = srv.toLocaleDateString(window.UI_LANG === 'en' ? 'en-GB' : 'ar', { weekday: 'long', day: 'numeric', month: 'long' });
       if (d.kind === 'attendance') renderAtt(d); else renderTrk(d);
       tick();
     }).catch(function () { tick(); }).then(function () { setTimeout(load, REFRESH); });
@@ -203,7 +206,7 @@ th{color:var(--muted);font-weight:700}td:first-child,th:first-child{text-align:r
       return '<div class="emp' + (r.id === follow ? ' on' : '') + '" onclick="focusEmp(' + r.id + ')"><b>' + esc(r.name) + '</b> ' + tag
         + '<div class="m">' + esc(r.dept) + (r.state ? ' — ' + esc(r.state) + (r.state_time ? ' <span dir="ltr">' + esc(r.state_time) + '</span>' : '') : '') + '</div>'
         + '<div class="m">' + (r.lat == null ? 'لا يوجد موقع بعد' : 'آخر موقع ' + ago(r.age_s)) + '</div></div>';
-    }).join('') + '<div class="m" style="color:var(--muted);font-size:.8rem;margin-top:6px">اضغط على اسم لتتبّعه، واضغط مرة أخرى لعرض الجميع.</div>';
+    }).join('') + '<div class="m" style="color:var(--muted);font-size:.8125rem;margin-top:6px">اضغط على اسم لتتبّعه، واضغط مرة أخرى لعرض الجميع.</div>';
   }
   load(); tick();
 })();
