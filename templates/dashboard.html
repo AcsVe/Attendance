@@ -439,7 +439,7 @@
           <button class="btn btn-primary" onclick="exportExcelMultiSheet()"><i class="fas fa-file-excel" aria-hidden="true"></i> تصدير Excel (كل الأوراق)</button>
           <button class="btn btn-outline" onclick="sendExportEmailNow(this)"><i class="fas fa-paper-plane" aria-hidden="true"></i> إرسال هذا التقرير بالبريد الآن</button>
         </div>
-        <p style="font-size:.8rem;color:var(--muted)">
+        <p style="font-size:.8125rem;color:var(--muted)">
           ملاحظة: نوع التقرير أعلاه يُطبَّق فقط على «إرسال بالبريد» (لأن ملف Excel يحتوي أصلاً كل الأنواع كأوراق منفصلة).
           يعتمد الإرسال على إعدادات SMTP والمستلمين المحفوظة في تبويب «الجدولة التلقائية».
         </p>
@@ -794,7 +794,7 @@
           <input type="search" id="dsEmpSearch" class="search-input" placeholder="بحث…" oninput="dsEmpRender()" style="margin:6px 0">
           <div id="dsEmps" style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:10px;padding:8px"></div>
           <label style="display:flex;gap:8px;align-items:center;font-weight:600;margin:8px 0 10px"><input type="checkbox" id="dsTrail" checked> رسم المسار خلال اليوم</label>
-          <p style="font-size:.8rem;color:var(--muted);margin:-4px 0 10px">تتحرك النقطة بقدر ما يُرسل هاتف الموظف — لمتابعة شبه لحظية فعّل له «التتبع المستمر» بفاصل قصير من «المواقع المشاركة».</p>
+          <p style="font-size:.8125rem;color:var(--muted);margin:-4px 0 10px">تتحرك النقطة بقدر ما يُرسل هاتف الموظف — لمتابعة شبه لحظية فعّل له «التتبع المستمر» بفاصل قصير من «المواقع المشاركة».</p>
         </div>
         <button class="btn btn-primary" onclick="dsSave()"><i class="fas fa-save" aria-hidden="true"></i> <span id="dsSaveLbl">إنشاء الشاشة</span></button>
         <button class="btn btn-outline" id="dsCancel" style="display:none" onclick="dsReset()">إلغاء التعديل</button>
@@ -839,17 +839,17 @@
         </div>
         <div class="form-group"><label>السبب / ملاحظة</label><input type="text" id="vaAddReason" maxlength="300"></div>
         <button class="btn btn-primary" onclick="vaAdd()"><i class="fas fa-save" aria-hidden="true"></i> تسجيل الإجازة</button>
-        <span style="font-size:.8rem;color:var(--muted);margin-inline-start:8px">تُحسب أيام العمل فقط (بلا الجمعة والعطل الرسمية، والسبت إن لم يكن له دوام).</span>
+        <span style="font-size:.8125rem;color:var(--muted);margin-inline-start:8px">تُحسب أيام العمل فقط (بلا الجمعة والعطل الرسمية، والسبت إن لم يكن له دوام).</span>
       </div>
       <div class="card">
         <div class="card-title"><i class="fas fa-scale-balanced" aria-hidden="true"></i> الأرصدة لسنة <input type="number" id="vaYear" class="search-input" style="width:90px;min-width:0;display:inline-block" onchange="vaBalances()"></div>
-        <p style="font-size:.8rem;color:var(--muted);margin-bottom:6px">كل خانة: المستخدم / الرصيد (والمعلّق بين قوسين). اضغط على خانة لتحديد رصيد خاص لهذا الموظف (مدير النظام).</p>
+        <p style="font-size:.8125rem;color:var(--muted);margin-bottom:6px">كل خانة: المستخدم / الرصيد (والمعلّق بين قوسين). اضغط على خانة لتحديد رصيد خاص لهذا الموظف (مدير النظام).</p>
         <input type="search" id="vaBalSearch" class="search-input" placeholder="بحث بالاسم أو القسم…" oninput="vaBalRender()" style="margin-bottom:8px">
         <div class="table-wrap" style="max-height:420px"><table><thead id="vaBalHead"></thead><tbody id="vaBalBody"></tbody></table></div>
       </div>
       <div class="card">
         <div class="card-title"><i class="fas fa-list" aria-hidden="true"></i> أنواع الإجازات</div>
-        <p style="font-size:.8rem;color:var(--muted);margin-bottom:6px">الرصيد السنوي بالأيام (0 = بلا حد). الإجازة غير المدفوعة تُخصم أيامها في «الرواتب» إذا فُعّلت قاعدتها. اضبط الأرصدة حسب سياستكم وقانون العمل.</p>
+        <p style="font-size:.8125rem;color:var(--muted);margin-bottom:6px">الرصيد السنوي بالأيام (0 = بلا حد). الإجازة غير المدفوعة تُخصم أيامها في «الرواتب» إذا فُعّلت قاعدتها. اضبط الأرصدة حسب سياستكم وقانون العمل.</p>
         <div class="table-wrap"><table><thead><tr><th>الاسم</th><th>الرصيد السنوي</th><th>مدفوعة</th><th>تحتاج موافقة</th><th>يطلبها الموظف</th><th>مفعّل</th><th>حفظ</th></tr></thead>
           <tbody id="vaTypes"></tbody></table></div>
       </div>
@@ -873,7 +873,7 @@
             <input type="month" id="prMonth" class="search-input" style="min-width:150px" aria-label="الشهر">
             <button class="btn btn-primary btn-sm" onclick="prCompute()"><i class="fas fa-play" aria-hidden="true"></i> احتساب / إعادة احتساب المسودة</button>
           </div>
-          <p style="font-size:.8rem;color:var(--muted)">تُحسب المسودة من «الكشف الشهري» حسب «قواعد الاحتساب»، ولا يُعتمد أي خصم قبل مراجعتك. حدّث بيانات الحضور للشهر أولاً من «رفع البيانات والتحليل».</p>
+          <p style="font-size:.8125rem;color:var(--muted)">تُحسب المسودة من «الكشف الشهري» حسب «قواعد الاحتساب»، ولا يُعتمد أي خصم قبل مراجعتك. حدّث بيانات الحضور للشهر أولاً من «رفع البيانات والتحليل».</p>
           <div class="table-wrap" style="max-height:240px;margin-top:8px"><table class="no-sort">
             <thead><tr><th>الشهر</th><th>الحالة</th><th>عدد الموظفين</th><th>صافي الرواتب</th><th>أُنشئت</th><th>اعتُمدت</th></tr></thead>
             <tbody id="prRuns"></tbody></table></div>
@@ -896,7 +896,7 @@
             <input type="number" id="prAdjAmount" class="search-input" style="width:120px;min-width:0" min="0" step="0.001" placeholder="المبلغ" aria-label="المبلغ">
             <input type="text" id="prAdjReason" class="search-input" maxlength="200" placeholder="السبب (يظهر في القسيمة)" aria-label="السبب">
             <button class="btn btn-primary btn-sm" onclick="prAdjust()"><i class="fas fa-plus" aria-hidden="true"></i> إضافة للمحددين</button>
-            <span style="font-size:.8rem;color:var(--muted)">المحددون: <b id="prSelCount">0</b></span>
+            <span style="font-size:.8125rem;color:var(--muted)">المحددون: <b id="prSelCount">0</b></span>
           </div>
           <div class="table-wrap" style="max-height:520px"><table class="dt-filterable" id="prLinesTable">
             <thead><tr><th class="no-filter"><input type="checkbox" aria-label="تحديد الكل" onchange="prCheckAll(this.checked)"></th>
@@ -919,7 +919,7 @@
               <option value="bank_name">تعيين اسم البنك</option></select>
             <input type="text" id="prBulkValue" class="search-input hide" style="width:160px;min-width:0" aria-label="القيمة" placeholder="القيمة">
             <button class="btn btn-primary btn-sm" onclick="prBulk()"><i class="fas fa-check-double" aria-hidden="true"></i> تطبيق</button>
-            <span style="font-size:.8rem;color:var(--muted)">المحددون: <b id="prProfSel">0</b></span>
+            <span style="font-size:.8125rem;color:var(--muted)">المحددون: <b id="prProfSel">0</b></span>
           </div>
           <div class="table-wrap" style="max-height:520px"><table class="dt-filterable" id="prProfTable">
             <thead><tr><th class="no-filter"><input type="checkbox" aria-label="تحديد الكل" onchange="prProfCheckAll(this.checked)"></th>
@@ -951,7 +951,7 @@
       <div class="pr-sub" id="prsub-advances">
         <div class="card">
           <div class="card-title"><i class="fas fa-hand-holding-dollar" aria-hidden="true"></i> السلف — العدد: <span id="prAdvCount">0</span></div>
-          <p style="font-size:.8rem;color:var(--muted);margin-bottom:10px">يُخصم قسط كل سلفة نشطة تلقائياً عند احتساب مسيرة كل شهر، بدءاً من شهر البدء حتى اكتمال السداد، ويظهر في قسيمة الراتب. السلفة التي لها أقساط في مسيرة معتمدة لا تُحذف، وتُوقَف بدلاً من ذلك.</p>
+          <p style="font-size:.8125rem;color:var(--muted);margin-bottom:10px">يُخصم قسط كل سلفة نشطة تلقائياً عند احتساب مسيرة كل شهر، بدءاً من شهر البدء حتى اكتمال السداد، ويظهر في قسيمة الراتب. السلفة التي لها أقساط في مسيرة معتمدة لا تُحذف، وتُوقَف بدلاً من ذلك.</p>
           <div class="stats-grid" id="prAdvStats"></div>
           <div class="form-grid quad">
             <div class="form-group"><label for="prAdvEmp">الموظف</label><select id="prAdvEmp"></select></div>
@@ -970,7 +970,7 @@
               <option value="">إجراء جماعي للمحددين…</option><option value="stop">إيقاف الخصم</option>
               <option value="activate">استئناف الخصم</option><option value="delete">حذف</option></select>
             <button class="btn btn-primary btn-sm" onclick="prAdvBulk()"><i class="fas fa-check-double" aria-hidden="true"></i> تطبيق</button>
-            <span style="font-size:.8rem;color:var(--muted)">المحددون: <b id="prAdvSel">0</b></span>
+            <span style="font-size:.8125rem;color:var(--muted)">المحددون: <b id="prAdvSel">0</b></span>
           </div>
           <div class="table-wrap" style="max-height:520px"><table class="dt-filterable" id="prAdvTable">
             <thead><tr><th class="no-filter"><input type="checkbox" aria-label="تحديد الكل" onchange="prAdvCheckAll(this.checked)"></th>
@@ -983,7 +983,7 @@
       <div class="pr-sub" id="prsub-rules">
         <div class="card">
           <div class="card-title"><i class="fas fa-sliders" aria-hidden="true"></i> قواعد الاحتساب</div>
-          <p style="font-size:.8rem;color:var(--muted);margin-bottom:10px">كل قاعدة تعمل فقط إذا فُعّلت. التغيير يسري على المسودات عند إعادة احتسابها، ولا يغيّر المسيرات المعتمدة. اضبط القواعد حسب سياسة المؤسسة وقانون العمل والضمان الاجتماعي.</p>
+          <p style="font-size:.8125rem;color:var(--muted);margin-bottom:10px">كل قاعدة تعمل فقط إذا فُعّلت. التغيير يسري على المسودات عند إعادة احتسابها، ولا يغيّر المسيرات المعتمدة. اضبط القواعد حسب سياسة المؤسسة وقانون العمل والضمان الاجتماعي.</p>
           <div id="prRulesForm"></div>
           <button class="btn btn-primary" onclick="prSaveRules()"><i class="fas fa-save" aria-hidden="true"></i> حفظ القواعد</button>
         </div>
@@ -992,7 +992,7 @@
       <div class="pr-sub" id="prsub-menapay">
         <div class="card">
           <div class="card-title"><i class="fas fa-file-export" aria-hidden="true"></i> تصدير متغيرات الحضور إلى MenaPAY</div>
-          <p style="font-size:.8rem;color:var(--muted);margin-bottom:8px">لمن يبقى على MenaPAY للرواتب: ملف بصيغة استيراد المتغيرات الشهرية (رمز الموظف، رمز البند، القيمة، الفترة). اكتب رمز كل بند كما هو معرَّف في MenaPAY.</p>
+          <p style="font-size:.8125rem;color:var(--muted);margin-bottom:8px">لمن يبقى على MenaPAY للرواتب: ملف بصيغة استيراد المتغيرات الشهرية (رمز الموظف، رمز البند، القيمة، الفترة). اكتب رمز كل بند كما هو معرَّف في MenaPAY.</p>
           <div class="form-grid quad">
             <div class="form-group"><label for="prMpLayout">شكل الملف</label><select id="prMpLayout"><option value="long">صف لكل بند (EmployeeCode, ItemCode, Value, Period)</option><option value="wide">صف لكل موظف (عمود لكل بند)</option></select></div>
             <div class="form-group"><label for="prMpCode">رمز الموظف من</label><select id="prMpCode"><option value="employee_no">الرقم الوظيفي</option><option value="device_uid">رقم الموظف في جهاز البصمة</option><option value="name">الاسم</option></select></div>
@@ -1005,11 +1005,11 @@
             <button class="btn btn-outline btn-sm" onclick="prMpExport('xlsx')"><i class="fas fa-file-excel" aria-hidden="true"></i> تصدير Excel</button>
             <button class="btn btn-outline btn-sm" onclick="prMpExport('csv')"><i class="fas fa-file-csv" aria-hidden="true"></i> تصدير CSV</button>
           </div>
-          <p style="font-size:.8rem;color:var(--muted);margin-top:6px">بنود المبالغ (الخصومات، الإضافي، الصافي) تُؤخذ من مسيرة الشهر إن احتُسبت؛ وبنود الأيام والدقائق والساعات من الحضور مباشرة.</p>
+          <p style="font-size:.8125rem;color:var(--muted);margin-top:6px">بنود المبالغ (الخصومات، الإضافي، الصافي) تُؤخذ من مسيرة الشهر إن احتُسبت؛ وبنود الأيام والدقائق والساعات من الحضور مباشرة.</p>
         </div>
         <div class="card">
           <div class="card-title"><i class="fas fa-file-import" aria-hidden="true"></i> استيراد الموظفين والرواتب من MenaITech / MenaPAY</div>
-          <p style="font-size:.8rem;color:var(--muted);margin-bottom:8px">صدّر من MenaITech قائمة الموظفين (Excel أو CSV) بأعمدة مثل: Employee Code، Employee Name، Department، Basic Salary، Bank، IBAN — تُكتشف الأعمدة تلقائياً بالعربية أو الإنجليزية. يُطابق الموظف بالرقم الوظيفي ثم بالاسم.</p>
+          <p style="font-size:.8125rem;color:var(--muted);margin-bottom:8px">صدّر من MenaITech قائمة الموظفين (Excel أو CSV) بأعمدة مثل: Employee Code، Employee Name، Department، Basic Salary، Bank، IBAN — تُكتشف الأعمدة تلقائياً بالعربية أو الإنجليزية. يُطابق الموظف بالرقم الوظيفي ثم بالاسم.</p>
           <div class="filter-bar">
             <input type="file" id="prImpFile" accept=".xlsx,.csv" aria-label="ملف الاستيراد">
             <label style="display:flex;gap:6px;align-items:center;font-size:.85rem"><input type="checkbox" id="prImpCreate"> إضافة الموظفين غير الموجودين</label>
@@ -1022,7 +1022,7 @@
       <div class="pr-sub" id="prsub-access">
         <div class="card">
           <div class="card-title"><i class="fas fa-user-lock" aria-hidden="true"></i> من يرى الرواتب ويديرها</div>
-          <p style="font-size:.8rem;color:var(--muted);margin-bottom:8px">الرواتب سرية: لا يراها إلا مدير النظام ومن تمنحه الصلاحية هنا. كل عملية تُسجَّل في سجل التدقيق.</p>
+          <p style="font-size:.8125rem;color:var(--muted);margin-bottom:8px">الرواتب سرية: لا يراها إلا مدير النظام ومن تمنحه الصلاحية هنا. كل عملية تُسجَّل في سجل التدقيق.</p>
           <div class="filter-bar" style="margin-bottom:8px">
             <button class="btn btn-primary btn-sm" onclick="prAccess(true)"><i class="fas fa-check" aria-hidden="true"></i> منح المحددين</button>
             <button class="btn btn-red btn-sm" onclick="prAccess(false)"><i class="fas fa-xmark" aria-hidden="true"></i> سحب من المحددين</button>
@@ -1098,7 +1098,7 @@
             <button class="btn btn-outline btn-sm" onclick="admsBulk('block')"><i class="fas fa-ban" aria-hidden="true"></i> إيقاف</button>
             <button class="btn btn-outline btn-sm" onclick="admsBulk('resend')" title="يطلب من الجهاز إعادة إرسال كل سجلاته عند الاتصال القادم"><i class="fas fa-rotate" aria-hidden="true"></i> إعادة إرسال الكل</button>
             <button class="btn btn-red btn-sm" onclick="admsBulk('delete')"><i class="fas fa-trash" aria-hidden="true"></i> حذف</button>
-            <span style="font-size:.85rem;color:var(--muted)">المحدد: <b id="admsSel">0</b> من <b id="admsTotal">0</b></span>
+            <span style="font-size:.85rem;color:var(--muted)">المحدد: <b id="admsSel">0</b> / <b id="admsTotal">0</b></span>
             <button class="btn btn-outline btn-sm" onclick="loadAdms()" style="margin-inline-start:auto"><i class="fas fa-sync" aria-hidden="true"></i> تحديث</button>
           </div>
           <div class="table-wrap">
@@ -1146,7 +1146,7 @@
             <button class="btn btn-outline btn-sm" onclick="dhBulk('auto_on')">تشغيل السحب التلقائي</button>
             <button class="btn btn-outline btn-sm" onclick="dhBulk('auto_off')">إيقاف السحب التلقائي</button>
             <button class="btn btn-red btn-sm" onclick="dhBulk('delete')"><i class="fas fa-trash" aria-hidden="true"></i> حذف</button>
-            <span style="font-size:.85rem;color:var(--muted)">المحدد: <b id="dhSel">0</b> من <b id="dhTotal">0</b></span>
+            <span style="font-size:.85rem;color:var(--muted)">المحدد: <b id="dhSel">0</b> / <b id="dhTotal">0</b></span>
           </div>
           <div class="filter-bar" style="margin-bottom:8px;flex-wrap:wrap">
             <span style="font-size:.85rem;font-weight:700">إدارة الأجهزة المحددة:</span>
@@ -1183,7 +1183,7 @@
             <button class="btn btn-outline btn-sm" onclick="dhUsersLoad()"><i class="fas fa-sync" aria-hidden="true"></i> قراءة من الجهاز</button>
             <button class="btn btn-red btn-sm" onclick="dhUsersDelete(false)"><i class="fas fa-trash" aria-hidden="true"></i> حذف المحدد من الجهاز</button>
             <button class="btn btn-red btn-sm" onclick="dhUsersDelete(true)">حذف كل المستخدمين</button>
-            <span style="font-size:.85rem;color:var(--muted)">المحدد: <b id="dhuSel">0</b> من <b id="dhuTotal">0</b></span>
+            <span style="font-size:.85rem;color:var(--muted)">المحدد: <b id="dhuSel">0</b> / <b id="dhuTotal">0</b></span>
           </div>
           <div id="dhuNote" style="font-size:.85rem;margin-bottom:6px;color:var(--muted)">اختر جهازاً لقراءة المستخدمين المسجّلين فيه.</div>
           <div class="table-wrap" style="max-height:360px">
@@ -1261,7 +1261,7 @@
               <tbody id="dhSenders"></tbody>
             </table>
           </div>
-          <pre id="dhRaw" dir="ltr" style="display:none;white-space:pre-wrap;max-height:260px;overflow:auto;font-size:.75rem;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;margin-top:8px"></pre>
+          <pre id="dhRaw" dir="ltr" style="display:none;white-space:pre-wrap;max-height:260px;overflow:auto;font-size:.8125rem;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;margin-top:8px"></pre>
         </div>
 
         <div class="card">
@@ -1472,7 +1472,7 @@
           <select id="nsAction" class="search-input" style="width:auto;min-width:0" aria-label="إجراء جماعي">
             <option value="">إجراء جماعي للمحددين…</option><option value="activate">تفعيل</option><option value="deactivate">تعطيل</option><option value="delete">حذف</option></select>
           <button class="btn btn-primary btn-sm" onclick="nsBulk()"><i class="fas fa-check-double" aria-hidden="true"></i> تطبيق</button>
-          <span style="font-size:.8rem;color:var(--muted)">المحددة: <b id="nsSel">0</b></span>
+          <span style="font-size:.8125rem;color:var(--muted)">المحددة: <b id="nsSel">0</b></span>
         </div>
         <div class="table-wrap" style="max-height:420px"><table class="dt-filterable" id="nsTable">
           <thead><tr><th class="no-filter"><input type="checkbox" aria-label="تحديد الكل" onchange="nsCheckAll(this.checked)"></th>
@@ -1504,7 +1504,7 @@
           <select id="nsaAction" class="search-input" style="width:auto;min-width:0" aria-label="إجراء جماعي">
             <option value="">إجراء جماعي للمحددين…</option><option value="end">إنهاء اليوم</option><option value="delete">حذف</option></select>
           <button class="btn btn-primary btn-sm" onclick="nsaBulk()"><i class="fas fa-check-double" aria-hidden="true"></i> تطبيق</button>
-          <span style="font-size:.8rem;color:var(--muted)">المحددة: <b id="nsaSel">0</b></span>
+          <span style="font-size:.8125rem;color:var(--muted)">المحددة: <b id="nsaSel">0</b></span>
         </div>
         <div class="table-wrap" style="max-height:520px"><table class="dt-filterable" id="nsaTable">
           <thead><tr><th class="no-filter"><input type="checkbox" aria-label="تحديد الكل" onchange="nsaCheckAll(this.checked)"></th>
@@ -1529,7 +1529,7 @@
           <div class="form-group"><label>بداية الاستراحة</label><input type="time" id="dtLunchStart"></div>
           <div class="form-group"><label>نهاية الاستراحة</label><input type="time" id="dtLunchEnd"></div>
         </div>
-        <p style="font-size:.8rem;color:var(--muted);margin:-4px 0 10px">تعمل استراحة الغداء فقط إذا فُعّل خيار «استثناء استراحة الغداء» في الإعدادات العامة.</p>
+        <p style="font-size:.8125rem;color:var(--muted);margin:-4px 0 10px">تعمل استراحة الغداء فقط إذا فُعّل خيار «استثناء استراحة الغداء» في الإعدادات العامة.</p>
         <button class="btn btn-primary" onclick="saveDeptTime()"><i class="fas fa-save" aria-hidden="true"></i> حفظ/تحديث</button>
       </div>
       <div class="card">
@@ -1552,13 +1552,13 @@
         <label style="display:flex;align-items:center;gap:8px;font-weight:700;cursor:pointer;margin-bottom:14px"><input type="checkbox" id="tickerEnabled"> تفعيل الشريط على كل الصفحات</label>
         <div class="form-group"><label>محتوى الشريط (عربي)</label>
           <div id="tickerQuill" style="background:#fff;color:#1e2a2b;min-height:120px" data-notr></div>
-          <div style="font-size:.78rem;color:var(--muted);margin-top:6px">يمكنك تلوين النص، تنسيق الخط، وإضافة روابط — لكل الفقرة أو لجزء محدد منها. كل سطر فقرة مستقلة في الشريط.</div></div>
+          <div style="font-size:.8125rem;color:var(--muted);margin-top:6px">يمكنك تلوين النص، تنسيق الخط، وإضافة روابط — لكل الفقرة أو لجزء محدد منها. كل سطر فقرة مستقلة في الشريط.</div></div>
         <div class="form-group"><label>محتوى الشريط (إنجليزي)</label>
           <div id="tickerQuillEn" style="background:#fff;color:#1e2a2b;min-height:120px" dir="ltr" data-notr></div>
-          <div style="font-size:.78rem;color:var(--muted);margin-top:6px">يظهر هذا المحتوى فقط عند تصفح الموقع بالإنجليزية — إن تُرك فارغاً يُستخدم المحتوى العربي بدلاً منه.</div></div>
+          <div style="font-size:.8125rem;color:var(--muted);margin-top:6px">يظهر هذا المحتوى فقط عند تصفح الموقع بالإنجليزية — إن تُرك فارغاً يُستخدم المحتوى العربي بدلاً منه.</div></div>
         <div class="form-grid">
           <div class="form-group"><label>سرعة الشريط (ثواني لكل دورة)</label><input type="number" id="tickerSpeed" min="5" max="180" step="1">
-            <div style="font-size:.76rem;color:var(--muted)">رقم أصغر = حركة أسرع</div></div>
+            <div style="font-size:.8125rem;color:var(--muted)">رقم أصغر = حركة أسرع</div></div>
           <div class="form-group"><label>رابط RSS (اختياري)</label><input type="text" id="tickerRssUrl" dir="ltr" placeholder="https://example.com/feed.xml"></div>
           <div class="form-group"><label>لون نص أخبار RSS</label><input type="color" id="tickerRssColor" style="height:38px;padding:2px;cursor:pointer"></div>
           <div class="form-group"><label>حجم خط أخبار RSS</label><input type="number" id="tickerRssFontSize" min="10" max="40" step="1"></div>
@@ -1570,7 +1570,7 @@
         <div class="form-grid trio" style="margin-top:14px">
           <div class="form-group"><label>لون خلفية الشريط</label><input type="color" id="tickerBgColor" style="height:38px;padding:2px;cursor:pointer" oninput="previewTickerColors()"></div>
           <div class="form-group"><label><span>شفافية الخلفية:</span> <b id="tickerBgOpacityVal">0%</b></label><input type="range" id="tickerBgOpacity" min="0" max="100" step="5" style="width:100%" oninput="previewTickerColors()">
-            <div style="font-size:.76rem;color:var(--muted)">0% = شفاف تماماً (كما كان)، 100% = لون كامل</div></div>
+            <div style="font-size:.8125rem;color:var(--muted)">0% = شفاف تماماً (كما كان)، 100% = لون كامل</div></div>
           <div class="form-group"><label>لون النص</label><input type="color" id="tickerTextColor" style="height:38px;padding:2px;cursor:pointer" oninput="previewTickerColors()"></div>
         </div>
         <div class="form-group" style="margin-top:12px;max-width:260px"><label>ظل النص (لوضوح أفضل)</label>
@@ -1602,7 +1602,7 @@
             <img id="logoPreviewImg" class="sys-icon" src="{{ logo_url or url_for('static', filename='brand/system.svg') }}" alt="الشعار الحالي">
             <div>
               <input type="file" id="logoFileInput" accept="image/*" onchange="uploadLogo()">
-              <p style="color:var(--muted);font-size:.8rem;margin:6px 0 0">يُرفع الشعار فور اختيار الملف ويظهر في القائمة الجانبية وصفحات الدخول وصفحة الموظف وأيقونة التطبيق وترويسة تقارير PDF والبريد. الصيغ: PNG أو JPG أو WEBP (يُفضَّل PNG بخلفية شفافة)، حتى 15 ميجابايت. ما دام لا يوجد شعار تظهر أيقونة النظام.</p>
+              <p style="color:var(--muted);font-size:.8125rem;margin:6px 0 0">يُرفع الشعار فور اختيار الملف ويظهر في القائمة الجانبية وصفحات الدخول وصفحة الموظف وأيقونة التطبيق وترويسة تقارير PDF والبريد. الصيغ: PNG أو JPG أو WEBP (يُفضَّل PNG بخلفية شفافة)، حتى 15 ميجابايت. ما دام لا يوجد شعار تظهر أيقونة النظام.</p>
               <label class="chk" id="logoRemoveRow" style="display:none"><input type="checkbox" id="logoRemove"> إزالة الشعار (العودة إلى أيقونة النظام عند الحفظ)</label>
             </div>
           </div>
@@ -1917,8 +1917,8 @@
           <thead><tr><th><input type="checkbox" id="urAll" onchange="document.querySelectorAll('#urTable .row-check').forEach(c=>{c.checked=this.checked});urCount()"></th>
             <th>المستخدم</th><th>الدور</th><th>الموظفون</th><th>الأجهزة</th><th>الإعدادات</th><th>الأقسام</th><th>الأقسام المسموحة</th><th>آخر دخول</th></tr></thead>
           <tbody id="urTable"></tbody></table></div>
-        <p style="font-size:.8rem;color:var(--muted);margin-top:8px;line-height:1.8">
-          <b>admin</b>: كل شيء + المستخدمون · <b>مدير قسم</b>: حسب الصلاحيات المحددة · <b>اطّلاع فقط</b>: يرى التقارير ولا يعدّل شيئاً.
+        <p style="font-size:.8125rem;color:var(--muted);margin-top:8px;line-height:1.8">
+          <b>مدير النظام</b>: كل شيء + المستخدمون · <b>مدير قسم</b>: حسب الصلاحيات المحددة · <b>اطّلاع فقط</b>: يرى التقارير ولا يعدّل شيئاً.
           الأقسام المسموحة فارغة = يرى كل الأقسام. ✓ رمادية = مشمولة تلقائياً لأن الدور admin. لتعديل مستخدم بالتفصيل استخدم «قائمة المستخدمين» بالأسفل.</p>
       </div>
       <div class="card">
@@ -2115,7 +2115,7 @@ async function saveMyPassword(){try{await api('/api/change-password',{method:'PO
     + '.cmdk-ih{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid rgba(0,0,0,.08)}'
     + '.cmdk-ih i{opacity:.55;font-size:16px}'
     + '.cmdk-ih input{flex:1;border:0;outline:0;background:transparent;font-size:16px;color:inherit;font-family:inherit}'
-    + '.cmdk-kbd{font-size:11px;opacity:.6;border:1px solid rgba(0,0,0,.2);border-radius:6px;padding:1px 6px;white-space:nowrap}'
+    + '.cmdk-kbd{font-size:13px;opacity:.6;border:1px solid rgba(0,0,0,.2);border-radius:6px;padding:1px 6px;white-space:nowrap}'
     + '.cmdk-list{max-height:52vh;overflow:auto;padding:6px}'
     + '.cmdk-it{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:9px;cursor:pointer}'
     + '.cmdk-it i{width:20px;text-align:center;opacity:.8}'

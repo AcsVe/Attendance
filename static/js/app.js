@@ -17,7 +17,7 @@ function initTableFilters() {
         input.type = 'text';
         input.placeholder = 'فلترة...';
         input.className = 'search-input dt-filter-input';
-        input.style.cssText = 'width:100%;font-size:.78rem;padding:4px 6px;font-weight:normal';
+        input.style.cssText = 'width:100%;font-size:.8125rem;padding:4px 6px;font-weight:normal';
         input.addEventListener('input', () => filterTable(table));
         cell.appendChild(input);
       }
@@ -350,7 +350,7 @@ async function loadLastImportNotice() {
           <b>آخر عملية سحب/استيراد بصمات:</b> ${escapeHtml(data.label)} — ${escapeHtml(data.timestamp)}
           ${data.username ? ' بواسطة ' + escapeHtml(data.username) : ''}
           ${data.detail ? `<br><span style="font-size:.85rem">${escapeHtml(data.detail)}</span>` : ''}
-          <br><span style="font-size:.8rem">تأكّد من هذا قبل تكرار نفس عملية السحب/الاستيراد لتفادي الانتظار غير الضروري (خصوصاً لملفات كبيرة).</span>
+          <br><span style="font-size:.8125rem">تأكّد من هذا قبل تكرار نفس عملية السحب/الاستيراد لتفادي الانتظار غير الضروري (خصوصاً لملفات كبيرة).</span>
         </div>
         <button class="btn btn-outline btn-sm" style="white-space:nowrap" onclick="dismissLastImportNotice()" aria-label="إغلاق" title="إغلاق"><i class="fas fa-times" aria-hidden="true"></i></button>
       </div>`;
@@ -786,7 +786,7 @@ async function loadReports(page) {
         <td>${_reportStatusCell(r)}${r.early_minutes ? ` <span class="badge badge-late" title="انصرف قبل نهاية الدوام">مغادرة مبكرة ${r.early_minutes} د</span>` : ''}${r.break_minutes ? ` <span class="badge badge-none" title="بصمات خروج وعودة أثناء الدوام في جهاز البصمة — خُصمت من ساعات العمل">خروج من البصمة ${r.break_minutes} د</span>` : ''}</td>
         <td>${r.late_minutes || 0}</td>
         <td>${r.working_hours || 0}</td>
-        <td>${escapeHtml(r.shift || '—')}</td>
+        <td dir="auto">${escapeHtml(r.shift || '—')}</td>
       </tr>`).join('');
   }
   renderPagination(data.total, data.page, data.page_size);
@@ -1834,7 +1834,7 @@ async function loadDevices() {
 
   const checklists = ['liveDeviceList', 'pullDeviceList', 'pushDeviceList', 'fingerTargetList', 'faceTargetList'];
   const checksHtml = devicesCache.map(d => `
-    <label><input type="checkbox" value="${d.id}"> ${escapeHtml(d.name)} <span style="color:var(--muted);font-size:.78rem" dir="ltr">(${escapeHtml(d.ip)})</span></label>
+    <label><input type="checkbox" value="${d.id}"> ${escapeHtml(d.name)} <span style="color:var(--muted);font-size:.8125rem" dir="ltr">(${escapeHtml(d.ip)})</span></label>
   `).join('') || '<span style="color:var(--muted);font-size:.85rem">لا توجد أجهزة - أضف جهازاً من تبويب "الأجهزة المسجَّلة" أولاً</span>';
   checklists.forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = checksHtml; });
 }
@@ -2769,14 +2769,14 @@ async function loadUsers() {
     const p = 'u' + r.id;
     return `
     <tr><td><input type="checkbox" class="row-check" data-id="${r.id}"></td><td dir="ltr" style="text-align:right">${escapeHtml(r.username)}</td><td>${escapeHtml(r.full_name || '')}
-      <input type="email" dir="ltr" value="${escapeHtml(r.email || '')}" placeholder="البريد الإلكتروني" aria-label="البريد الإلكتروني" style="margin-top:6px;font-size:.8rem" onchange="saveUserEmail(${r.id}, this.value)"></td>
+      <input type="email" dir="ltr" value="${escapeHtml(r.email || '')}" placeholder="البريد الإلكتروني" aria-label="البريد الإلكتروني" style="margin-top:6px;font-size:.8125rem" onchange="saveUserEmail(${r.id}, this.value)"></td>
     <td>
       <select id="${p}Role" class="search-input" style="min-width:150px" onchange="applyRoleDefaults('${p}')">
         <option value="viewer" ${r.role === 'viewer' ? 'selected' : ''}>مشاهد (viewer)</option>
         <option value="dept_manager" ${r.role === 'dept_manager' ? 'selected' : ''}>مدير قسم (dept_manager)</option>
         <option value="admin" ${r.role === 'admin' ? 'selected' : ''}>مدير النظام (admin)</option>
       </select>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;font-size:.75rem;white-space:nowrap">
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;font-size:.8125rem;white-space:nowrap">
         <label style="display:flex;align-items:center;gap:4px;font-weight:normal"><input type="checkbox" id="${p}PermEmployees" ${r.can_manage_employees ? 'checked' : ''}> موظفين</label>
         <label style="display:flex;align-items:center;gap:4px;font-weight:normal"><input type="checkbox" id="${p}PermDepartments" ${r.can_manage_departments ? 'checked' : ''}> أقسام</label>
         <label style="display:flex;align-items:center;gap:4px;font-weight:normal"><input type="checkbox" id="${p}PermDevices" ${r.can_push_devices ? 'checked' : ''}> أجهزة</label>

@@ -34,7 +34,7 @@
   <h1>{% block heading %}{% endblock %}</h1>
   {% block body %}{% endblock %}
 </div></div>
-<footer class="auth-foot">© {{ now_year }} <b data-notr dir="auto">{{ org_display or 'نظام الحضور والانصراف' }}</b></footer>
+<footer class="auth-foot">© {{ now_year }} {% if org_display and org_display != 'نظام الحضور والانصراف' %}<b data-notr dir="auto">{{ org_display }}</b>{% else %}<b>نظام الحضور والانصراف</b>{% endif %}</footer>
 <script>
 function attToggleTheme(){var r=document.documentElement,d=r.getAttribute('data-theme')==='dark';r.setAttribute('data-theme',d?'light':'dark');try{localStorage.setItem('att_theme',d?'light':'dark');}catch(e){}attThemeIcon();}
 function attThemeIcon(){var b=document.getElementById('themeIcon');if(b)b.className=document.documentElement.getAttribute('data-theme')==='dark'?'fas fa-sun':'fas fa-moon';}

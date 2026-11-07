@@ -121,6 +121,24 @@ try:
                     errs.clear()
                     if os.environ.get('SHOTS'):
                         page.screenshot(path=os.path.join(OUT, f'{vp_name}-{ui}{data}-{t}.jpg'), type='jpeg', quality=45)
+                # صفحات خارج لوحة التحكم: شاشة العرض، وجهاز المدخل، وتطبيق الموظف
+                for u in ('/display/audit-display-token-000001', '/display/not-a-real-token-0000000', '/kiosk', '/me/logout', '/me/login', '/me/forgot', '/app'):
+                    page.goto(base + u, wait_until='networkidle')
+                    page.wait_for_timeout(600)
+                    if 'not-a-real' in u:   # الرابط غير الصحيح يُرجع 404 عمداً
+                        errs[:] = [e for e in errs if '404' not in e]
+                    report.append((vp_name, ui, data, u, page.evaluate(AUDIT_JS, ['body', ui == 'en' and data == 'en', UNTRANSLATED_OK]), list(errs)))
+                    errs.clear()
+                page.goto(base + '/me/login', wait_until='networkidle')
+                page.fill('#mu', 'emp1')
+                page.fill('#mp', 'emp12345')
+                page.click('#f button[type=submit]')
+                page.wait_for_load_state('networkidle')
+                page.wait_for_timeout(1200)
+                report.append((vp_name, ui, data, '/me', page.evaluate(AUDIT_JS, ['body', ui == 'en' and data == 'en', UNTRANSLATED_OK]), list(errs)))
+                errs.clear()
+                if os.environ.get('SHOTS'):
+                    page.screenshot(path=os.path.join(OUT, f'{vp_name}-{ui}{data}-me.jpg'), type='jpeg', quality=45, full_page=True)
                 ctx.close()
         browser.close()
 finally:

@@ -9,7 +9,7 @@
     .clock{font-size:2.6rem;font-weight:800;color:var(--pd);text-align:center;letter-spacing:1px;direction:ltr}
     .date{text-align:center;color:var(--m);font-weight:600;margin-bottom:6px}
     .gps{display:flex;align-items:center;gap:10px;border-radius:12px;padding:11px 13px;font-weight:700;font-size:.92rem;margin-top:10px}
-    .gps i{font-size:1.2rem}.gps.ok{background:#e6f5ee;color:var(--ok)}.gps.bad{background:#fdecea;color:var(--bad)}.gps.wait{background:#fff6e8;color:var(--warn)}
+    .gps i{font-size:1.2rem}.gps.ok{background:#e6f5ee;color:var(--ok)}.gps.bad{background:#fdecea;color:#b91c1c}.gps.wait{background:#fff6e8;color:var(--warn)}
     .acts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .act{border:0;border-radius:18px;padding:20px 8px;font:800 1.08rem 'Tajawal',sans-serif;color:#fff;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.08);transition:transform .08s,opacity .2s}
     .act i{font-size:1.9rem}.act:active{transform:scale(.97)}
@@ -18,12 +18,12 @@
     .a-lo{background:linear-gradient(135deg,#d9822b,#f0a64f)}.a-lb{background:linear-gradient(135deg,#0C67EC,#3D8EF5)}
     .state{text-align:center;font-weight:800;margin:4px 0 12px;font-size:1rem}
     .tl{list-style:none}.tl li{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px dashed var(--b);font-size:.95rem}
-    .tl li:last-child{border:0}.tag{border-radius:20px;padding:2px 10px;font-size:.78rem;font-weight:800}
+    .tl li:last-child{border:0}.tag{border-radius:20px;padding:2px 10px;font-size:.8125rem;font-weight:800}
     .t-in{background:#e6f5ee;color:var(--ok)}.t-out{background:#fdecea;color:var(--bad)}.t-leave_out{background:#fff3e2;color:var(--warn)}.t-leave_back{background:#e6f1f6;color:var(--p)}.t-rej{background:#f3f3f3;color:#888}
     .tabs{display:flex;gap:6px;margin-bottom:10px}.tabs button{flex:1;border:0;border-radius:12px;padding:10px 4px;min-height:44px;font:700 .92rem 'Tajawal',sans-serif;background:var(--chip);color:var(--pd);cursor:pointer}
     .tabs button.on{background:var(--p);color:#fff}
     .kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}.kpi div{background:#f4f8fe;border-radius:12px;text-align:center;padding:9px 4px}
-    .kpi b{display:block;font-size:1.25rem;color:var(--pd)}.kpi span{font-size:.75rem;color:var(--m);font-weight:700}
+    .kpi b{display:block;font-size:1.25rem;color:var(--pd)}.kpi span{font-size:.8125rem;color:var(--m);font-weight:700}
     table{width:100%;border-collapse:collapse;font-size:.85rem}th,td{padding:8px 4px;border-bottom:1px solid #eef2f3;text-align:right}th{color:var(--m);font-weight:700}
     .tw{overflow:auto;max-height:62vh;-webkit-overflow-scrolling:touch}.tw thead th{position:sticky;top:0;background:#eaf1fc;color:var(--navy);z-index:2;box-shadow:inset 0 -1px 0 #e3eaec;cursor:pointer;user-select:none;white-space:nowrap}.tw th .ar{font-size:.7em;margin-inline-start:3px}
     .toast{position:fixed;left:14px;right:14px;bottom:calc(18px + env(safe-area-inset-bottom));max-width:490px;margin:0 auto;border-radius:14px;padding:14px 16px;font-weight:800;color:#fff;z-index:9;box-shadow:0 8px 24px rgba(0,0,0,.2);display:none}
@@ -91,7 +91,7 @@
         </select>
         <button class="btn btn-p" id="shareLiveBtn" style="flex:1.4"><i class="fas fa-tower-broadcast" aria-hidden="true"></i> مشاركة مباشرة</button>
       </div>
-      <p class="muted" style="font-size:.78rem;margin:6px 0 0">تُرسل فقط عند ضغطك، وتتوقف المشاركة المباشرة تلقائياً بانتهاء المدة أو عند ضغط «إيقاف».</p>
+      <p class="muted" style="font-size:.8125rem;margin:6px 0 0">تُرسل فقط عند ضغطك، وتتوقف المشاركة المباشرة تلقائياً بانتهاء المدة أو عند ضغط «إيقاف».</p>
     </div>
     <div class="card">
       <b style="color:var(--pd)">حركات اليوم</b>

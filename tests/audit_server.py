@@ -54,6 +54,10 @@ conn.execute("INSERT INTO absence_reasons (name, date, reason) VALUES (?, ?, ?)"
 conn.execute("INSERT INTO devices (name, ip, port, location) VALUES (?, '192.168.1.201', 4370, ?)", (TXT('جهاز المدخل', 'Entrance device'), TXT('المدخل الرئيسي', 'Main entrance')))
 conn.execute("INSERT INTO shifts (name, start_time, end_time, days) VALUES (?, '14:00', '22:00', '6,0,1,2,3,4')", (TXT('المسائية', 'Evening'),))
 conn.execute("INSERT INTO employee_shifts (name, shift_id, date_from, created_by) VALUES (?, 1, ?, 'admin')", (NAMES[5], start.isoformat()))
+# حساب تطبيق لموظف (لفحص /me) وشاشة عرض (لفحص /display)
+from werkzeug.security import generate_password_hash  # noqa: E402
+conn.execute("INSERT INTO employee_accounts (employee_id, username, password_hash) VALUES (1, 'emp1', ?)", (generate_password_hash('emp12345'),))
+conn.execute("INSERT INTO displays (name, kind, token, config) VALUES (?, 'attendance', 'audit-display-token-000001', '{}')", (TXT('شاشة الإدارة', 'Office screen'),))
 conn.commit()
 A.run_full_analysis(conn)
 conn.commit()
