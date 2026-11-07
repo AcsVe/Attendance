@@ -116,7 +116,7 @@ function maRender() {
   maRows.forEach(r => { byDept[r.dept || ''] = (byDept[r.dept || ''] || 0) + 1; });
   document.getElementById('maDeptChips').innerHTML =
     `<button class="${maDept === null ? 'on' : ''}" onclick="maDept=null;maRender()">كل الأقسام <b>${maRows.length}</b></button>` +
-    Object.keys(byDept).sort().map(k => `<button class="${maDept === k ? 'on' : ''}" data-dept="${mEsc(k)}" onclick="maDept=this.dataset.dept;maRender()">${mEsc(k || 'بدون قسم')} <b>${byDept[k]}</b></button>`).join('');
+    Object.keys(byDept).sort().map(k => `<button class="${maDept === k ? 'on' : ''}" data-dept="${mEsc(k)}" onclick="maDept=this.dataset.dept;maRender()"><bdi>${mEsc(k || 'بدون قسم')}</bdi> <b>${byDept[k]}</b></button>`).join('');
   const base = maRows.filter(r => maDept === null || (r.dept || '') === maDept);
   const st = {
     all: base.length, acc: base.filter(r => r.has_account).length, none: base.filter(r => !r.has_account).length,
@@ -652,7 +652,7 @@ async function empMoveDept() {
     const rows = [...document.querySelectorAll('#employeesTable tr')].filter(tr => tr.children.length > 3);
     const counts = {};
     rows.forEach(tr => { const d = tr.children[2].textContent.trim() || 'بدون قسم'; counts[d] = (counts[d] || 0) + 1; });
-    document.getElementById('empDeptCounts').textContent = `الكل (${rows.length}) · ` + Object.keys(counts).sort().map(k => `${k} (${counts[k]})`).join(' · ');
+    document.getElementById('empDeptCounts').textContent = `الكل (${rows.length}) · ` + Object.keys(counts).sort().map(k => `\u2068${k}\u2069 (${counts[k]})`).join(' · ');
     document.getElementById('empDeptList').innerHTML = Object.keys(counts).filter(k => k !== 'بدون قسم').map(k => `<option value="${mEsc(k)}">`).join('');
   };
 })();
@@ -948,7 +948,7 @@ function prDeptsRender() {
   const counts = {};
   prEmps.forEach(e => { const d = e.dept || ''; counts[d] = (counts[d] || 0) + 1; });
   document.getElementById('prDepts').innerHTML = Object.keys(counts).sort().map(d => `<label style="display:flex;gap:6px;align-items:center;border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-weight:600;font-size:.85rem">
-    <input type="checkbox" class="pr-dept" value="${mEsc(d)}" ${prDeptSet.has(d) ? 'checked' : ''} onchange="prDeptToggle(this)"> ${mEsc(d || 'بدون قسم')} <b style="color:var(--muted)">${counts[d]}</b></label>`).join('')
+    <input type="checkbox" class="pr-dept" value="${mEsc(d)}" ${prDeptSet.has(d) ? 'checked' : ''} onchange="prDeptToggle(this)"> <bdi>${mEsc(d || 'بدون قسم')}</bdi> <b style="color:var(--muted)">${counts[d]}</b></label>`).join('')
     || '<span style="color:var(--muted)">لا توجد أقسام</span>';
 }
 function prDeptToggle(cb) { cb.checked ? prDeptSet.add(cb.value) : prDeptSet.delete(cb.value); prRender(); prStateText(); }

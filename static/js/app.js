@@ -2464,7 +2464,7 @@ async function removeLogo() {
 /* مزوّدو البريد: قوالب جاهزة لإعدادات الإرسال مع إرشادات مختصرة */
 const EMAIL_PROVIDERS = {
   microsoft: { host: 'smtp.office365.com', port: 587, security: 'starttls', pw: 'كلمة مرور الحساب (أو كلمة مرور تطبيق إن كانت المصادقة الثنائية مفعّلة)',
-    help: '<b>Microsoft 365 / Outlook:</b> الخادم smtp.office365.com والمنفذ 587 مع STARTTLS. يجب أن يكون «Authenticated SMTP» مفعّلاً لصندوق المرسل من مركز إدارة Microsoft 365 (المستخدمون ← البريد ← إدارة تطبيقات البريد). إن عطّلت مؤسستك SMTP AUTH فاختر «Microsoft Graph API».' },
+    help: '<b><bdi>Microsoft 365 / Outlook</bdi>:</b> الخادم smtp.office365.com والمنفذ 587 مع STARTTLS. يجب أن يكون «Authenticated SMTP» مفعّلاً لصندوق المرسل من مركز إدارة Microsoft 365 (المستخدمون ← البريد ← إدارة تطبيقات البريد). إن عطّلت مؤسستك SMTP AUTH فاختر «Microsoft Graph API».' },
   google: { host: 'smtp.gmail.com', port: 587, security: 'starttls', pw: 'كلمة مرور التطبيق (16 حرفاً) — لا كلمة مرور Gmail العادية',
     help: '<b>Google (Gmail / Workspace):</b> الخادم smtp.gmail.com والمنفذ 587 مع STARTTLS (أو 465 مع SSL). يشترط Google تفعيل التحقق بخطوتين ثم إنشاء «كلمة مرور تطبيق» من حساب Google ← الأمان ← كلمات مرور التطبيقات، واستخدامها هنا.' },
   custom: { host: '', port: 587, security: 'starttls', pw: 'كلمة المرور',
