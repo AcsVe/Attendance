@@ -9,8 +9,11 @@ ROOT = os.path.abspath(os.path.join(SPECPATH, '..'))
 datas = [(os.path.join(ROOT, 'templates'), 'templates'), (os.path.join(ROOT, 'static'), 'static')]
 binaries = []
 hidden = ['shares', 'vacations', 'scheduler', 'waitress'] + collect_submodules('zk')
-# APScheduler يجد أنواع الجدولة من بيانات الحزمة (entry points)، فتُنسخ كاملة
-for pkg in ('apscheduler', 'tzdata', 'reportlab', 'pywebpush', 'py_vapid', 'http_ece'):
+# APScheduler يجد أنواع الجدولة من بيانات الحزمة (entry points)، فتُنسخ كاملة.
+# openpyxl/xlrd: محرّكا قراءة Excel يستدعيهما pandas بالاسم وقت الاستيراد فقط، فلا يراهما
+# المحلّل الساكن — لذلك نضمّهما صراحةً وإلا فشل استيراد ملفات الموظفين (.xlsx/.xls).
+for pkg in ('apscheduler', 'tzdata', 'reportlab', 'pywebpush', 'py_vapid', 'http_ece',
+            'openpyxl', 'et_xmlfile', 'xlrd'):
     try:
         d, b, h = collect_all(pkg)
         datas += d
@@ -18,6 +21,7 @@ for pkg in ('apscheduler', 'tzdata', 'reportlab', 'pywebpush', 'py_vapid', 'http
         hidden += h
     except Exception:
         pass
+hidden += ['openpyxl', 'xlrd', 'et_xmlfile']
 # كل وحدات النظام في جذر المستودع (بعضها يُستورد داخل الدوال)
 skip = {'serve'}
 hidden += [f[:-3] for f in os.listdir(ROOT) if f.endswith('.py') and f[:-3] not in skip]

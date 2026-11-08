@@ -2162,10 +2162,15 @@ def _read_table_file(f, filename):
     بلا مشاكل إذا استُدعي مباشرة. أما CSV/TXT فيُقرأ بمحاولة عدة ترميزات
     (انظر _read_csv_auto_encoding) بدل افتراض UTF-8 دائماً."""
     name_lower = (filename or '').lower()
-    if name_lower.endswith('.xls'):
-        return pd.read_excel(f, engine='xlrd'), []
-    if name_lower.endswith('.xlsx'):
-        return pd.read_excel(f, engine='openpyxl'), []
+    for suffix, engine in (('.xls', 'xlrd'), ('.xlsx', 'openpyxl')):
+        if name_lower.endswith(suffix):
+            try:
+                return pd.read_excel(f, engine=engine), []
+            except ImportError:
+                # محرّك القراءة غير مُضمَّن في هذه النسخة — رسالة واضحة بدل خطأ pandas الخام
+                raise _BinaryFileDetected(
+                    f'تعذّر قراءة ملف {suffix} في هذه النسخة. احفظ الملف بصيغة CSV وأعد المحاولة، أو '
+                    'بلّغ المسؤول بتحديث النظام.')
     _check_not_binary(f)
     return _read_csv_auto_encoding(f)
 
