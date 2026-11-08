@@ -128,6 +128,19 @@ def selftest(root):
     for path in ('/static/i18n/en.js', '/static/css/style.css', '/static/icons/favicon.ico'):
         if os.path.exists(os.path.join(app_dir(), path.lstrip('/'))):
             assert c.get(path).status_code == 200, path
+    # محرّكا قراءة Excel مُضمَّنان فعلاً (يستدعيهما pandas بالاسم، فلا يراهما مجمِّع البناء تلقائياً):
+    # بدونهما يُرفض استيراد ملفات الموظفين. نقرأ ملفاً فعلياً حتى يفشل البناء هنا لا عند المستخدم.
+    import io
+    import pandas as pd
+    import openpyxl  # noqa: F401  — محرّك .xlsx
+    import xlrd      # noqa: F401  — محرّك .xls
+    buf = io.BytesIO()
+    wb = openpyxl.Workbook()
+    wb.active.append(['name', 'dept'])
+    wb.active.append(['موظف', 'قسم'])
+    wb.save(buf)
+    buf.seek(0)
+    assert pd.read_excel(buf, engine='openpyxl').shape == (1, 2), 'xlsx import engine missing'
     print('selftest ok')
     return 0
 
