@@ -33,5 +33,7 @@ jobs:
         run: |
           pip install -r requirements.txt playwright
           python -m playwright install --with-deps chromium
+      - name: Subscription checks
+        run: python tests/license_check.py
       - name: UI audit
         run: python tests/ui_audit.py

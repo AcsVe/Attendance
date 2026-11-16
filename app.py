@@ -123,6 +123,15 @@ except Exception:
 from utils.page_shield import install as _shield  # noqa: E402
 _shield(app)
 
+# اشتراك النسخة المستضافة (ملف الاشتراكات المشترك أو LICENSE_UNTIL في .env) — انظر utils/license.py.
+# بعد الإيقاف تبقى مفتوحة الصفحات الدخول والخروج واستعادة كلمة المرور، وواجهات أجهزة البصمة (/iclock و/dahua)
+# فلا تضيع حركات الحضور، ومزامنة النسخة المكتبية.
+from utils.license import install as _license  # noqa: E402
+_license(app, open_endpoints={'login', 'logout', 'forgot_password', 'reset_password', 'service_worker',
+                              'dynamic_manifest', 'app_icon', 'api_sync_receive'},
+         open_prefixes=('/iclock/', '/dahua/push'),
+         lang_of=lambda req, sess: req.args.get('lang') or _ui_lang(req))
+
 # ===== شعار المؤسسة - يُحفَظ كملف واحد تحت static/uploads/ (اسم ثابت
 # "org_logo.<امتداد>")، والامتداد الفعلي يُحفَظ بإعداد org_logo_filename
 # حتى تُعرف صيغته عند العرض/التضمين بالتقارير والبريد =====
