@@ -146,6 +146,16 @@
     <button class="btn btn-primary btn-sm" onclick="rrOpen()">عرض الطلبات</button>
   </div>
   <div class="content">
+    {% if lic.state in ('warn', 'grace') %}
+    <!-- ── تنبيه الاشتراك (utils/license.py) ── -->
+    <div class="license-alert" role="status" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:10px;padding:11px 14px;margin-bottom:14px;font-weight:600;font-size:.9rem">
+      <i class="fas fa-hourglass-half" aria-hidden="true"></i>
+      {% if ui_lang == 'en' %}{{ 'The subscription for this system ends on' if lic.state == 'warn' else 'The subscription for this system has ended; the system will be paused on' }}{% else %}{{ 'ينتهي اشتراك هذا النظام في' if lic.state == 'warn' else 'انتهى اشتراك هذا النظام، وسيتوقف في' }}{% endif %}
+      <span dir="ltr">{{ lic.until if lic.state == 'warn' else lic.lock_from }}</span>.
+      {{ 'Contact the service provider to renew it.' if ui_lang == 'en' else 'تواصل مع مزوّد الخدمة لتجديده.' }}
+      {% if lic.contact %}<bdi>{{ lic.contact }}</bdi>{% endif %}
+    </div>
+    {% endif %}
 
     <!-- ============ DASHBOARD ============ -->
     <div class="tab-panel active" id="tab-dashboard">

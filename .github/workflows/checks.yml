@@ -16,7 +16,8 @@ concurrency:
 
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    # مثبّتة على 24.04: ubuntu-latest صارت 26.04 ولا يدعمها Playwright (تفشل خطوة تثبيت المتصفح)
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
       E2E_CHANNEL: chromium
@@ -33,5 +34,7 @@ jobs:
         run: |
           pip install -r requirements.txt playwright
           python -m playwright install --with-deps chromium
+      - name: Subscription checks
+        run: python tests/license_check.py
       - name: UI audit
         run: python tests/ui_audit.py

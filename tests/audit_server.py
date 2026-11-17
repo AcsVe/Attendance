@@ -13,6 +13,10 @@ for ext in ('', '-wal', '-shm'):
         os.remove(DB + ext)
 os.environ['ATTENDANCE_DB_PATH'] = DB
 os.environ.pop('BASE_URL', None)
+for _k in ('LICENSE_FILE', 'LICENSE_ID'):
+    os.environ.pop(_k, None)
+# اشتراك قريب الانتهاء: يظهر تنبيه الاشتراك في لوحة التحكم فيشمله فحص المظهر واللغة
+os.environ.update(LICENSE_UNTIL=(date.today() + timedelta(days=10)).isoformat(), LICENSE_CONTACT='0790000000')
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import db  # noqa: E402
