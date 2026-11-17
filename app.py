@@ -126,8 +126,10 @@ _shield(app)
 # اشتراك النسخة المستضافة (ملف الاشتراكات المشترك أو LICENSE_UNTIL في .env) — انظر utils/license.py.
 # بعد الإيقاف تبقى مفتوحة الصفحات الدخول والخروج واستعادة كلمة المرور، وواجهات أجهزة البصمة (/iclock و/dahua)
 # فلا تضيع حركات الحضور، ومزامنة النسخة المكتبية.
+from utils.brand_icon import install as _favicon  # noqa: E402
+_favicon(app)                      # أيقونة العميل الاختيارية (FAVICON_FILE)
 from utils.license import install as _license  # noqa: E402
-_license(app, open_endpoints={'login', 'logout', 'forgot_password', 'reset_password', 'service_worker',
+_license(app, open_endpoints={'brand_favicon', 'login', 'logout', 'forgot_password', 'reset_password', 'service_worker',
                               'dynamic_manifest', 'app_icon', 'api_sync_receive'},
          open_prefixes=('/iclock/', '/dahua/push'),
          lang_of=lambda req, sess: req.args.get('lang') or _ui_lang(req))
@@ -432,6 +434,24 @@ def app_icon(size, kind='any'):
     if size not in _ICON_SIZES:
         size = 192
     maskable = kind == 'maskable'
+    from utils.brand_icon import _path as _custom_icon_path
+    custom = _custom_icon_path()
+    if custom:                                   # أيقونة العميل (FAVICON_FILE) تتقدّم على شعار الإعدادات
+        from PIL import Image
+        cache_dir = os.path.join(os.path.dirname(db.DB_PATH) or '.', 'icon-cache')
+        os.makedirs(cache_dir, exist_ok=True)
+        out = os.path.join(cache_dir, f'custom-{size}-{kind}-{int(os.path.getmtime(custom))}.png')
+        if not os.path.isfile(out):
+            src = Image.open(custom).convert('RGBA')
+            if maskable:                         # أندرويد يقصّ الأطراف: خلفية كاملة وهامش
+                inner = int(size * 0.8)
+                canvas = Image.new('RGBA', (size, size), (255, 255, 255, 255))
+                small = src.resize((inner, inner), Image.LANCZOS)
+                canvas.alpha_composite(small, ((size - inner) // 2, (size - inner) // 2))
+            else:
+                canvas = src.resize((size, size), Image.LANCZOS)
+            canvas.save(out, 'PNG', optimize=True)
+        return send_file(out, mimetype='image/png', max_age=3600)
     logo, ver = _logo_file()
     if not logo or logo.rsplit('.', 1)[-1].lower() == 'svg':
         name = {16: 'favicon-16.png', 32: 'favicon-32.png', 180: 'apple-touch-icon.png'}.get(size) or \

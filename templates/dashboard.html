@@ -1609,7 +1609,7 @@
         <div class="form-group">
           <label for="logoFileInput">شعار المؤسسة</label>
           <div class="logo-pick">
-            <img id="logoPreviewImg" class="sys-icon" src="{{ logo_url or url_for('static', filename='brand/system.svg') }}" alt="الشعار الحالي">
+            <img id="logoPreviewImg" class="sys-icon" src="{{ logo_url or favicon_url or url_for('static', filename='brand/system.svg') }}" alt="الشعار الحالي">
             <div>
               <input type="file" id="logoFileInput" accept="image/*" onchange="uploadLogo()">
               <p style="color:var(--muted);font-size:.8125rem;margin:6px 0 0">يُرفع الشعار فور اختيار الملف ويظهر في القائمة الجانبية وصفحات الدخول وصفحة الموظف وأيقونة التطبيق وترويسة تقارير PDF والبريد. الصيغ: PNG أو JPG أو WEBP (يُفضَّل PNG بخلفية شفافة)، حتى 15 ميجابايت. ما دام لا يوجد شعار تظهر أيقونة النظام.</p>
