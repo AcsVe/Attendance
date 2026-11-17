@@ -128,6 +128,8 @@ _shield(app)
 # فلا تضيع حركات الحضور، ومزامنة النسخة المكتبية.
 from utils.brand_icon import install as _favicon  # noqa: E402
 _favicon(app)                      # أيقونة العميل الاختيارية (FAVICON_FILE)
+from utils.app_version import install as _app_version  # noqa: E402
+_app_version(app, os.path.dirname(os.path.abspath(__file__)))     # تنبيه الإدارة بصدور تحديث
 from utils.license import install as _license  # noqa: E402
 _license(app, open_endpoints={'brand_favicon', 'login', 'logout', 'forgot_password', 'reset_password', 'service_worker',
                               'dynamic_manifest', 'app_icon', 'api_sync_receive'},
